@@ -48,6 +48,7 @@ import java.util.List;
  */
 final class TelecomAccountRegistry {
     private static final boolean DBG = false; /* STOP SHIP if true */
+    public static final String EMERGENCY_ACCOUNT_HANDLE_ID = "E";
 
     // This icon is the one that is used when the Slot ID that we have for a particular SIM
     // is not supported, i.e. SubscriptionManager.INVALID_SLOT_ID or the 5th SIM in a phone.
@@ -248,6 +249,22 @@ final class TelecomAccountRegistry {
         // because this could signal a removal or addition of a SIM in a single SIM phone.
         mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_SERVICE_STATE);
     }
+
+    static PhoneAccountHandle makePstnPhoneAccountHandle(Phone phone) {
+        return makePstnPhoneAccountHandleWithPrefix(phone, "", false);
+    }
+
+    static PhoneAccountHandle makePstnPhoneAccountHandleWithPrefix(
+            Phone phone, String prefix, boolean isEmergency) {
+        ComponentName pstnConnectionServiceName =
+                new ComponentName(phone.getContext(), TelephonyConnectionService.class);
+        // TODO: Should use some sort of special hidden flag to decorate this account as
+        // an emergency-only account
+        String id = isEmergency ? EMERGENCY_ACCOUNT_HANDLE_ID : prefix +
+                String.valueOf(phone.getSubId());
+        return new PhoneAccountHandle(pstnConnectionServiceName, id);
+    }
+
     /**
      * Determines if the list of {@link AccountEntry}(s) contains an {@link AccountEntry} with a
      * specified {@link PhoneAccountHandle}.
@@ -255,7 +272,7 @@ final class TelecomAccountRegistry {
      * @param handle The {@link PhoneAccountHandle}.
      * @return {@code True} if an entry exists.
      */
-    private boolean hasAccountEntryForPhoneAccount(PhoneAccountHandle handle) {
+    boolean hasAccountEntryForPhoneAccount(PhoneAccountHandle handle) {
         for (AccountEntry entry : mAccounts) {
             if (entry.getPhoneAccountHandle().equals(handle)) {
                 return true;
