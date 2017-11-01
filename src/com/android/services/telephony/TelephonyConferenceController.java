@@ -68,13 +68,12 @@ final class TelephonyConferenceController {
     /** The known connections. */
     private final List<TelephonyConnection> mTelephonyConnections = new ArrayList<>();
 
-    private final TelephonyConnectionService mConnectionService;
+    private final TelephonyConnectionServiceProxy mConnectionService;
     private boolean mTriggerRecalculate = false;
 
-    public TelephonyConferenceController(TelephonyConnectionService connectionService) {
+    public TelephonyConferenceController(TelephonyConnectionServiceProxy connectionService) {
         mConnectionService = connectionService;
     }
-
     /** The TelephonyConference connection object. */
     private TelephonyConference mTelephonyConference;
 
@@ -89,7 +88,6 @@ final class TelephonyConferenceController {
             Log.w(this, "add - connection already tracked; connection=%s", connection);
             return;
         }
-
         mTelephonyConnections.add(connection);
         connection.addConnectionListener(mConnectionListener);
         recalculate();
@@ -163,14 +161,20 @@ final class TelephonyConferenceController {
 
         // Set the conference as conferenceable with all of the connections that are not in the
         // conference.
-        if (mTelephonyConference != null && !isFullConference(mTelephonyConference)) {
-            List<Connection> nonConferencedConnections = mTelephonyConnections
-                    .stream()
-                    // Only retrieve Connections that are not in a conference (but support
-                    // conferences).
-                    .filter(c -> c.isConferenceSupported() && c.getConference() == null)
-                    .collect(Collectors.toList());
-            mTelephonyConference.setConferenceableConnections(nonConferencedConnections);
+        if (mTelephonyConference != null) {
+            if (!isFullConference(mTelephonyConference)) {
+                List<Connection> nonConferencedConnections = mTelephonyConnections
+                        .stream()
+                        // Only retrieve Connections that are not in a conference (but support
+                        // conferences).
+                        .filter(c -> c.isConferenceSupported() && c.getConference() == null)
+                        .collect(Collectors.toList());
+                mTelephonyConference.setConferenceableConnections(nonConferencedConnections);
+            } else {
+                Log.d(this, "cannot merge anymore due it is full");
+                mTelephonyConference
+                        .setConferenceableConnections(Collections.<Connection>emptyList());
+            }
         }
         // TODO: Do not allow conferencing of already conferenced connections.
     }
@@ -182,13 +186,11 @@ final class TelephonyConferenceController {
         for (TelephonyConnection connection : mTelephonyConnections) {
             com.android.internal.telephony.Connection radioConnection =
                 connection.getOriginalConnection();
-
             if (radioConnection != null) {
                 Call.State state = radioConnection.getState();
                 Call call = radioConnection.getCall();
                 if ((state == Call.State.ACTIVE || state == Call.State.HOLDING) &&
                         (call != null && call.isMultiparty())) {
-
                     numGsmConnections++;
                     conferencedConnections.add(connection);
                 }

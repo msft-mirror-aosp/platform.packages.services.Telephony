@@ -20,7 +20,7 @@
          and other settings UIs.  This is the version of the label for
          tablet devices, where the phone app handles mobile data but not
          actual phone calls. -->
-    <string name="phoneAppLabel" product="tablet">Cellular Data</string>
+    <string name="phoneAppLabel" product="tablet">Mobile Data</string>
 
     <!-- Official label of the phone app, as seen in "Manage Applications"
          and other settings UIs. -->
@@ -95,6 +95,8 @@
     <string name="no_vm_number_msg">No voicemail number is stored on the SIM card.</string>
     <!-- Button label on the "Missing voicemail number" dialog -->
     <string name="add_vm_number_str">Add number</string>
+    <!--Toast in Call settings when asked to launch voicemail for a guest user -->
+    <string name="voice_number_setting_primary_user_only">Voicemail Settings can only be modified by the Primary User.</string>
 
     <!-- Status message displayed on SIM PIN unlock panel -->
     <string name="puk_unlocked">Your SIM card has been unblocked. Your phone is unlocking\u2026</string>
@@ -115,7 +117,7 @@
     <!-- settings strings -->
 
     <!-- Error message for users that aren't allowed to modify Mobile Network settings [CHAR LIMIT=none] -->
-    <string name="mobile_network_settings_not_available">Cellular network settings are not available for this user</string>
+    <string name="mobile_network_settings_not_available">Mobile network settings are not available for this user</string>
     <!-- GSM Call settings screen, setting option name. [CHAR LIMIT=40] -->
     <string name="labelGSMMore">GSM call settings</string>
     <!-- GSM Call settings screen, setting option name with label indicating the SIM the settings
@@ -170,6 +172,12 @@
     <string name="voicemail_settings_with_label">Voicemail (<xliff:g id="subscriptionlabel" example="Mock Carrier">%s</xliff:g>)</string>
     <!-- Call forwarding dialog box, voicemail number prefix -->
     <string name="voicemail_abbreviated">VM:</string>
+    <!-- DO NOT TRANSLATE. Internal key for a voicemail notification preference. -->
+    <string name="voicemail_notifications_key" translatable="false">voicemail_notification_key</string>
+
+    <!-- Voicemail notifications title. The user clicks on this preference navigate to the system settings screen for that channel
+    .[CHAR LIMIT=30] -->
+    <string name="voicemail_notifications_preference_title">Notifications</string>
     <!-- Mobile network settings screen, setting option name -->
     <string name="networks">Network operators</string>
     <!-- Cell Broadcast settings title.  [CHAR LIMIT=50] -->
@@ -253,7 +261,7 @@
     <!-- Call forwarding settings screen, setting summary text when forwarding to a specific number when unreachable-->
     <string name="sum_cfnrc_enabled">Forwarding to <xliff:g id="phonenumber" example="555-1212">{0}</xliff:g></string>
     <!-- Call forwarding settings screen, setting summary text when Forward when unreachable is disabled -->
-    <string name="sum_cfnrc_disabled">Disabled</string>
+    <string name="sum_cfnrc_disabled">Off</string>
     <!-- Error message displayed after failing to disable forwarding calls when the phone is unreachable -->
     <string name="disable_cfnrc_forbidden">Your carrier doesn\'t support disabling call forwarding when your phone is unreachable.</string>
 
@@ -354,7 +362,9 @@
 
     <!-- networks setting strings --><skip/>
     <!-- Mobile network settings screen title -->
-    <string name="mobile_networks">Cellular network settings</string>
+    <string name="mobile_networks">Mobile network settings</string>
+    <!-- Mobile network settings screen title/heading -->
+    <string name="network_settings_title">Mobile network</string>
     <!-- Available networks screen title/heading -->
     <string name="label_available">Available networks</string>
     <!-- Mobile network settings screen, toast when searching for available networks -->
@@ -377,84 +387,134 @@
     <string name="sum_carrier_select">Choose a network operator</string>
     <!-- Available networks screen, setting summary text -->
     <string name="sum_search_networks">Search for all available networks</string>
-    <!-- Available networks screen, setting option name -->
-    <string name="select_automatically">Choose automatically</string>
-    <!-- Available networks screen, setting summary text -->
-    <string name="sum_select_automatically">Automatically choose preferred network</string>
+    <!-- Available networks screen, name of switch button for whether to select network automatically -->
+    <string name="select_automatically">Automatically select network</string>
+    <!-- Available networks screen, name of button when user wants to select network manually  -->
+    <string name="network_select_title">Network</string>
     <string name="register_automatically">Automatic registration\u2026</string>
     <string name="preferred_network_mode_title">Preferred network type</string>
     <string name="preferred_network_mode_summary">Change the network operating mode</string>
     <string name="preferred_network_mode_dialogtitle">Preferred network type</string>
-    <!-- Mobile network settings, summary for preferred network mode WCDMA preferred[CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_wcdma_perf_summary">Preferred network mode: WCDMA preferred</string>
-    <!-- Mobile network settings, summary for preferred network mode GSM [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_gsm_only_summary">Preferred network mode: GSM only</string>
-    <!-- Mobile network settings, summary for preferred network mode WCDMA only [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_wcdma_only_summary">Preferred network mode: WCDMA only</string>
-    <!-- Mobile network settings, summary for preferred network mode GSM / UMTS [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_gsm_wcdma_summary">Preferred network mode: GSM / WCDMA</string>
-    <!-- Mobile network settings, summary for preferred network mode CDMA [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_cdma_summary">Preferred network mode: CDMA</string>
-    <!-- Mobile network settings, summary for preferred network mode CDMA / EvDo [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_cdma_evdo_summary">Preferred network mode: CDMA / EvDo</string>
-    <!-- Mobile network settings, summary for preferred network mode CDMA only [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_cdma_only_summary">Preferred network mode: CDMA only</string>
-    <!-- Mobile network settings, summary for preferred network mode EvDo only [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_evdo_only_summary">Preferred network mode: EvDo only</string>
-    <!-- Mobile network settings, summary for preferred network mode CDMA/EvDo/GSM/WCDMA[CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_cdma_evdo_gsm_wcdma_summary">Preferred network mode: CDMA/EvDo/GSM/WCDMA</string>
-    <!-- Mobile network settings, summary for preferred network mode LTE [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_lte_summary">Preferred network mode: LTE </string>
-    <!-- Mobile network settings, summary for preferred network mode GSM/WCDMA/LTE [CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_lte_gsm_wcdma_summary">Preferred network mode: GSM/WCDMA/LTE</string>
-    <!-- Mobile network settings, summary for preferred network mode CDMA+LTE/EVDO[CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_lte_cdma_evdo_summary">Preferred network mode: CDMA+LTE/EVDO</string>
-    <!-- Mobile network settings, summary for preferred network mode Global[CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_global_summary">Preferred network mode: Global</string>
-    <!-- Mobile network settings, summary for preferred network mode LTE / WCDMA[CHAR LIMIT=100] -->
-    <string name="preferred_network_mode_lte_wcdma_summary">Preferred network mode: LTE / WCDMA</string>
-     <!-- Mobile network settings, summary for preferred network mode LTE / GSM / UMTS [CHAR LIMIT=100] -->
-     <string name="preferred_network_mode_lte_gsm_umts_summary">Preferred network mode: LTE / GSM / UMTS</string>
-     <!-- Mobile network settings, summary for preferred network mode LTE / CDMA [CHAR LIMIT=100] -->
-     <string name="preferred_network_mode_lte_cdma_summary">Preferred network mode: LTE / CDMA</string>
-     <!-- Mobile network settings, summary for preferred network mode TDSCDMTA [CHAR LIMIT=100] -->
-     <string name="preferred_network_mode_tdscdma_summary">Preferred network mode: TDSCDMA</string>
 
+    <!-- The preferred network modes in Mobile network settings -->
     <string-array name="preferred_network_mode_choices">
-        <item>LTE / WCDMA</item>
-        <item>LTE</item>
-        <item>Global</item>
-        <item>GSM/WCDMA/LTE</item>
-        <item>CDMA + LTE/EvDo</item>
-        <item>CDMA/EvDo/GSM/WCDMA</item>
-        <item>EvDo only</item>
-        <item>CDMA w/o EvDo</item>
-        <item>CDMA/EvDo auto</item>
-        <item>GSM/WCDMA auto</item>
-        <item>WCDMA only</item>
-        <item>GSM only</item>
         <item>GSM/WCDMA preferred</item>
+        <item>GSM only</item>
+        <item>WCDMA only</item>
+        <item>GSM/WCDMA auto</item>
+        <item>CDMA/EvDo auto</item>
+        <item>CDMA w/o EvDo</item>
+        <item>EvDo only</item>
+        <item>CDMA/EvDo/GSM/WCDMA</item>
+        <item>CDMA + LTE/EvDo</item>
+        <item>GSM/WCDMA/LTE</item>
+        <item>Global</item>
+        <item>LTE</item>
+        <item>LTE / WCDMA</item>
+        <item>TDSCDMA only</item>
+        <item>TDSCDMA/WCDMA</item>
+        <item>LTE/TDSCDMA</item>
+        <item>TDSCDMA/GSM</item>
+        <item>LTE/TDSCDMA/GSM</item>
+        <item>TDSCDMA/GSM/WCDMA</item>
+        <item>LTE/TDSCDMA/WCDMA</item>
+        <item>LTE/TDSCDMA/GSM/WCDMA</item>
+        <item>TDSCDMA/CDMA/EVDO/GSM/WCDMA </item>
+        <item>LTE/TDSCDMA/CDMA/EVDO/GSM/WCDMA</item>
     </string-array>
+    <!-- The preferred network modes RIL constants, in order of the modes above,
+         e.g. the choice "GSM/WCDMA preferred" has the corresponding value "0" -->
     <string-array name="preferred_network_mode_values"  translatable="false">
-        <item>"12"</item>
-        <item>"11"</item>
-        <item>"10"</item>
-        <item>"9"</item>
-        <item>"8"</item>
-        <item>"7"</item>
-        <item>"6"</item>
-        <item>"5"</item>
-        <item>"4"</item>
-        <item>"3"</item>
-        <item>"2"</item>
-        <item>"1"</item>
         <item>"0"</item>
+        <item>"1"</item>
+        <item>"2"</item>
+        <item>"3"</item>
+        <item>"4"</item>
+        <item>"5"</item>
+        <item>"6"</item>
+        <item>"7"</item>
+        <item>"8"</item>
+        <item>"9"</item>
+        <item>"10"</item>
+        <item>"11"</item>
+        <item>"12"</item>
+        <item>"13"</item>
+        <item>"14"</item>
+        <item>"15"</item>
+        <item>"16"</item>
+        <item>"17"</item>
+        <item>"18"</item>
+        <item>"19"</item>
+        <item>"20"</item>
+        <item>"21"</item>
+        <item>"22"</item>
     </string-array>
-    <!-- Cellular network 4G title [CHAR LIMIT=30] -->
+
+    <!-- The following strings are summaries for preferred network modes in Mobile network settings,
+         and have a character limit of 100 -->
+    <!-- WCDMA preferred -->
+    <string name="preferred_network_mode_wcdma_perf_summary">Preferred network mode: WCDMA preferred</string>
+    <!-- GSM only -->
+    <string name="preferred_network_mode_gsm_only_summary">Preferred network mode: GSM only</string>
+    <!-- WCDMA only -->
+    <string name="preferred_network_mode_wcdma_only_summary">Preferred network mode: WCDMA only</string>
+    <!-- GSM / WCDMA -->
+    <string name="preferred_network_mode_gsm_wcdma_summary">Preferred network mode: GSM / WCDMA</string>
+    <!-- CDMA -->
+    <string name="preferred_network_mode_cdma_summary">Preferred network mode: CDMA</string>
+    <!-- CDMA / EvDo -->
+    <string name="preferred_network_mode_cdma_evdo_summary">Preferred network mode: CDMA / EvDo</string>
+    <!-- CDMA only -->
+    <string name="preferred_network_mode_cdma_only_summary">Preferred network mode: CDMA only</string>
+    <!-- EvDo only -->
+    <string name="preferred_network_mode_evdo_only_summary">Preferred network mode: EvDo only</string>
+    <!-- CDMA/EvDo/GSM/WCDMA -->
+    <string name="preferred_network_mode_cdma_evdo_gsm_wcdma_summary">Preferred network mode: CDMA/EvDo/GSM/WCDMA</string>
+    <!-- LTE  -->
+    <string name="preferred_network_mode_lte_summary">Preferred network mode: LTE </string>
+    <!-- GSM/WCDMA/LTE -->
+    <string name="preferred_network_mode_lte_gsm_wcdma_summary">Preferred network mode: GSM/WCDMA/LTE</string>
+    <!-- CDMA+LTE/EVDO -->
+    <string name="preferred_network_mode_lte_cdma_evdo_summary">Preferred network mode: CDMA+LTE/EVDO</string>
+    <!-- Global -->
+    <string name="preferred_network_mode_global_summary">Preferred network mode: Global</string>
+    <!-- LTE / WCDMA -->
+    <string name="preferred_network_mode_lte_wcdma_summary">Preferred network mode: LTE / WCDMA</string>
+    <!-- LTE / GSM / UMTS -->
+    <string name="preferred_network_mode_lte_gsm_umts_summary">Preferred network mode: LTE / GSM / UMTS</string>
+    <!-- LTE / CDMA -->
+    <string name="preferred_network_mode_lte_cdma_summary">Preferred network mode: LTE / CDMA</string>
+    <!-- TDSCDMA -->
+    <string name="preferred_network_mode_tdscdma_summary">Preferred network mode: TDSCDMA</string>
+    <!-- TDSCDMA / WCDMA -->
+    <string name="preferred_network_mode_tdscdma_wcdma_summary">Preferred network mode: TDSCDMA / WCDMA</string>
+    <!-- LTE / TDSCDMA -->
+    <string name="preferred_network_mode_lte_tdscdma_summary">Preferred network mode: LTE / TDSCDMA</string>
+    <!-- TDSCDMA / GSM -->
+    <string name="preferred_network_mode_tdscdma_gsm_summary">Preferred network mode: TDSCDMA / GSM</string>
+    <!-- LTE/GSM/TDSCDMA -->
+    <string name="preferred_network_mode_lte_tdscdma_gsm_summary">Preferred network mode: LTE/GSM/TDSCDMA</string>
+    <!-- TDSCDMA/GSM/WCDMA -->
+    <string name="preferred_network_mode_tdscdma_gsm_wcdma_summary">Preferred network mode: TDSCDMA/GSM/WCDMA</string>
+    <!-- LTE/TDSCDMA/WCDMA -->
+    <string name="preferred_network_mode_lte_tdscdma_wcdma_summary">Preferred network mode: LTE/TDSCDMA/WCDMA</string>
+    <!-- LTE/TDSCDMA/GSM/WCDMA -->
+    <string name="preferred_network_mode_lte_tdscdma_gsm_wcdma_summary">Preferred network mode: LTE/TDSCDMA/GSM/WCDMA</string>
+    <!-- TDSCDMA/CDMA/EvDo/GSM/WCDMA -->
+    <string name="preferred_network_mode_tdscdma_cdma_evdo_gsm_wcdma_summary">Preferred network mode: TDSCDMA/CDMA/EvDo/GSM/WCDMA</string>
+    <!-- LTE/TDSCDMA/CDMA/EvDo/GSM/WCDMA -->
+    <string name="preferred_network_mode_lte_tdscdma_cdma_evdo_gsm_wcdma_summary">Preferred network mode: LTE/TDSCDMA/CDMA/EvDo/GSM/WCDMA</string>
+
+    <!-- Mobile network settings screen, name for call settings category -->
+    <string name="call_category">Calling</string>
+    <!-- Mobile network settings screen, name for network operator category -->
+    <string name="network_operator_category">Network</string>
+
+    <!-- Mobile network 4G title [CHAR LIMIT=30] -->
     <string name="enhanced_4g_lte_mode_title">Enhanced 4G LTE Mode</string>
     <!-- Carrier variant of Enhaced 4G LTE Mode title.  [CHAR LIMIT=50] -->
     <string name="enhanced_4g_lte_mode_title_variant">Advanced Calling</string>
-    <!-- Cellular network 4G summary [CHAR LIMIT=80] -->
+    <!-- Mobile network 4G summary [CHAR LIMIT=80] -->
     <string name="enhanced_4g_lte_mode_summary">Use LTE services to improve voice and other communications (recommended)</string>
 
     <!-- Mobile network settings screen, data enabling checkbox name -->
@@ -464,7 +524,7 @@
     <!-- Mobile network settings screen, title for alert dialog -->
     <string name="dialog_alert_title">Attention</string>
     <!-- Mobile network settings screen, setting check box name -->
-    <string name="roaming">Data roaming</string>
+    <string name="roaming">Roaming</string>
     <!-- Mobile network settings screen, setting summary text when check box is selected -->
     <string name="roaming_enable">Connect to data services when roaming</string>
     <!-- Mobile network settings screen, setting summary text when check box is clear -->
@@ -477,6 +537,25 @@
     <string name="roaming_warning">You may incur significant charges.</string>
     <!-- Mobile network settings screen, dialog message title when user selects the Data roaming check box -->
     <string name="roaming_alert_title">Allow data roaming?</string>
+    <!-- Mobile network settings screen, data usage setting check box name -->
+    <string name="data_usage_title">Data usage</string>
+    <!-- Summary about how much data has been used in a date range [CHAR LIMIT=100] -->
+    <string name="data_usage_template"><xliff:g name="amount" example="200 MB">%1$s</xliff:g> mobile data used between <xliff:g name="date_range" example="Jan 1 -- Feb 2">%2$s</xliff:g></string>
+    <!-- Mobile network settings screen, name of the option to manage carrier profiles on devices which support embedded carrier profiles -->
+    <string name="carrier_settings_euicc">Carrier</string>
+    <!-- Keywords used to search the carrier menu for managing carrier profiles on devices which support embedded carrier profiles. eSIM/eUICC is embedded SIM card used to store this data.  -->
+    <string name="keywords_carrier_settings_euicc">carrier, esim, sim, euicc</string>
+    <!-- Mobile network settings screen, summary of the option to manage carrier profiles on devices which support embedded carrier profiles -->
+    <string name="carrier_settings_euicc_summary"><xliff:g id="carrier_name">%1$s</xliff:g> &#8212; <xliff:g id="phone_number">%2$s</xliff:g></string>
+    <!-- Mobile network settings screen, title of Mobile Data switch preference -->
+    <string name="mobile_data_settings_title">Mobile Data</string>
+    <!-- Mobile network settings screen, title of Mobile Data switch preference -->
+    <string name="mobile_data_settings_summary">Access data using mobile network</string>
+    <!-- Mobile network settings screen, title of Wi-Fi calling setting -->
+    <string name="wifi_calling_settings_title">Wi-Fi calling</string>
+    <!-- Mobile network settings screen, title of Video calling setting -->
+    <string name="video_calling_settings_title">Carrier video calling</string>
+
 
     <!-- USSD aggregation dialog box: separator strings between messages (new-lines will be added before and after) -->
     <string name="ussd_dialog_sep" translatable="false">----------</string>
@@ -505,7 +584,7 @@
 
     <string name="throttle_rate_subtext">Data rate reduced to <xliff:g id="used">%1$d</xliff:g> Kb/s if data use limit is exceeded</string>
 
-    <string name="throttle_help_subtext">More information about your carrier\'s cellular network data use policy</string>
+    <string name="throttle_help_subtext">More information about your carrier\'s mobile network data use policy</string>
 
     <string name="cell_broadcast_sms">Cell Broadcast SMS</string>
 
@@ -805,6 +884,8 @@
     <string name="menu_edit">Edit contact</string>
     <!-- FDN list screen: menu item label -->
     <string name="menu_delete">Delete contact</string>
+    <!-- FDN list screen: menu item label -->
+    <string name="menu_dial">Dial contact</string>
 
     <!-- FDN related strings -->
     <!-- Label for PIN2 entry screen -->
@@ -836,7 +917,7 @@
     <!-- FDN settings: error message displayed in a popup (toast) -->
     <string name="pin2_invalid">FDN wasn\'t updated because you typed an incorrect PIN.</string>
     <!-- FDN settings: error message displayed in a popup (toast) -->
-    <string name="fdn_invalid_number">FDN wasn\'t updated because the number can\'t exceed 20 digits.</string>
+    <string name="fdn_invalid_number">FDN wasn\'t updated because the number is empty or exceeds 20 digits.</string>
     <!-- FDN settings: error message displayed in a popup (toast), when the entered
          FDN number was inappropriate, OR, PIN2 the user entered was incorrect.
          Because of API restriction, there's no way to determine which is the exact
@@ -979,7 +1060,9 @@
     <string name="notification_network_selection_text">Selected network (<xliff:g id="operator_name">%s</xliff:g>) unavailable</string>
 
     <!-- In-call screen: call failure message displayed in an error dialog. [CHAR_LIMIT=NONE] -->
-    <string name="incall_error_power_off">Turn off airplane mode to make a call.</string>
+    <string name="incall_error_power_off" product="watch">Turn on mobile network, turn off airplane mode or turn off battery saver mode to make a call.</string>
+    <!-- In-call screen: call failure message displayed in an error dialog. [CHAR_LIMIT=NONE] -->
+    <string name="incall_error_power_off" product="default">Turn off airplane mode to make a call.</string>
     <!-- In-call screen: call failure message displayed in an error dialog when in airplane mode, WFC is enabled, not wifi-only, and not connected to wireless networks. [CHAR_LIMIT=NONE] -->
     <string name="incall_error_power_off_wfc">Turn off airplane mode or connect to a wireless network to make a call.</string>
     <!-- In-call screen: call failure message displayed when the user attempts to make a non-emergency call while the phone is in emergency callback mode. -->
@@ -988,17 +1071,15 @@
          This string is currently unused (see comments in InCallScreen.java.) -->
     <string name="incall_error_emergency_only">Not registered on network.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
-    <string name="incall_error_out_of_service">Cellular network not available.</string>
+    <string name="incall_error_out_of_service">Mobile network not available.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
-    <string name="incall_error_out_of_service_wfc">Cellular network is not available. Connect to a wireless network to make a call.</string>
+    <string name="incall_error_out_of_service_wfc">Mobile network is not available. Connect to a wireless network to make a call.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
     <string name="incall_error_no_phone_number_supplied">To place a call, enter a valid number.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
     <string name="incall_error_call_failed">Call failed.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
-    <string name="incall_error_cannot_add_call">Call cannot be added at this time.</string>
-    <!-- In-call screen: status message displayed in a dialog when starting an MMI -->
-    <string name="incall_status_dialed_mmi">Starting MMI sequence\u2026</string>
+    <string name="incall_error_cannot_add_call">Call cannot be added at this time.  You can try to reach out by sending a message.</string>
     <!-- In-call screen: message displayed in an error dialog -->
     <string name="incall_error_supp_service_unknown">Service not supported</string>
     <!-- In-call screen: message displayed in an error dialog -->
@@ -1181,12 +1262,8 @@
     <string name="phone_in_ecm_notification_title">Emergency Callback Mode</string>
     <!-- ECM: Notification body -->
     <string name="phone_in_ecm_call_notification_text">Data connection disabled</string>
-    <plurals name="phone_in_ecm_notification_time">
-        <!-- number of minutes is one -->
-        <item quantity="one">No data connection for <xliff:g id="count">%s</xliff:g> minute</item>
-        <!-- number of minutes is not equal to one -->
-        <item quantity="other">No data connection for <xliff:g id="count">%s</xliff:g> minutes</item>
-    </plurals>
+    <!-- ECM: Displays the time when ECM will end, Example: "No Data Connection until 10:45 AM" -->
+    <string name="phone_in_ecm_notification_complete_time">No data connection until <xliff:g id="completeTime">%s</xliff:g></string>
     <!-- ECM: Dialog box message for exiting from the notifications screen -->
     <plurals name="alert_dialog_exit_ecm">
         <!-- number of minutes is one -->
@@ -1255,11 +1332,6 @@
     -->
     <string name="description_dial_button">dial</string>
 
-    <!-- Title for the vibration settings for voicemail notifications [CHAR LIMIT=40] -->
-    <string name="voicemail_notification_vibrate_when_title" msgid="8731372580674292759">Vibrate</string>
-    <!-- Dialog title for the vibration settings for voice mail notifications [CHAR LIMIT=40]-->
-    <string name="voicemail_notification_vibarte_when_dialog_title" msgid="8995274609647451109">Vibrate</string>
-
     <!-- Visual voicemail on/off title [CHAR LIMIT=40] -->
     <string name="voicemail_visual_voicemail_switch_title">Visual Voicemail</string>
 
@@ -1267,21 +1339,6 @@
     <string name="voicemail_set_pin_dialog_title">Set PIN</string>
     <!-- Voicemail change PIN dialog title [CHAR LIMIT=40] -->
     <string name="voicemail_change_pin_dialog_title">Change PIN</string>
-
-    <!-- Voicemail ringtone title. The user clicks on this preference to select
-         which sound to play when a voicemail notification is received.
-         [CHAR LIMIT=30] -->
-    <string name="voicemail_notification_ringtone_title">Sound</string>
-
-    <!-- The default value value for voicemail notification. -->
-    <string name="voicemail_notification_vibrate_when_default" translatable="false">never</string>
-
-    <!-- Actual values used in our code for voicemail notifications. DO NOT TRANSLATE -->
-    <string-array name="voicemail_notification_vibrate_when_values" translatable="false">
-        <item>always</item>
-        <item>silent</item>
-        <item>never</item>
-    </string-array>
 
     <!-- Title for the category "ringtone", which is shown above ringtone and vibration
          related settings.
@@ -1329,10 +1386,6 @@
     <!-- Status hint label for a call being made over a wifi network. [CHAR LIMIT=25] -->
     <string name="status_hint_label_wifi_call">Wi-Fi call</string>
 
-    <!-- DO NOT TRANSLATE. Internal key for a voicemail notification preference. -->
-    <string name="voicemail_notification_ringtone_key">voicemail_notification_ringtone_key</string>
-    <!-- DO NOT TRANSLATE. Internal key for a voicemail notification preference. -->
-    <string name="voicemail_notification_vibrate_key">voicemail_notification_vibrate_key</string>
     <!-- DO NOT TRANSLATE. Internal key for a visual voicemail preference. -->
     <string name="voicemail_visual_voicemail_key">voicemail_visual_voicemail_key</string>
     <!-- DO NOT TRANSLATE. Internal key for a voicemail change pin preference. -->
@@ -1366,6 +1419,20 @@
         Unable to connect, please insert a valid SIM card.
     </string>
 
+    <!-- Call failure reason displayed when an in-progress WIFI call fails due to a loss of WIFI
+         connectivity, or the WIFI signal has degraded to the point the call cannot continue. -->
+    <string name="callFailed_wifi_lost">
+        Wi-Fi connection lost.  Call ended.
+    </string>
+
+    <!-- Call failure reason displayed when the user's outgoing call cannot be placed due to a low
+         battery. -->
+    <string name="dialFailed_low_battery">Your video call cannot be placed due to low battery.</string>
+
+    <!-- Call failure reason displayed when the user's call is ended due to a low battery. This
+         message is shown when an in-progress call is ended due to the battery being low. -->
+    <string name="callFailed_low_battery">Video call ended due to low battery.</string>
+
     <!-- The title for the change voicemail PIN activity -->
     <string name="change_pin_title">Change Voicemail PIN</string>
     <!-- The label for the continue button in change voicemail PIN activity -->
@@ -1390,4 +1457,34 @@
     <string name="change_pin_succeeded">Voicemail PIN updated</string>
     <!-- The error message to show if the server reported an error while attempting to change the voicemail PIN -->
     <string name="change_pin_system_error">Unable to set PIN</string>
+
+    <!-- The subtext for mobile data setting. shown if roaming settings turned off -->
+    <string name="mobile_data_status_roaming_turned_off_subtext">Data roaming is turned off</string>
+    <!-- The subtext for mobile data setting. shown if roaming settings turned on -->
+    <string name="mobile_data_status_roaming_turned_on_subtext">Data roaming is turned on</string>
+    <!-- The subtext for mobile data setting. shown if currently roaming, have roaming settings turned on but don't have a roaming data plan-->
+    <string name="mobile_data_status_roaming_without_plan_subtext">Currently roaming, need data plan</string>
+    <!-- The subtext for mobile data setting. shown if currently roaming, have roaming settings turned and have an active roaming data plan-->
+    <string name="mobile_data_status_roaming_with_plan_subtext">Currently roaming, data plan is active</string>
+    <!-- The subtext for mobile data setting. shown if not in roaming and prepaid sim has run out of balance -->
+    <string name="mobile_data_status_no_plan_subtext">No mobile data left</string>
+
+    <!-- The setting option name for activate prepaid mobile data plan -->
+    <string name="mobile_data_activate_prepaid">No mobile data left</string>
+    <!-- The setting option summary for activate prepaid mobile data plan -->
+    <string name="mobile_data_activate_prepaid_summary">Add mobile data through <xliff:g id="provider_name">%s</xliff:g></string>
+    <!-- The setting option name for for adding roaming data plan -->
+    <string name="mobile_data_activate_roaming_plan">No roaming plan</string>
+    <!-- The setting option summary for adding roaming data plan -->
+    <string name="mobile_data_activate_roaming_plan_summary">Add roaming plan through <xliff:g id="provider_name">%s</xliff:g></string>
+    <!-- The setting option footer for adding data either prepaid or roaming -->
+    <string name="mobile_data_activate_footer">You can add mobile data or a roaming plan through your carrier, <xliff:g id="provider_name">%s</xliff:g>.</string>
+    <!-- activate data plan dialogue title for either prepaid or roaming -->
+    <string name="mobile_data_activate_diag_title">Add data?</string>
+    <!-- activate data plan dialogue message for either prepaid or roaming -->
+    <string name="mobile_data_activate_diag_message">You may need to add data through <xliff:g id="provider_name">%s</xliff:g></string>
+    <!-- activate data plan dialogue button for adding data, which will take users out of the setting page -->
+    <string name="mobile_data_activate_button">ADD DATA</string>
+    <!-- activate data plan dialogue button for cancel further actions-->
+    <string name="mobile_data_activate_cancel_button">CANCEL</string>
 </resources>

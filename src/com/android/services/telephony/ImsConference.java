@@ -23,8 +23,8 @@ import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.telecom.Conference;
 import android.telecom.ConferenceParticipant;
-import android.telecom.Connection.VideoProvider;
 import android.telecom.Connection;
+import android.telecom.Connection.VideoProvider;
 import android.telecom.DisconnectCause;
 import android.telecom.Log;
 import android.telecom.PhoneAccountHandle;
@@ -131,17 +131,6 @@ public class ImsConference extends Conference {
         }
 
         /**
-         * Handles destruction of the host connection; once the host connection has been
-         * destroyed, cleans up the conference participant connection.
-         *
-         * @param connection The host connection.
-         */
-        @Override
-        public void onDestroyed(android.telecom.Connection connection) {
-            disconnectConferenceParticipants();
-        }
-
-        /**
          * Handles changes to conference participant data as reported by the conference host
          * connection.
          *
@@ -215,7 +204,7 @@ public class ImsConference extends Conference {
     /**
      * The telephony connection service; used to add new participant connections to Telecom.
      */
-    private TelephonyConnectionService mTelephonyConnectionService;
+    private TelephonyConnectionServiceProxy mTelephonyConnectionService;
 
     /**
      * The connection to the conference server which is hosting the conference.
@@ -231,6 +220,8 @@ public class ImsConference extends Conference {
      * The address of the conference host.
      */
     private Uri[] mConferenceHostAddress;
+
+    private TelecomAccountRegistry mTelecomAccountRegistry;
 
     /**
      * The known conference participant connections.  The HashMap is keyed by a Pair containing
@@ -267,17 +258,23 @@ public class ImsConference extends Conference {
      * @param conferenceHost The telephony connection hosting the conference.
      * @param phoneAccountHandle The phone account handle associated with the conference.
      */
-    public ImsConference(TelephonyConnectionService telephonyConnectionService,
+    public ImsConference(TelecomAccountRegistry telecomAccountRegistry,
+                         TelephonyConnectionServiceProxy telephonyConnectionService,
             TelephonyConnection conferenceHost, PhoneAccountHandle phoneAccountHandle) {
 
         super(phoneAccountHandle);
 
+        mTelecomAccountRegistry = telecomAccountRegistry;
+
         // Specify the connection time of the conference to be the connection time of the original
         // connection.
         long connectTime = conferenceHost.getOriginalConnection().getConnectTime();
-        setConnectTimeMillis(connectTime);
+        long connectElapsedTime = conferenceHost.getOriginalConnection().getConnectTimeReal();
+        setConnectionTime(connectTime);
+        setConnectionElapsedTime(connectElapsedTime);
         // Set the connectTime in the connection as well.
         conferenceHost.setConnectTimeMillis(connectTime);
+        conferenceHost.setConnectElapsedTimeMillis(connectElapsedTime);
 
         mTelephonyConnectionService = telephonyConnectionService;
         setConferenceHost(conferenceHost);
@@ -329,6 +326,10 @@ public class ImsConference extends Conference {
         conferenceCapabilities = changeBitmask(conferenceCapabilities,
                 Connection.CAPABILITY_CANNOT_DOWNGRADE_VIDEO_TO_AUDIO,
                 can(capabilities, Connection.CAPABILITY_CANNOT_DOWNGRADE_VIDEO_TO_AUDIO));
+
+        conferenceCapabilities = changeBitmask(conferenceCapabilities,
+                Connection.CAPABILITY_CAN_PAUSE_VIDEO,
+                mConferenceHost.getVideoPauseSupported() && isVideoCapable());
 
         return conferenceCapabilities;
     }
@@ -407,6 +408,8 @@ public class ImsConference extends Conference {
             return;
         }
 
+        disconnectConferenceParticipants();
+
         Call call = mConferenceHost.getCall();
         if (call != null) {
             try {
@@ -439,7 +442,7 @@ public class ImsConference extends Conference {
     @Override
     public void onMerge(android.telecom.Connection connection) {
         try {
-            Phone phone = ((TelephonyConnection) connection).getPhone();
+            Phone phone = mConferenceHost.getPhone();
             if (phone != null) {
                 phone.conference();
             }
@@ -589,8 +592,7 @@ public class ImsConference extends Conference {
             Phone imsPhone = mConferenceHost.getPhone();
             mConferenceHostPhoneAccountHandle =
                     PhoneUtils.makePstnPhoneAccountHandle(imsPhone.getDefaultPhone());
-            Uri hostAddress = TelecomAccountRegistry.getInstance(mTelephonyConnectionService)
-                    .getAddress(mConferenceHostPhoneAccountHandle);
+            Uri hostAddress = mTelecomAccountRegistry.getAddress(mConferenceHostPhoneAccountHandle);
 
             ArrayList<Uri> hostAddresses = new ArrayList<>();
 
@@ -735,8 +737,9 @@ public class ImsConference extends Conference {
             mConferenceParticipantConnections.put(new Pair<>(participant.getHandle(),
                     participant.getEndpoint()), connection);
         }
+
         mTelephonyConnectionService.addExistingConnection(mConferenceHostPhoneAccountHandle,
-                connection);
+                connection, this);
         addConnection(connection);
     }
 
@@ -879,7 +882,8 @@ public class ImsConference extends Conference {
 
             if (mConferenceHost.getPhone().getPhoneType() == PhoneConstants.PHONE_TYPE_GSM) {
                 Log.i(this,"handleOriginalConnectionChange : SRVCC to GSM");
-                GsmConnection c = new GsmConnection(originalConnection, getTelecomCallId());
+                GsmConnection c = new GsmConnection(originalConnection, getTelecomCallId(),
+                        mConferenceHost.isOutgoingCall());
                 // This is a newly created conference connection as a result of SRVCC
                 c.setConferenceSupported(true);
                 c.addCapability(Connection.CAPABILITY_CONFERENCE_HAS_NO_CHILDREN);
@@ -938,6 +942,16 @@ public class ImsConference extends Conference {
                 setOnHold();
                 break;
         }
+    }
+
+    /**
+     * Determines if the host of this conference is capable of video calling.
+     * @return {@code true} if video capable, {@code false} otherwise.
+     */
+    private boolean isVideoCapable() {
+        int capabilities = mConferenceHost.getConnectionCapabilities();
+        return can(capabilities, Connection.CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL)
+                && can(capabilities, Connection.CAPABILITY_SUPPORTS_VT_REMOTE_BIDIRECTIONAL);
     }
 
     private void updateStatusHints() {
@@ -999,5 +1013,48 @@ public class ImsConference extends Conference {
             return null;
         }
         return PhoneGlobals.getInstance().getCarrierConfigForSubId(phone.getSubId());
+    }
+
+    /**
+     * @return {@code true} if the carrier associated with the conference requires that the maximum
+     *      size of the conference is enforced, {@code false} otherwise.
+     */
+    public boolean isMaximumConferenceSizeEnforced() {
+        PersistableBundle b = getCarrierConfig();
+        // Return false if the CarrierConfig is unavailable
+        return b != null && b.getBoolean(
+                CarrierConfigManager.KEY_IS_IMS_CONFERENCE_SIZE_ENFORCED_BOOL);
+    }
+
+    /**
+     * @return The maximum size of a conference call where
+     * {@link #isMaximumConferenceSizeEnforced()} is true.
+     */
+    public int getMaximumConferenceSize() {
+        PersistableBundle b = getCarrierConfig();
+
+        // If there is no carrier config its really a problem, but we'll still define a sane limit
+        // of 5 so that we can still make a conference.
+        if (b == null) {
+            Log.w(this, "getMaximumConferenceSize - failed to get conference size");
+            return 5;
+        }
+        return b.getInt(CarrierConfigManager.KEY_IMS_CONFERENCE_SIZE_LIMIT_INT);
+    }
+
+    /**
+     * @return The number of participants in the conference.
+     */
+    public int getNumberOfParticipants() {
+        return mConferenceParticipantConnections.size();
+    }
+
+    /**
+     * @return {@code True} if the carrier enforces a maximum conference size, and the number of
+     *      participants in the conference has reached the limit, {@code false} otherwise.
+     */
+    public boolean isFullConference() {
+        return isMaximumConferenceSizeEnforced()
+                && getNumberOfParticipants() >= getMaximumConferenceSize();
     }
 }

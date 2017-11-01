@@ -16,7 +16,7 @@
 
 <resources xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
-    <string name="phoneAppLabel" product="tablet" msgid="1107073389495104784">"Cellular Data"</string>
+    <string name="phoneAppLabel" product="tablet" msgid="8576272342240415145">"Data sa Mobile"</string>
     <string name="phoneAppLabel" product="default" msgid="6790717591729922998">"Mga Serbisyo sa Telepono"</string>
     <string name="emergencyDialerIconLabel" msgid="7812140032168171053">"Pang-emergency na Dialer"</string>
     <string name="phoneIconLabel" msgid="2331230813161304895">"Telepono"</string>
@@ -45,6 +45,7 @@
     <string name="no_vm_number" msgid="4164780423805688336">"Nawawala ang numero ng voicemail"</string>
     <string name="no_vm_number_msg" msgid="1300729501030053828">"Walang nakaimbak na numero ng voicemail sa SIM card."</string>
     <string name="add_vm_number_str" msgid="4676479471644687453">"Magdagdag ng numero"</string>
+    <string name="voice_number_setting_primary_user_only" msgid="6596604364907022416">"Maaari lang baguhin ng Pangunahing User ang Mga Setting ng Voicemail."</string>
     <string name="puk_unlocked" msgid="2284912838477558454">"Naalis sa pagkaka-block ang iyong SIM card. Nag-a-unlock ang iyong telepono…"</string>
     <string name="label_ndp" msgid="780479633159517250">"PIN na pang-unlock ng SIM network"</string>
     <string name="sim_ndp_unlock_text" msgid="683628237760543009">"I-unlock"</string>
@@ -52,7 +53,7 @@
     <string name="requesting_unlock" msgid="6412629401033249351">"Humihiling ng pag-unlock sa network…"</string>
     <string name="unlock_failed" msgid="6490531697031504225">"Hindi matagumpay ang kahilingan na i-unlock ang network."</string>
     <string name="unlock_success" msgid="6770085622238180152">"Matagumpay ang pag-unlock ng network."</string>
-    <string name="mobile_network_settings_not_available" msgid="3831911315358856062">"Hindi available ang mga setting ng cellular network para sa user na ito"</string>
+    <string name="mobile_network_settings_not_available" msgid="7355254462995117896">"Hindi available ang mga setting ng mobile network para sa user na ito"</string>
     <string name="labelGSMMore" msgid="5930842194056092106">"Mga setting ng tawag ng GSM"</string>
     <string name="labelGsmMore_with_label" msgid="2674012918829238901">"Mga setting ng tawag gamit ang GSM (<xliff:g id="SUBSCRIPTIONLABEL">%s</xliff:g>)"</string>
     <string name="labelCDMAMore" msgid="1630676740428229339">"Mga setting ng CDMA na tawag"</string>
@@ -76,6 +77,7 @@
     <string name="voicemail" msgid="8693759337917898954">"Voicemail"</string>
     <string name="voicemail_settings_with_label" msgid="152724978380748296">"Voicemail (<xliff:g id="SUBSCRIPTIONLABEL">%s</xliff:g>)"</string>
     <string name="voicemail_abbreviated" msgid="2215592488517217448">"VM:"</string>
+    <string name="voicemail_notifications_preference_title" msgid="4019728578955102213">"Mga Notification"</string>
     <string name="networks" msgid="8873030692174541976">"Mga network operator"</string>
     <string name="cell_broadcast_settings" msgid="8740238216690502563">"Mga pang-emergency na broadcast"</string>
     <string name="call_settings" msgid="6112441768261754562">"Mga setting ng tawag"</string>
@@ -115,7 +117,7 @@
     <string name="labelCFNRc" msgid="2614827454402079766">"Kapag hindi makontak"</string>
     <string name="messageCFNRc" msgid="6380695421020295119">"Numero kapag hindi makontak"</string>
     <string name="sum_cfnrc_enabled" msgid="7010898346095497421">"Pinapasa sa <xliff:g id="PHONENUMBER">{0}</xliff:g>"</string>
-    <string name="sum_cfnrc_disabled" msgid="7222141261321276464">"Hindi pinagana"</string>
+    <string name="sum_cfnrc_disabled" msgid="2684474391807469832">"Naka-off"</string>
     <string name="disable_cfnrc_forbidden" msgid="5646361343094064333">"Hindi sinusuportahan ng iyong carrier ang hindi pagpapagana ng pagpasa ng tawag kapag hindi maabot ang iyong telepono."</string>
     <string name="updating_title" msgid="6146755386174019046">"Mga setting ng tawag"</string>
     <string name="call_settings_admin_user_only" msgid="4526094783818216374">"Ang admin user lang ang maaaring magbago sa mga setting ng tawag."</string>
@@ -157,7 +159,8 @@
     <string name="vm_change_pin_error_invalid" msgid="3972205462701668653">"Ang bagong PIN ay naglalaman ng mga di-wastong character."</string>
     <string name="vm_change_pin_error_system_error" msgid="6610603326230000207">"Hindi nabago ang PIN"</string>
     <string name="vvm_unsupported_message_format" msgid="11795090778411977">"Hindi sinusuportahang uri ng mensahe, tawagan ang <xliff:g id="NUMBER">%s</xliff:g> upang pakinggan."</string>
-    <string name="mobile_networks" msgid="2843854043339307375">"Setting ng cellular network"</string>
+    <string name="mobile_networks" msgid="5540397602919106177">"Mga setting ng mobile network"</string>
+    <string name="network_settings_title" msgid="514120489499925574">"Mobile network"</string>
     <string name="label_available" msgid="1181658289009300430">"Mga available na network"</string>
     <string name="load_networks_progress" msgid="5230707536168902952">"Naghahanap…"</string>
     <string name="empty_networks_list" msgid="4249426905018815316">"Walang nakitang mga network."</string>
@@ -169,12 +172,37 @@
     <string name="registration_done" msgid="495135664535876612">"Nakarehistro sa network."</string>
     <string name="sum_carrier_select" msgid="3494252551249882718">"Pumili ng network operator"</string>
     <string name="sum_search_networks" msgid="2921092249873272715">"Hanapin ang lahat ng mga available na network"</string>
-    <string name="select_automatically" msgid="5628402124471810174">"Awtomatikong pumili"</string>
-    <string name="sum_select_automatically" msgid="5614890115123292400">"Awtomatikong pumili ng gustong network"</string>
+    <string name="select_automatically" msgid="1046727200631770962">"Awtomatikong piliin ang network"</string>
+    <string name="network_select_title" msgid="7733107364757544558">"Network"</string>
     <string name="register_automatically" msgid="6017849844573519637">"Awtomatikong pagpaparehistro..."</string>
     <string name="preferred_network_mode_title" msgid="2336624679902659306">"Gustong uri ng network"</string>
     <string name="preferred_network_mode_summary" msgid="1434820673166126609">"Baguhin ang network operating mode"</string>
     <string name="preferred_network_mode_dialogtitle" msgid="4048082093347807230">"Gustong uri ng network"</string>
+  <string-array name="preferred_network_mode_choices">
+    <item msgid="3628460389382468528">"Mas gusto ang GSM/WCDMA"</item>
+    <item msgid="8442633436636425221">"GSM lang"</item>
+    <item msgid="2032314385791760810">"WCDMA lang"</item>
+    <item msgid="6334554401059422303">"GSM/WCDMA auto"</item>
+    <item msgid="1462198368200398663">"CDMA/EvDo auto"</item>
+    <item msgid="3611460019185359968">"CDMA na walang EvDo"</item>
+    <item msgid="545430093607698090">"EvDo lang"</item>
+    <item msgid="4286774020869405140">"CDMA/EvDo/GSM/WCDMA"</item>
+    <item msgid="4006002265696868538">"CDMA + LTE/EvDo"</item>
+    <item msgid="8973936140318359205">"GSM/WCDMA/LTE"</item>
+    <item msgid="3471059554252610472">"Pangkalahatan"</item>
+    <item msgid="2882615514545171802">"LTE"</item>
+    <item msgid="8076204422288290116">"LTE / WCDMA"</item>
+    <item msgid="3982984144824159726">"TDSCDMA lang"</item>
+    <item msgid="3686191974505922271">"TDSCDMA/WCDMA"</item>
+    <item msgid="7135671700201836475">"LTE/TDSCDMA"</item>
+    <item msgid="3736619459066330755">"TDSCDMA/GSM"</item>
+    <item msgid="4778666570887216861">"LTE/TDSCDMA/GSM"</item>
+    <item msgid="2952322596201849456">"TDSCDMA/GSM/WCDMA"</item>
+    <item msgid="115984258536697617">"LTE/TDSCDMA/WCDMA"</item>
+    <item msgid="7957991936217192636">"LTE/TDSCDMA/GSM/WCDMA"</item>
+    <item msgid="2828588917858484655">"TDSCDMA/CDMA/EVDO/GSM/WCDMA"</item>
+    <item msgid="4989979948139945854">"LTE/TDSCDMA/CDMA/EVDO/GSM/WCDMA"</item>
+  </string-array>
     <string name="preferred_network_mode_wcdma_perf_summary" msgid="8521677230113533809">"Mas gustong mode ng network: WCDMA ang mas gusto"</string>
     <string name="preferred_network_mode_gsm_only_summary" msgid="3352445413437453511">"Mas gustong mode ng network: GSM lamang"</string>
     <string name="preferred_network_mode_wcdma_only_summary" msgid="2836897236221063413">"Mas gustong mode ng network: WCDMA lamang"</string>
@@ -192,33 +220,38 @@
     <string name="preferred_network_mode_lte_gsm_umts_summary" msgid="633315028976225026">"Mas gustong network mode: LTE / GSM / UMTS"</string>
     <string name="preferred_network_mode_lte_cdma_summary" msgid="3722647806454528426">"Mas gustong mode ng network: LTE / CDMA"</string>
     <string name="preferred_network_mode_tdscdma_summary" msgid="8021016193718678775">"Piniling network mode: TDSCDMA"</string>
-  <string-array name="preferred_network_mode_choices">
-    <item msgid="7886739962255042385">"LTE / WCDMA"</item>
-    <item msgid="577652050447385699">"LTE"</item>
-    <item msgid="6813597571293773656">"Pangkalahatan"</item>
-    <item msgid="127064712132619032">"GSM/WCDMA/LTE"</item>
-    <item msgid="1126767511633425977">"CDMA + LTE/EvDo"</item>
-    <item msgid="6389676313771670660">"CDMA/EvDo/GSM/WCDMA"</item>
-    <item msgid="545430093607698090">"EvDo lang"</item>
-    <item msgid="1508557726283094448">"CDMA na walang EvDo"</item>
-    <item msgid="4341433122263841224">"CDMA/EvDo auto"</item>
-    <item msgid="5958053792390386668">"GSM/WCDMA auto"</item>
-    <item msgid="7913148405605373434">"WCDMA lang"</item>
-    <item msgid="1524224863879435516">"GSM lang"</item>
-    <item msgid="3817924849415716259">"Ninanais ang GSM/WCDMA"</item>
-  </string-array>
+    <string name="preferred_network_mode_tdscdma_wcdma_summary" msgid="2405154895437348623">"Mas gustong network mode: TDSCDMA / WCDMA"</string>
+    <string name="preferred_network_mode_lte_tdscdma_summary" msgid="2104702896644235637">"Mas gustong network mode: LTE / TDSCDMA"</string>
+    <string name="preferred_network_mode_tdscdma_gsm_summary" msgid="4893784445338396204">"Mas gustong network mode: TDSCDMA / GSM"</string>
+    <string name="preferred_network_mode_lte_tdscdma_gsm_summary" msgid="1815169717046729757">"Mas gustong network mode: LTE/GSM/TDSCDMA"</string>
+    <string name="preferred_network_mode_tdscdma_gsm_wcdma_summary" msgid="2195358773359424099">"Mas gustong network mode: TDSCDMA/GSM/WCDMA"</string>
+    <string name="preferred_network_mode_lte_tdscdma_wcdma_summary" msgid="1181424059695667803">"Mas gustong network mode: LTE/TDSCDMA/WCDMA"</string>
+    <string name="preferred_network_mode_lte_tdscdma_gsm_wcdma_summary" msgid="2526539326505354382">"Mas gustong network mode: LTE/TDSCDMA/GSM/WCDMA"</string>
+    <string name="preferred_network_mode_tdscdma_cdma_evdo_gsm_wcdma_summary" msgid="8195248059196614939">"Mas gustong network mode: CDMA/EvDo/GSM/WCDMA"</string>
+    <string name="preferred_network_mode_lte_tdscdma_cdma_evdo_gsm_wcdma_summary" msgid="5596733053095592791">"Mas gustong network mode: LTE/TDSCDMA/CDMA/EvDo/GSM/WCDMA"</string>
+    <string name="call_category" msgid="5863978196309462052">"Tumatawag"</string>
+    <string name="network_operator_category" msgid="4830701959205735636">"Network"</string>
     <string name="enhanced_4g_lte_mode_title" msgid="522191650223239171">"Enhanced 4G LTE Mode"</string>
     <string name="enhanced_4g_lte_mode_title_variant" msgid="4871126028907265406">"Advanced na Pagtawag"</string>
     <string name="enhanced_4g_lte_mode_summary" msgid="2332175070522125850">"Gamitin ang LTE upang pahusayin ang voice at ibang komunikasyon (inirerekomenda)"</string>
     <string name="data_enabled" msgid="5972538663568715366">"Pinagana ang data"</string>
     <string name="data_enable_summary" msgid="2382798156640007971">"Payagan ang paggamit ng data"</string>
     <string name="dialog_alert_title" msgid="6751344986194435476">"Bigyang-pansin"</string>
-    <string name="roaming" msgid="8871412572928323707">"Roaming ng data"</string>
+    <string name="roaming" msgid="7894878421600247140">"Roaming"</string>
     <string name="roaming_enable" msgid="7331106985174381987">"Kumonekta sa mga serbisyo ng data kapag nagro-roam"</string>
     <string name="roaming_disable" msgid="1843417228755568110">"Kumonekta sa mga serbisyo ng data kapag nagro-roam"</string>
     <string name="roaming_reenable_message" msgid="8913735676127858115">"Nawalan ka ng pagkonekta sa data dahil iniwan mo ang iyong home network na naka-off ang roaming ng data."</string>
     <string name="roaming_warning" msgid="1603164667540144353">"Maaari kang magkaroon ng malaking bayarin."</string>
     <string name="roaming_alert_title" msgid="3654815360303826008">"Payagan ang roaming ng data?"</string>
+    <string name="data_usage_title" msgid="8759619109516889802">"Paggamit ng data"</string>
+    <string name="data_usage_template" msgid="8065650945732671045">"<xliff:g id="ID_1">%1$s</xliff:g> na mobile data ang nagamit sa pagitan ng <xliff:g id="ID_2">%2$s</xliff:g>"</string>
+    <string name="carrier_settings_euicc" msgid="6714062862127226405">"Carrier"</string>
+    <string name="keywords_carrier_settings_euicc" msgid="783429609643157743">"carrier, esim, sim, euicc"</string>
+    <string name="carrier_settings_euicc_summary" msgid="5115001942761995457">"<xliff:g id="CARRIER_NAME">%1$s</xliff:g> — <xliff:g id="PHONE_NUMBER">%2$s</xliff:g>"</string>
+    <string name="mobile_data_settings_title" msgid="3273340917802377121">"Mobile Data"</string>
+    <string name="mobile_data_settings_summary" msgid="5087255915840576895">"I-access ang data gamit ang mobile network"</string>
+    <string name="wifi_calling_settings_title" msgid="7741961465416430470">"Pagtawag gamit ang Wi-Fi"</string>
+    <string name="video_calling_settings_title" msgid="539714564273795574">"Pakikipag-video call gamit ang carrier"</string>
     <string name="gsm_umts_options" msgid="6538311689850981686">"Mga pagpipilian sa GSM/UMTS"</string>
     <string name="cdma_options" msgid="4016822858172249884">"Mga pagpipiliian sa CDMA"</string>
     <string name="throttle_data_usage" msgid="3715677828160555808">"Paggamit ng data"</string>
@@ -231,7 +264,7 @@
     <string name="throttle_data_rate_reduced_subtext" msgid="7492763592720107737">"Ang <xliff:g id="USED_0">%1$s</xliff:g> na maximum ay lumagpas sa\nBinabaan ang rate ng data sa <xliff:g id="USED_1">%2$d</xliff:g> Kb/s"</string>
     <string name="throttle_time_frame_subtext" msgid="7732763021560399960">"<xliff:g id="USED_0">%1$d</xliff:g>٪ ng cycle ay lumagpas sa\nMagsisimula ang susunod na tagal ng panahon sa loob ng <xliff:g id="USED_1">%2$d</xliff:g> (na) araw (<xliff:g id="USED_2">%3$s</xliff:g>)"</string>
     <string name="throttle_rate_subtext" msgid="2149102656120726855">"Ibinaba ang rate ng data sa <xliff:g id="USED">%1$d</xliff:g> Kb/s kung nalagpasan ang limitasyon sa paggamit ng data"</string>
-    <string name="throttle_help_subtext" msgid="3633091498168446044">"Higit pang impormasyon tungkol sa patakaran sa paggamit ng data sa cellular network ng iyong carrier"</string>
+    <string name="throttle_help_subtext" msgid="5217706521499010816">"Higit pang impormasyon tungkol sa patakaran sa paggamit ng data sa mobile network ng iyong carrier"</string>
     <string name="cell_broadcast_sms" msgid="5584192824053625842">"Cell Broadcast SMS"</string>
     <string name="enable_disable_cell_bc_sms" msgid="4851147873691392255">"Cell Broadcast SMS"</string>
     <string name="cell_bc_sms_enable" msgid="6441688565738921084">"Pinagana ang Cell Broadcast SMS"</string>
@@ -368,6 +401,7 @@
     <string name="menu_add" msgid="1882023737425114762">"Magdagdag ng contact"</string>
     <string name="menu_edit" msgid="7143003705504672374">"I-edit ang contact"</string>
     <string name="menu_delete" msgid="3977150783449642851">"Tanggalin ang contact"</string>
+    <string name="menu_dial" msgid="3223106222819685808">"I-dial ang contact"</string>
     <string name="get_pin2" msgid="8204677063922225311">"I-type ang PIN2"</string>
     <string name="name" msgid="7329028332786872378">"Pangalan"</string>
     <string name="number" msgid="7905950798349903858">"Numero"</string>
@@ -382,7 +416,7 @@
     <string name="deleting_fdn_contact" msgid="5669163206349319969">"Tinatanggal ang fixed dialing number…"</string>
     <string name="fdn_contact_deleted" msgid="7154162327112259569">"Tinanggal ang fixed dialing number."</string>
     <string name="pin2_invalid" msgid="5470854099230755944">"Hindi na-update ang FDN dahil maling PIN ang iyong na-type."</string>
-    <string name="fdn_invalid_number" msgid="1494755047900009147">"Hindi pa na-update ang FDN dahil hindi maaaring humigit sa 20 digit ang numero."</string>
+    <string name="fdn_invalid_number" msgid="8602417141715473998">"Hindi na-update ang FDN dahil walang inilagay na numero o lampas ito sa 20 digit."</string>
     <string name="pin2_or_fdn_invalid" msgid="6025144083384701197">"Hindi na-update ang FDN. Hindi wasto ang PIN2, o tinanggihan ang numero ng telepono."</string>
     <string name="fdn_failed" msgid="540018079008319747">"Nagbigo ang operasyon ng FDN."</string>
     <string name="simContacts_emptyLoading" msgid="2203331234764498011">"Nagbabasa mula sa SIM card…"</string>
@@ -439,16 +473,16 @@
     <string name="notification_voicemail_no_vm_number" msgid="760963466895609716">"Hindi kilala ang numero ng voicemail"</string>
     <string name="notification_network_selection_title" msgid="4224455487793492772">"Walang serbisyo"</string>
     <string name="notification_network_selection_text" msgid="2607085729661923269">"Hindi available ang mga piniling network (<xliff:g id="OPERATOR_NAME">%s</xliff:g>)"</string>
-    <string name="incall_error_power_off" msgid="2947938060513306698">"I-off ang airplane mode upang makatawag."</string>
+    <string name="incall_error_power_off" product="watch" msgid="2007450435656211658">"I-on ang mobile network, i-off ang airplane mode o i-off ang battery saver mode upang tumawag."</string>
+    <string name="incall_error_power_off" product="default" msgid="2947938060513306698">"I-off ang airplane mode upang makatawag."</string>
     <string name="incall_error_power_off_wfc" msgid="8711428920632416575">"I-off ang airplane mode o kumonekta sa isang wireless network upang makatawag."</string>
     <string name="incall_error_ecm_emergency_only" msgid="738708660612388692">"Lumabas sa emergency callback mode upang makapagsagawa ng hindi pang-emergency na pagtawag."</string>
     <string name="incall_error_emergency_only" msgid="4678640422710818317">"Hindi nakarehistro sa network."</string>
-    <string name="incall_error_out_of_service" msgid="4100065333878929223">"Hindi available ang cellular network"</string>
-    <string name="incall_error_out_of_service_wfc" msgid="323851839058697057">"Hindi available ang cellular network. Kumonekta sa isang wireless network upang makatawag."</string>
+    <string name="incall_error_out_of_service" msgid="8587993036435080418">"Hindi available ang mobile network."</string>
+    <string name="incall_error_out_of_service_wfc" msgid="8741629779555132471">"Hindi available ang mobile network. Kumonekta sa isang wireless network upang tumawag."</string>
     <string name="incall_error_no_phone_number_supplied" msgid="1150414018684246528">"Upang tumawag, maglagay ng wastong numero."</string>
     <string name="incall_error_call_failed" msgid="5891978320269774095">"Nabigo ang tawag."</string>
     <string name="incall_error_cannot_add_call" msgid="5206923515522412110">"Hindi maidaragdag ang tawag sa oras na ito."</string>
-    <string name="incall_status_dialed_mmi" msgid="3672498861336189563">"Sinisimulan ang pagkakasunud-sunod ng MMI…"</string>
     <string name="incall_error_supp_service_unknown" msgid="655570339115407698">"Hindi sinusuportahan ang serbisyo"</string>
     <string name="incall_error_supp_service_switch" msgid="5237002176899962862">"Hindi mailipat ang mga tawag."</string>
     <string name="incall_error_supp_service_separate" msgid="7224393405134545246">"Hindi mapaghiwalay ang tawag"</string>
@@ -523,10 +557,7 @@
     <string name="phone_entered_ecm_text" msgid="6266424252578731203">"Ipinasok na Emergency Callback Mode"</string>
     <string name="phone_in_ecm_notification_title" msgid="3226896828951687085">"Emergency Callback Mode"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="4611608947314729773">"Hindi pinagana ang koneksyon ng data"</string>
-    <plurals name="phone_in_ecm_notification_time" formatted="false" msgid="8308381858502470919">
-      <item quantity="one">Walang koneksyon ng data sa loob ng <xliff:g id="COUNT_1">%s</xliff:g> minuto</item>
-      <item quantity="other">Walang koneksyon ng data sa loob ng <xliff:g id="COUNT_1">%s</xliff:g> na minuto</item>
-    </plurals>
+    <string name="phone_in_ecm_notification_complete_time" msgid="7730376844178948351">"Walang koneksyon sa data hanggang <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
     <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="7179911675595441201">
       <item quantity="one">Mapupunta sa Emergency Callback mode ang telepono sa loob ng <xliff:g id="COUNT_1">%s</xliff:g> minuto. Habang nasa mode na ito, walang magagamit na mga application na gumagamit ng koneksyon ng data. Gusto mo bang lumabas ngayon?</item>
       <item quantity="other">Mapupunta sa Emergency Callback mode ang telepono sa loob ng <xliff:g id="COUNT_1">%s</xliff:g> na minuto. Habang nasa mode na ito, walang magagamit na mga application na gumagamit ng koneksyon ng data. Gusto mo bang lumabas ngayon?</item>
@@ -550,12 +581,9 @@
     <string name="selectContact" msgid="781975788478987237">"pumili ng contact"</string>
     <string name="not_voice_capable" msgid="2739898841461577811">"Hindi suportado ang voice calling"</string>
     <string name="description_dial_button" msgid="7459705245418435351">"Mag-dial"</string>
-    <string name="voicemail_notification_vibrate_when_title" msgid="8361970092063604886">"Mag-vibrate"</string>
-    <string name="voicemail_notification_vibarte_when_dialog_title" msgid="5739583146522136440">"Mag-vibrate"</string>
     <string name="voicemail_visual_voicemail_switch_title" msgid="5012622186976275457">"Visual Voicemail"</string>
     <string name="voicemail_set_pin_dialog_title" msgid="2797924461029093837">"Magtakda ng PIN"</string>
     <string name="voicemail_change_pin_dialog_title" msgid="6035421908626121564">"Baguhin ang PIN"</string>
-    <string name="voicemail_notification_ringtone_title" msgid="2609519527849101590">"Tunog"</string>
     <string name="preference_category_ringtone" msgid="5197960752529332721">"Ringtone at Pag-vibrate"</string>
     <string name="pstn_connection_service_label" msgid="1743245930577325900">"Mga built-in na SIM card"</string>
     <string name="enable_video_calling_title" msgid="7237253660669000899">"I-on ang video calling"</string>
@@ -572,6 +600,10 @@
     <string name="message_decode_error" msgid="3456481534066924855">"Nagkaroon ng error habang dine-decode ang mensahe."</string>
     <string name="callFailed_cdma_activation" msgid="2307989779233262164">"Na-activate ng isang SIM card ang iyong serbisyo at na-update ang mga kakayahang roaming ng iyong telepono."</string>
     <string name="callFailed_cdma_call_limit" msgid="1556916577171457086">"Masyadong maraming aktibong tawag. Mangyaring tapusin o pagsamahin ang mga umiiral na tawag bago gumawa ng bago."</string>
+    <string name="callFailed_imei_not_accepted" msgid="132192626901238542">"Hindi nakakonekta, pakipasok ang isang wastong SIM card."</string>
+    <string name="callFailed_wifi_lost" msgid="5968076625137297184">"Nawala ang koneksyon sa Wi-Fi. Natapos ang tawag."</string>
+    <string name="dialFailed_low_battery" msgid="8760548177088774268">"Hindi maisasagawa ang iyong video call dahil sa mahinang baterya."</string>
+    <string name="callFailed_low_battery" msgid="4913582435905872616">"Natapos ang video call dahil sa mahinang baterya."</string>
     <string name="change_pin_title" msgid="7790232089699034029">"Baguhin ang PIN sa Voicemail"</string>
     <string name="change_pin_continue_label" msgid="2135088662420163447">"Magpatuloy"</string>
     <string name="change_pin_cancel_label" msgid="353535488390948596">"Kanselahin"</string>
@@ -584,4 +616,18 @@
     <string name="change_pin_confirm_pins_dont_match" msgid="4795052654904027909">"Hindi tugma ang mga PIN"</string>
     <string name="change_pin_succeeded" msgid="2022852286442211151">"In-update ang PIN sa voicemail"</string>
     <string name="change_pin_system_error" msgid="8308462387154257840">"Hindi naitakda ang PIN"</string>
+    <string name="mobile_data_status_roaming_turned_off_subtext" msgid="935636805765823307">"Naka-off ang data roaming"</string>
+    <string name="mobile_data_status_roaming_turned_on_subtext" msgid="1335176927083781041">"Naka-on ang data roaming"</string>
+    <string name="mobile_data_status_roaming_without_plan_subtext" msgid="3568412513831673037">"Kasalukuyang nasa roaming, kailangan ng data plan"</string>
+    <string name="mobile_data_status_roaming_with_plan_subtext" msgid="8721998948811064377">"Kasalukuyang nasa roaming, aktibo ang data plan"</string>
+    <string name="mobile_data_status_no_plan_subtext" msgid="4887747337017565725">"Walang natitirang mobile data"</string>
+    <string name="mobile_data_activate_prepaid" msgid="7447025165850512683">"Walang natitirang mobile data"</string>
+    <string name="mobile_data_activate_prepaid_summary" msgid="5705389791791637666">"Magdagdag ng mobile data sa pamamagitan ng <xliff:g id="PROVIDER_NAME">%s</xliff:g>"</string>
+    <string name="mobile_data_activate_roaming_plan" msgid="5998161536947086264">"Walang roaming plan"</string>
+    <string name="mobile_data_activate_roaming_plan_summary" msgid="511202908883425459">"Magdagdag ng roaming plan sa pamamagitan ng <xliff:g id="PROVIDER_NAME">%s</xliff:g>"</string>
+    <string name="mobile_data_activate_footer" msgid="5979019929980140594">"Maaari kang magdagdag ng mobile data o ng isang roaming plan sa pamamagitan ng iyong carrier na <xliff:g id="PROVIDER_NAME">%s</xliff:g>."</string>
+    <string name="mobile_data_activate_diag_title" msgid="9044252207707864493">"Magdagdag ng data?"</string>
+    <string name="mobile_data_activate_diag_message" msgid="8216154678758451453">"Maaaring kailanganin mong magdagdag ng data sa pamamagitan ng <xliff:g id="PROVIDER_NAME">%s</xliff:g>"</string>
+    <string name="mobile_data_activate_button" msgid="3682400969184405446">"MAGDAGDAG NG DATA"</string>
+    <string name="mobile_data_activate_cancel_button" msgid="1708022171547398765">"KANSELAHIN"</string>
 </resources>

@@ -20,7 +20,7 @@ import static android.Manifest.permission.READ_PHONE_STATE;
 import static android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE;
 
 import android.annotation.NonNull;
-import android.app.ActivityManagerNative;
+import android.app.ActivityManager;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -83,8 +83,9 @@ import java.util.List;
 
 public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     private static final String LOG_TAG = "CarrierConfigLoader";
-    // Package name for default carrier config app, bundled with system image.
-    private static final String DEFAULT_CARRIER_CONFIG_PACKAGE = "com.android.carrierconfig";
+
+    // Package name for platform carrier config app, bundled with system image.
+    private final String mPlatformCarrierConfigPackage;
 
     /** The singleton instance. */
     private static CarrierConfigLoader sInstance;
@@ -96,6 +97,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     private PersistableBundle[] mConfigFromCarrierApp;
     // Service connection for binding to config app.
     private CarrierServiceConnection[] mServiceConnection;
+    // Whether we have sent config change bcast for each phone id.
+    private boolean[] mHasSentConfigChange;
 
     // Broadcast receiver for Boot intents, register intent filter in construtor.
     private final BroadcastReceiver mBootReceiver = new ConfigLoaderBroadcastReceiver();
@@ -178,7 +181,12 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
 
                 case EVENT_SYSTEM_UNLOCKED:
                     for (int i = 0; i < TelephonyManager.from(mContext).getPhoneCount(); ++i) {
-                        updateConfigForPhoneId(i);
+                        // When user unlock device, we should only try to send broadcast again if
+                        // we have sent it before unlock. This will avoid we try to load carrier
+                        // config when SIM is still loading when unlock happens.
+                        if (mHasSentConfigChange[i]) {
+                            updateConfigForPhoneId(i);
+                        }
                     }
                     break;
 
@@ -196,16 +204,16 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
 
                 case EVENT_FETCH_DEFAULT:
                     iccid = getIccIdForPhoneId(phoneId);
-                    config = restoreConfigFromXml(DEFAULT_CARRIER_CONFIG_PACKAGE, iccid);
+                    config = restoreConfigFromXml(mPlatformCarrierConfigPackage, iccid);
                     if (config != null) {
-                        log("Loaded config from XML. package=" + DEFAULT_CARRIER_CONFIG_PACKAGE
+                        log("Loaded config from XML. package=" + mPlatformCarrierConfigPackage
                                 + " phoneId=" + phoneId);
                         mConfigFromDefaultApp[phoneId] = config;
                         Message newMsg = obtainMessage(EVENT_LOADED_FROM_DEFAULT, phoneId, -1);
                         newMsg.getData().putBoolean("loaded_from_xml", true);
                         mHandler.sendMessage(newMsg);
                     } else {
-                        if (bindToConfigPackage(DEFAULT_CARRIER_CONFIG_PACKAGE,
+                        if (bindToConfigPackage(mPlatformCarrierConfigPackage,
                                 phoneId, EVENT_CONNECTED_TO_DEFAULT)) {
                             sendMessageDelayed(obtainMessage(EVENT_BIND_DEFAULT_TIMEOUT, phoneId, -1),
                                     BIND_TIMEOUT_MILLIS);
@@ -230,7 +238,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                 .asInterface(conn.service);
                         config = carrierService.getCarrierConfig(carrierId);
                         iccid = getIccIdForPhoneId(phoneId);
-                        saveConfigToXml(DEFAULT_CARRIER_CONFIG_PACKAGE, iccid, config);
+                        saveConfigToXml(mPlatformCarrierConfigPackage, iccid, config);
                         mConfigFromDefaultApp[phoneId] = config;
                         sendMessage(obtainMessage(EVENT_LOADED_FROM_DEFAULT, phoneId, -1));
                     } catch (Exception ex) {
@@ -349,6 +357,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
      */
     private CarrierConfigLoader(Context context) {
         mContext = context;
+        mPlatformCarrierConfigPackage =
+                mContext.getString(R.string.platform_carrier_config_package);
 
         IntentFilter bootFilter = new IntentFilter();
         bootFilter.addAction(Intent.ACTION_BOOT_COMPLETED);
@@ -367,6 +377,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         mConfigFromDefaultApp = new PersistableBundle[numPhones];
         mConfigFromCarrierApp = new PersistableBundle[numPhones];
         mServiceConnection = new CarrierServiceConnection[numPhones];
+        mHasSentConfigChange = new boolean[numPhones];
         // Make this service available through ServiceManager.
         ServiceManager.addService(Context.CARRIER_CONFIG_SERVICE, this);
         log("CarrierConfigLoader has started");
@@ -392,10 +403,11 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
 
     private void broadcastConfigChangedIntent(int phoneId) {
         Intent intent = new Intent(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
-        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
+        intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT |
+                Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
         SubscriptionManager.putPhoneIdAndSubIdExtra(intent, phoneId);
-        ActivityManagerNative.broadcastStickyIntent(intent, READ_PHONE_STATE,
-                UserHandle.USER_ALL);
+        ActivityManager.broadcastStickyIntent(intent, UserHandle.USER_ALL);
+        mHasSentConfigChange[phoneId] = true;
     }
 
     /** Binds to the default or carrier config app. */
@@ -476,8 +488,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             loge("Cannot save config with null packageName or iccid.");
             return;
         }
-        if (config == null) {
-          config = new PersistableBundle();
+        // b/32668103 Only save to file if config isn't empty.
+        // In case of failure, not caching an empty bundle will
+        // try loading config again on next power on or sim loaded.
+        // Downside is for genuinely empty bundle, will bind and load
+        // on every power on.
+        if (config == null || config.isEmpty()) {
+            return;
         }
 
         final String version = getPackageVersion(packageName);
