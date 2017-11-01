@@ -18,9 +18,9 @@ package com.android;
 
 import android.content.Context;
 import android.os.Handler;
+import android.os.Looper;
 import android.support.test.InstrumentationRegistry;
-
-import com.android.phone.MockitoHelper;
+import android.util.Log;
 
 import org.mockito.MockitoAnnotations;
 
@@ -33,16 +33,25 @@ import java.util.concurrent.TimeUnit;
 public class TelephonyTestBase {
 
     protected Context mContext;
-    MockitoHelper mMockitoHelper = new MockitoHelper();
 
     public void setUp() throws Exception {
         mContext = InstrumentationRegistry.getTargetContext();
-        mMockitoHelper.setUp(mContext, getClass());
         MockitoAnnotations.initMocks(this);
+        // Set up the looper if it does not exist on the test thread.
+        if (Looper.myLooper() == null) {
+            Looper.prepare();
+            // Wait until the looper is not null anymore
+            for(int i = 0; i < 5; i++) {
+                if (Looper.myLooper() != null) {
+                    break;
+                }
+                Looper.prepare();
+                Thread.sleep(100);
+            }
+        }
     }
 
     public void tearDown() throws Exception {
-        mMockitoHelper.tearDown();
     }
 
     protected final void waitForHandlerAction(Handler h, long timeoutMillis) {
@@ -66,6 +75,14 @@ public class TelephonyTestBase {
             } catch (InterruptedException e) {
                 // do nothing
             }
+        }
+    }
+
+    protected void waitForMs(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException e) {
+            Log.e("TelephonyTestBase", "InterruptedException while waiting: " + e);
         }
     }
 }

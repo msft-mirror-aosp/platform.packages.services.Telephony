@@ -3,7 +3,7 @@ package com.android.phone;
 
 import android.content.Context;
 
-import com.android.phone.vvm.omtp.utils.VvmDumpHandler;
+import com.android.phone.vvm.VvmDumpHandler;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -15,6 +15,7 @@ public class DumpsysHandler {
 
     public static void dump(Context context, FileDescriptor fd, PrintWriter writer,
             String[] args) {
+        PhoneGlobals.getInstance().dump(fd, writer, args);
         // Dump OMTP visual voicemail log.
         VvmDumpHandler.dump(context, fd, writer, args);
     }
