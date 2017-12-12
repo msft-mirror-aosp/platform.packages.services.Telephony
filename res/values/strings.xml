@@ -178,8 +178,6 @@
     <!-- Voicemail notifications title. The user clicks on this preference navigate to the system settings screen for that channel
     .[CHAR LIMIT=30] -->
     <string name="voicemail_notifications_preference_title">Notifications</string>
-    <!-- Mobile network settings screen, setting option name -->
-    <string name="networks">Network operators</string>
     <!-- Cell Broadcast settings title.  [CHAR LIMIT=50] -->
     <string name="cell_broadcast_settings">Emergency broadcasts</string>
     <!-- Call settings screen title -->
@@ -288,6 +286,7 @@
     <string name="stk_cc_ss_to_dial_error">SS request modified to DIAL request.</string>
     <string name="stk_cc_ss_to_ussd_error">SS request modified to USSD request.</string>
     <string name="stk_cc_ss_to_ss_error">SS request modified to new SS request.</string>
+    <string name="stk_cc_ss_to_dial_video_error">SS request modified to Video DIAL request.</string>
 
     <!-- Status message displayed in the "Call settings error" dialog when operation fails due to FDN
          [CHAR LIMIT=NONE] -->
@@ -371,8 +370,6 @@
     <string name="load_networks_progress">Searching\u2026</string>
     <!-- Available networks screen, text when no networks are found -->
     <string name="empty_networks_list">No networks found.</string>
-    <!-- Available networks screen, setting option name -->
-    <string name="search_networks">Search networks</string>
     <!-- Available networks screen, toast when an error is encountered when searching for networks -->
     <string name="network_query_error">Error while searching for networks.</string>
     <!-- Available networks screen, toast when registering on a specific network -->
@@ -383,10 +380,6 @@
     <string name="connect_later">Can\'t connect to this network right now. Try again later.</string>
     <!-- Available networks screen, toast when registered on a specific network -->
     <string name="registration_done">Registered on network.</string>
-    <!-- Mobile network settings screen setting option summary text -->
-    <string name="sum_carrier_select">Choose a network operator</string>
-    <!-- Available networks screen, setting summary text -->
-    <string name="sum_search_networks">Search for all available networks</string>
     <!-- Available networks screen, name of switch button for whether to select network automatically -->
     <string name="select_automatically">Automatically select network</string>
     <!-- Available networks screen, name of button when user wants to select network manually  -->
@@ -395,6 +388,7 @@
     <string name="preferred_network_mode_title">Preferred network type</string>
     <string name="preferred_network_mode_summary">Change the network operating mode</string>
     <string name="preferred_network_mode_dialogtitle">Preferred network type</string>
+    <string name="forbidden_network">(forbidden)</string>
 
     <!-- The preferred network modes in Mobile network settings -->
     <string-array name="preferred_network_mode_choices">
@@ -540,7 +534,9 @@
     <!-- Mobile network settings screen, data usage setting check box name -->
     <string name="data_usage_title">Data usage</string>
     <!-- Summary about how much data has been used in a date range [CHAR LIMIT=100] -->
-    <string name="data_usage_template"><xliff:g name="amount" example="200 MB">%1$s</xliff:g> mobile data used between <xliff:g name="date_range" example="Jan 1 -- Feb 2">%2$s</xliff:g></string>
+    <string name="data_usage_template"><xliff:g name="amount" example="200 MB">%1$s</xliff:g> mobile data used <xliff:g name="date_range" example="Jan 1 -- Feb 2">%2$s</xliff:g></string>
+    <!-- Mobile network settings screen, Advanced button to show more items when clicked [CHAR LIMIT=50] -->
+    <string name="advanced_options_title">Advanced</string>
     <!-- Mobile network settings screen, name of the option to manage carrier profiles on devices which support embedded carrier profiles -->
     <string name="carrier_settings_euicc">Carrier</string>
     <!-- Keywords used to search the carrier menu for managing carrier profiles on devices which support embedded carrier profiles. eSIM/eUICC is embedded SIM card used to store this data.  -->
@@ -548,9 +544,17 @@
     <!-- Mobile network settings screen, summary of the option to manage carrier profiles on devices which support embedded carrier profiles -->
     <string name="carrier_settings_euicc_summary"><xliff:g id="carrier_name">%1$s</xliff:g> &#8212; <xliff:g id="phone_number">%2$s</xliff:g></string>
     <!-- Mobile network settings screen, title of Mobile Data switch preference -->
-    <string name="mobile_data_settings_title">Mobile Data</string>
-    <!-- Mobile network settings screen, title of Mobile Data switch preference -->
+    <string name="mobile_data_settings_title">Mobile data</string>
+    <!-- Mobile network settings screen, title of Mobile data switch preference -->
     <string name="mobile_data_settings_summary">Access data using mobile network</string>
+    <!-- Message to show when user trying to turn off mobile data, in single sim mode [CHAR LIMIT=100]-->
+    <string name="data_usage_disable_mobile">Turn off mobile data?</string>
+    <!-- When a SIM preference hasn't been selected yet, this string is displayed as the pref summary until the user chooses a SIM subscription from the preference list [CHAR LIMIT=50] -->
+    <string name="sim_selection_required_pref">Selection required</string>
+    <!-- Title asking user if they wish to change the default sim for cellular data.  [CHAR LIMIT=30] -->
+    <string name="sim_change_data_title">Change data SIM?</string>
+    <!-- Message confirming the user wishes to change the default data SIM from one to another.  [CHAR LIMIT=NONE] -->
+    <string name="sim_change_data_message">Use <xliff:g id="new_sim">%1$s</xliff:g> instead of <xliff:g id="old_sim">%2$s</xliff:g> for mobile data?</string>
     <!-- Mobile network settings screen, title of Wi-Fi calling setting -->
     <string name="wifi_calling_settings_title">Wi-Fi calling</string>
     <!-- Mobile network settings screen, title of Video calling setting -->
