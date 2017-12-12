@@ -123,8 +123,8 @@ public class EditPhoneNumberPreference extends EditTextPreference {
         setDialogLayoutResource(R.layout.pref_dialog_editphonenumber);
 
         //create intent to bring up contact list
-        mContactListIntent = new Intent(Intent.ACTION_GET_CONTENT);
-        mContactListIntent.setType(Phone.CONTENT_ITEM_TYPE);
+        mContactListIntent = new Intent(Intent.ACTION_PICK);
+        mContactListIntent.setType(Phone.CONTENT_TYPE);
 
         //get the edit phone number default settings
         TypedArray a = context.obtainStyledAttributes(attrs,
@@ -258,8 +258,8 @@ public class EditPhoneNumberPreference extends EditTextPreference {
                 builder.setPositiveButton(mChangeNumberText, this);
                 builder.setNeutralButton(mDisableText, this);
             } else {
-                builder.setPositiveButton(null, null);
-                builder.setNeutralButton(mEnableText, this);
+                builder.setPositiveButton(mEnableText, this);
+                builder.setNeutralButton(null, null);
             }
         }
         // set the call icon on the title.
