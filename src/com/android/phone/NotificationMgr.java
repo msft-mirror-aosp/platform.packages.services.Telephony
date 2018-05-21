@@ -539,7 +539,7 @@ public class NotificationMgr {
 
         final Notification.Builder builder = new Notification.Builder(mContext)
                 .setSmallIcon(android.R.drawable.stat_sys_warning)
-                .setContentTitle(mContext.getText(R.string.roaming))
+                .setContentTitle(mContext.getText(R.string.roaming_notification_title))
                 .setColor(mContext.getResources().getColor(R.color.dialer_theme_color))
                 .setContentText(contentText)
                 .setChannel(NotificationChannelController.CHANNEL_ID_MOBILE_DATA_STATUS)
@@ -613,24 +613,34 @@ public class NotificationMgr {
                 PhoneFactory.getPhone(phoneId) : PhoneFactory.getDefaultPhone();
         if (TelephonyCapabilities.supportsNetworkSelection(phone)) {
             if (SubscriptionManager.isValidSubscriptionId(subId)) {
+                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
+                String selectedNetworkOperatorName =
+                        sp.getString(Phone.NETWORK_SELECTION_NAME_KEY + subId, "");
                 // get the shared preference of network_selection.
                 // empty is auto mode, otherwise it is the operator alpha name
                 // in case there is no operator name, check the operator numeric
-                SharedPreferences sp =
-                        PreferenceManager.getDefaultSharedPreferences(mContext);
-                String networkSelection =
-                        sp.getString(Phone.NETWORK_SELECTION_NAME_KEY + subId, "");
-                if (TextUtils.isEmpty(networkSelection)) {
-                    networkSelection =
+                if (TextUtils.isEmpty(selectedNetworkOperatorName)) {
+                    selectedNetworkOperatorName =
                             sp.getString(Phone.NETWORK_SELECTION_KEY + subId, "");
                 }
+                boolean isManualSelection;
+                // if restoring manual selection is controlled by framework, then get network
+                // selection from shared preference, otherwise get from real network indicators.
+                boolean restoreSelection = !mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.skip_restoring_network_selection);
+                if (restoreSelection) {
+                    isManualSelection = !TextUtils.isEmpty(selectedNetworkOperatorName);
+                } else {
+                    isManualSelection = phone.getServiceStateTracker().mSS.getIsManualSelection();
+                }
 
-                if (DBG) log("updateNetworkSelection()..." + "state = " +
-                        serviceState + " new network " + networkSelection);
+                if (DBG) {
+                    log("updateNetworkSelection()..." + "state = " + serviceState + " new network "
+                            + (isManualSelection ? selectedNetworkOperatorName : ""));
+                }
 
-                if (serviceState == ServiceState.STATE_OUT_OF_SERVICE
-                        && !TextUtils.isEmpty(networkSelection)) {
-                    showNetworkSelection(networkSelection, subId);
+                if (serviceState == ServiceState.STATE_OUT_OF_SERVICE && isManualSelection) {
+                    showNetworkSelection(selectedNetworkOperatorName, subId);
                     mSelectedUnavailableNotify = true;
                 } else {
                     if (mSelectedUnavailableNotify) {

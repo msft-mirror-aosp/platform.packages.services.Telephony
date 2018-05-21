@@ -56,6 +56,7 @@ import com.android.internal.telephony.ICarrierConfigLoader;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
+import com.android.internal.telephony.TelephonyPermissions;
 import com.android.internal.util.FastXmlSerializer;
 import com.android.internal.util.IndentingPrintWriter;
 
@@ -174,7 +175,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     mConfigFromDefaultApp[phoneId] = null;
                     mConfigFromCarrierApp[phoneId] = null;
                     mServiceConnection[phoneId] = null;
-                    broadcastConfigChangedIntent(phoneId);
+                    broadcastConfigChangedIntent(phoneId, false);
                     break;
                 }
 
@@ -512,10 +513,21 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     }
 
     private void broadcastConfigChangedIntent(int phoneId) {
+        broadcastConfigChangedIntent(phoneId, true);
+    }
+
+    private void broadcastConfigChangedIntent(int phoneId, boolean addSubIdExtra) {
         Intent intent = new Intent(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT |
                 Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-        SubscriptionManager.putPhoneIdAndSubIdExtra(intent, phoneId);
+        // Include subId extra only if SIM records are loaded
+        TelephonyManager telephonyManager = TelephonyManager.from(mContext);
+        int simApplicationState = telephonyManager.getSimApplicationState();
+        if (addSubIdExtra && (simApplicationState != TelephonyManager.SIM_STATE_UNKNOWN
+                && simApplicationState != TelephonyManager.SIM_STATE_NOT_READY)) {
+            SubscriptionManager.putPhoneIdAndSubIdExtra(intent, phoneId);
+        }
+        intent.putExtra(CarrierConfigManager.EXTRA_SLOT_INDEX, phoneId);
         ActivityManager.broadcastStickyIntent(intent, UserHandle.USER_ALL);
         mHasSentConfigChange[phoneId] = true;
     }
@@ -766,21 +778,36 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     @Override public
     @NonNull
     PersistableBundle getConfigForSubId(int subId) {
+        // TODO(b/73136824): Migrate to TelephonyPermissions#checkCallingOrSelfReadPhoneState.
         try {
             mContext.enforceCallingOrSelfPermission(READ_PRIVILEGED_PHONE_STATE, null);
             // SKIP checking run-time READ_PHONE_STATE since using PRIVILEGED
         } catch (SecurityException e) {
-            mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, null);
+            try {
+                mContext.enforceCallingOrSelfPermission(READ_PHONE_STATE, null);
+            } catch (SecurityException securityException) {
+                // If we don't have the runtime permission, but do have carrier privileges, that
+                // suffices for reading phone state.
+                if (!SubscriptionManager.isValidSubscriptionId(subId)) {
+                    throw securityException;
+                }
+                TelephonyPermissions.enforceCallingOrSelfCarrierPrivilege(subId, null);
+            }
         }
+
         int phoneId = SubscriptionManager.getPhoneId(subId);
         PersistableBundle retConfig = CarrierConfigManager.getDefaultConfig();
         if (SubscriptionManager.isValidPhoneId(phoneId)) {
             PersistableBundle config = mConfigFromDefaultApp[phoneId];
-            if (config != null)
+            if (config != null) {
                 retConfig.putAll(config);
+                retConfig.putBoolean(CarrierConfigManager.KEY_CARRIER_CONFIG_APPLIED_BOOL, true);
+            }
             config = mConfigFromCarrierApp[phoneId];
-            if (config != null)
+            if (config != null) {
                 retConfig.putAll(config);
+                retConfig.putBoolean(CarrierConfigManager.KEY_CARRIER_CONFIG_APPLIED_BOOL, true);
+            }
         }
         return retConfig;
     }

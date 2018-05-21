@@ -52,6 +52,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
+import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.MMIDialogActivity;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
@@ -421,7 +422,11 @@ public class TelephonyConnectionService extends ConnectionService {
                     isEmergencyNumber, handle, phone);
             // If there was a failure, the resulting connection will not be a TelephonyConnection,
             // so don't place the call!
-            if(resultConnection instanceof TelephonyConnection) {
+            if (resultConnection instanceof TelephonyConnection) {
+                if (request.getExtras() != null && request.getExtras().getBoolean(
+                        TelecomManager.EXTRA_USE_ASSISTED_DIALING, false)) {
+                    ((TelephonyConnection) resultConnection).setIsUsingAssistedDialing(true);
+                }
                 placeOutgoingConnection((TelephonyConnection) resultConnection, phone, request);
             }
             return resultConnection;
@@ -646,6 +651,7 @@ public class TelephonyConnectionService extends ConnectionService {
         connection.setAddress(handle, PhoneConstants.PRESENTATION_ALLOWED);
         connection.setInitializing();
         connection.setVideoState(request.getVideoState());
+        connection.setRttTextStream(request.getRttTextStream());
 
         return connection;
     }
@@ -695,15 +701,46 @@ public class TelephonyConnectionService extends ConnectionService {
         int videoState = originalConnection != null ? originalConnection.getVideoState() :
                 VideoProfile.STATE_AUDIO_ONLY;
 
-        Connection connection =
+        TelephonyConnection connection =
                 createConnectionFor(phone, originalConnection, false /* isOutgoing */,
                         request.getAccountHandle(), request.getTelecomCallId(),
                         request.getAddress(), videoState);
+        handleIncomingRtt(request, originalConnection);
         if (connection == null) {
             return Connection.createCanceledConnection();
         } else {
             return connection;
         }
+    }
+
+    private void handleIncomingRtt(ConnectionRequest request,
+            com.android.internal.telephony.Connection originalConnection) {
+        if (originalConnection == null
+                || originalConnection.getPhoneType() != PhoneConstants.PHONE_TYPE_IMS) {
+            if (request.isRequestingRtt()) {
+                Log.w(this, "Requesting RTT on non-IMS call, ignoring");
+            }
+            return;
+        }
+
+        ImsPhoneConnection imsOriginalConnection = (ImsPhoneConnection) originalConnection;
+        if (!request.isRequestingRtt()) {
+            if (imsOriginalConnection.isRttEnabledForCall()) {
+                Log.w(this, "Incoming call requested RTT but we did not get a RttTextStream");
+            }
+            return;
+        }
+
+        if (!imsOriginalConnection.isRttEnabledForCall()) {
+            if (request.isRequestingRtt()) {
+                Log.w(this, "Incoming call processed as RTT but did not come in as one. Ignoring");
+            }
+            return;
+        }
+
+        Log.i(this, "Setting RTT stream on ImsPhoneConnection");
+        imsOriginalConnection.setCurrentRttTextStream(request.getRttTextStream());
+        imsOriginalConnection.getImsCall().setAnswerWithRtt();
     }
 
     /**
@@ -984,7 +1021,11 @@ public class TelephonyConnectionService extends ConnectionService {
         com.android.internal.telephony.Connection originalConnection = null;
         try {
             if (phone != null) {
-                originalConnection = phone.dial(number, null, videoState, extras);
+                originalConnection = phone.dial(number, new ImsPhone.ImsDialArgs.Builder()
+                        .setVideoState(videoState)
+                        .setIntentExtras(extras)
+                        .setRttTextStream(connection.getRttTextStream())
+                        .build());
             }
         } catch (CallStateException e) {
             Log.e(this, e, "placeOutgoingConnection, phone.dial exception: " + e);
@@ -1048,6 +1089,9 @@ public class TelephonyConnectionService extends ConnectionService {
                             phoneAccountHandle));
             returnConnection.setManageImsConferenceCallSupported(
                     TelecomAccountRegistry.getInstance(this).isManageImsConferenceCallSupported(
+                            phoneAccountHandle));
+            returnConnection.setShowPreciseFailedCause(
+                    TelecomAccountRegistry.getInstance(this).isShowPreciseFailedCause(
                             phoneAccountHandle));
         }
         return returnConnection;

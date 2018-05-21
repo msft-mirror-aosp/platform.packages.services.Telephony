@@ -31,8 +31,9 @@ import android.os.IBinder;
 import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.telephony.MbmsDownloadSession;
+import android.telephony.mbms.DownloadProgressListener;
 import android.telephony.mbms.DownloadRequest;
-import android.telephony.mbms.DownloadStateCallback;
+import android.telephony.mbms.DownloadStatusListener;
 import android.telephony.mbms.FileInfo;
 import android.telephony.mbms.FileServiceInfo;
 import android.telephony.mbms.MbmsDownloadSessionCallback;
@@ -143,9 +144,16 @@ public class EmbmsSampleDownloadService extends Service {
         }
 
         @Override
-        public int registerStateCallback(DownloadRequest downloadRequest,
-                DownloadStateCallback callback) throws RemoteException {
-            mDownloadStateCallbacks.put(downloadRequest, callback);
+        public int addStatusListener(DownloadRequest downloadRequest,
+                DownloadStatusListener callback) throws RemoteException {
+            mDownloadStatusCallbacks.put(downloadRequest, callback);
+            return MbmsErrors.SUCCESS;
+        }
+
+        @Override
+        public int addProgressListener(DownloadRequest downloadRequest,
+                DownloadProgressListener callback) throws RemoteException {
+            mDownloadProgressCallbacks.put(downloadRequest, callback);
             return MbmsErrors.SUCCESS;
         }
 
@@ -183,7 +191,9 @@ public class EmbmsSampleDownloadService extends Service {
     // A map of app-identifiers to (maps of service-ids to sets of temp file uris in use)
     private final Map<FrontendAppIdentifier, Map<String, Set<Uri>>> mTempFilesInUse =
             new ConcurrentHashMap<>();
-    private final Map<DownloadRequest, DownloadStateCallback> mDownloadStateCallbacks =
+    private final Map<DownloadRequest, DownloadStatusListener> mDownloadStatusCallbacks =
+            new ConcurrentHashMap<>();
+    private final Map<DownloadRequest, DownloadProgressListener> mDownloadProgressCallbacks =
             new ConcurrentHashMap<>();
 
     private HandlerThread mHandlerThread;
@@ -261,7 +271,8 @@ public class EmbmsSampleDownloadService extends Service {
     }
 
     private void sendFdRequest(DownloadRequest request, FrontendAppIdentifier appKey) {
-        int numFds = getNumFdsNeededForRequest(request);
+        // Request twice as many as needed to exercise the post-download cleanup mechanism
+        int numFds = getNumFdsNeededForRequest(request) * 2;
         // Compose the FILE_DESCRIPTOR_REQUEST_INTENT
         Intent requestIntent = new Intent(VendorUtils.ACTION_FILE_DESCRIPTOR_REQUEST);
         requestIntent.putExtra(VendorUtils.EXTRA_SERVICE_ID, request.getFileServiceId());
@@ -299,8 +310,8 @@ public class EmbmsSampleDownloadService extends Service {
                 .getFileServiceInfoForId(request.getFileServiceId())
                 .getFiles();
 
-        if (tempFiles.size() != filesToDownload.size()) {
-            Log.w(LOG_TAG, "Different numbers of temp files and files to download...");
+        if (tempFiles.size() != filesToDownload.size() * 2) {
+            Log.w(LOG_TAG, "Incorrect numbers of temp files and files to download...");
         }
 
         if (!mActiveDownloadRequests.containsKey(appKey)) {
@@ -310,37 +321,39 @@ public class EmbmsSampleDownloadService extends Service {
 
         // Go through the files one-by-one and send them to the frontend app with a delay between
         // each one.
-        for (int i = 0; i < tempFiles.size(); i++) {
-            if (i >= filesToDownload.size()) {
+        for (int i = 0; i < tempFiles.size(); i += 2) {
+            if (i >= filesToDownload.size() * 2) {
                 break;
             }
             UriPathPair tempFile = tempFiles.get(i);
+            UriPathPair extraTempFile = tempFiles.get(i + 1);
             addTempFileInUse(appKey, request.getFileServiceId(),
                     tempFile.getFilePathUri());
-            FileInfo fileToDownload = filesToDownload.get(i);
+            FileInfo fileToDownload = filesToDownload.get(i / 2);
             mHandler.postDelayed(() -> {
                 if (mActiveDownloadRequests.get(appKey) == null ||
                         !mActiveDownloadRequests.get(appKey).contains(request)) {
                     return;
                 }
-                downloadSingleFile(appKey, request, tempFile, fileToDownload);
+                downloadSingleFile(appKey, request, tempFile, extraTempFile, fileToDownload);
                 removeTempFileInUse(appKey, request.getFileServiceId(),
                         tempFile.getFilePathUri());
-            }, FILE_SEPARATION_DELAY * i * mDownloadDelayFactor);
+            }, FILE_SEPARATION_DELAY * i * mDownloadDelayFactor / 2);
         }
     }
 
     private void downloadSingleFile(FrontendAppIdentifier appKey, DownloadRequest request,
-            UriPathPair tempFile, FileInfo fileToDownload) {
+            UriPathPair tempFile, UriPathPair extraTempFile, FileInfo fileToDownload) {
         int result = MbmsDownloadSession.RESULT_SUCCESSFUL;
         // Test Callback
-        DownloadStateCallback c = mDownloadStateCallbacks.get(request);
-        if (c != null) {
-            c.onProgressUpdated(request, fileToDownload, 0, 10, 0, 10);
+        DownloadStatusListener statusListener = mDownloadStatusCallbacks.get(request);
+        DownloadProgressListener progressListener = mDownloadProgressCallbacks.get(request);
+        if (progressListener != null) {
+            progressListener.onProgressUpdated(request, fileToDownload, 0, 10, 0, 10);
         }
         // Test Callback
-        if (c != null) {
-            c.onStateUpdated(request, fileToDownload,
+        if (statusListener != null) {
+            statusListener.onStatusUpdated(request, fileToDownload,
                     MbmsDownloadSession.STATUS_ACTIVELY_DOWNLOADING);
         }
         try {
@@ -367,15 +380,12 @@ public class EmbmsSampleDownloadService extends Service {
             result = MbmsDownloadSession.RESULT_CANCELLED;
         }
         // Test Callback
-        if (c != null) {
-            c.onProgressUpdated(request, fileToDownload, 10, 10, 10, 10);
+        if (progressListener != null) {
+            progressListener.onProgressUpdated(request, fileToDownload, 10, 10, 10, 10);
         }
         // Take a round-trip through the download request serialization to exercise it
-        DownloadRequest request1 = new DownloadRequest.Builder(request.getSourceUri())
-                .setSubscriptionId(request.getSubscriptionId())
-                .setServiceId(request.getFileServiceId())
-                .setOpaqueData(request.getOpaqueData())
-                .build();
+        DownloadRequest request1 = DownloadRequest.Builder.fromSerializedRequest(
+                request.toByteArray()).build();
 
         Intent downloadResultIntent =
                 new Intent(VendorUtils.ACTION_DOWNLOAD_RESULT_INTERNAL);
@@ -385,9 +395,10 @@ public class EmbmsSampleDownloadService extends Service {
         downloadResultIntent.putExtra(MbmsDownloadSession.EXTRA_MBMS_FILE_INFO, fileToDownload);
         downloadResultIntent.putExtra(VendorUtils.EXTRA_TEMP_FILE_ROOT,
                 mAppTempFileRoots.get(appKey));
-        ArrayList<Uri> tempFileList = new ArrayList<>(1);
+        ArrayList<Uri> tempFileList = new ArrayList<>(2);
         tempFileList.add(tempFile.getFilePathUri());
-        downloadResultIntent.getExtras().putParcelableArrayList(
+        tempFileList.add(extraTempFile.getFilePathUri());
+        downloadResultIntent.putParcelableArrayListExtra(
                 VendorUtils.EXTRA_TEMP_LIST, tempFileList);
         downloadResultIntent.putExtra(MbmsDownloadSession.EXTRA_MBMS_DOWNLOAD_RESULT, result);
         downloadResultIntent.setComponent(mAppReceivers.get(appKey));
