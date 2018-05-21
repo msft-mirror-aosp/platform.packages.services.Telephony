@@ -27,8 +27,9 @@ import android.support.v7.widget.LinearLayoutManager;
 import android.support.v7.widget.RecyclerView;
 import android.telephony.MbmsDownloadSession;
 import android.telephony.SubscriptionManager;
+import android.telephony.mbms.DownloadProgressListener;
 import android.telephony.mbms.DownloadRequest;
-import android.telephony.mbms.DownloadStateCallback;
+import android.telephony.mbms.DownloadStatusListener;
 import android.telephony.mbms.FileInfo;
 import android.telephony.mbms.FileServiceInfo;
 import android.telephony.mbms.MbmsDownloadSessionCallback;
@@ -37,13 +38,14 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
+import android.widget.EditText;
 import android.widget.ImageView;
-import android.widget.NumberPicker;
 import android.widget.Spinner;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import java.io.File;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -182,6 +184,7 @@ public class EmbmsTestDownloadApp extends Activity {
     private FileServiceInfoAdapter mFileServiceInfoAdapter;
     private DownloadRequestAdapter mDownloadRequestAdapter;
     private ImageAdapter mImageAdapter;
+    private boolean mIsTempDirExternal = false;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -203,15 +206,29 @@ public class EmbmsTestDownloadApp extends Activity {
 
         Button bindButton = (Button) findViewById(R.id.bind_button);
         bindButton.setOnClickListener((view) -> {
-            mDownloadManager = MbmsDownloadSession.create(this, mCallback, mHandler);
+            mDownloadManager = MbmsDownloadSession.create(this, mHandler::post, mCallback);
         });
 
-        Button setTempFileRootButton = (Button) findViewById(R.id.set_temp_root_button);
-        setTempFileRootButton.setOnClickListener((view) -> {
+        Button setTempFileRootButtonExternal =
+                (Button) findViewById(R.id.set_temp_root_button_external);
+        setTempFileRootButtonExternal.setOnClickListener((view) -> {
+            File downloadDir = new File(EmbmsTestDownloadApp.this.getExternalFilesDir(null),
+                    CUSTOM_EMBMS_TEMP_FILE_LOCATION);
+            downloadDir.mkdirs();
+            mDownloadManager.setTempFileRootDirectory(downloadDir);
+            mIsTempDirExternal = true;
+            Toast.makeText(EmbmsTestDownloadApp.this,
+                    "temp file root set to " + downloadDir, Toast.LENGTH_SHORT).show();
+        });
+
+        Button setTempFileRootButtonInternal =
+                (Button) findViewById(R.id.set_temp_root_button_internal);
+        setTempFileRootButtonInternal.setOnClickListener((view) -> {
             File downloadDir = new File(EmbmsTestDownloadApp.this.getFilesDir(),
                     CUSTOM_EMBMS_TEMP_FILE_LOCATION);
             downloadDir.mkdirs();
             mDownloadManager.setTempFileRootDirectory(downloadDir);
+            mIsTempDirExternal = false;
             Toast.makeText(EmbmsTestDownloadApp.this,
                     "temp file root set to " + downloadDir, Toast.LENGTH_SHORT).show();
         });
@@ -252,14 +269,13 @@ public class EmbmsTestDownloadApp extends Activity {
                 SideChannel.requestSpuriousTempFiles(EmbmsTestDownloadApp.this,
                         (FileServiceInfo) serviceSelector.getSelectedItem()));
 
-        NumberPicker downloadDelayPicker = (NumberPicker) findViewById(R.id.delay_factor);
-        downloadDelayPicker.setMinValue(1);
-        downloadDelayPicker.setMaxValue(50);
+        EditText downloadDelay = findViewById(R.id.delay_factor);
+        downloadDelay.setText(String.valueOf(5));
 
         Button delayDownloadButton = (Button) findViewById(R.id.delay_download_button);
         delayDownloadButton.setOnClickListener((view) ->
                 SideChannel.delayDownloads(EmbmsTestDownloadApp.this,
-                        downloadDelayPicker.getValue()));
+                        Integer.valueOf(downloadDelay.getText().toString())));
 
         final Spinner downloadRequestSpinner = (Spinner) findViewById(R.id.active_downloads);
         downloadRequestSpinner.setAdapter(mDownloadRequestAdapter);
@@ -291,26 +307,18 @@ public class EmbmsTestDownloadApp extends Activity {
                         "No DownloadRequest Pending for progress...", Toast.LENGTH_SHORT).show();
                 return;
             }
-            mDownloadManager.registerStateCallback(req, new DownloadStateCallback(
-                    DownloadStateCallback.PROGRESS_UPDATES) {
-                @Override
-                public void onProgressUpdated(DownloadRequest request, FileInfo fileInfo,
-                        int currentDownloadSize, int fullDownloadSize, int currentDecodedSize,
-                        int fullDecodedSize) {
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "Progress Updated (" + fileInfo + ") cd: " + currentDecodedSize
-                                    + " fd: " + fullDownloadSize, Toast.LENGTH_SHORT).show();
-                }
-
-                @Override
-                public void onStateUpdated(DownloadRequest request, FileInfo fileInfo,
-                        @MbmsDownloadSession.DownloadStatus int state) {
-                    // only registered for state callback, this shouldn't happen!
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "State ERROR: received state update for callback that didn't filter it",
-                            Toast.LENGTH_SHORT).show();
-                }
-            }, sInstance.getMainThreadHandler());
+            mDownloadManager.addProgressListener(req, sInstance.getMainThreadHandler()::post,
+                    new DownloadProgressListener() {
+                        @Override
+                        public void onProgressUpdated(DownloadRequest request, FileInfo fileInfo,
+                                int currentDownloadSize, int fullDownloadSize,
+                                int currentDecodedSize, int fullDecodedSize) {
+                            Toast.makeText(EmbmsTestDownloadApp.this,
+                                    "Progress Updated (" + fileInfo + ") cd: " + currentDecodedSize
+                                            + " fd: " + fullDownloadSize, Toast.LENGTH_SHORT)
+                                    .show();
+                        }
+                    });
         });
 
         Button registerStateCallback =
@@ -327,26 +335,16 @@ public class EmbmsTestDownloadApp extends Activity {
                         "No DownloadRequest Pending for state...", Toast.LENGTH_SHORT).show();
                 return;
             }
-            mDownloadManager.registerStateCallback(req, new DownloadStateCallback(
-                    DownloadStateCallback.STATE_UPDATES) {
-                @Override
-                public void onProgressUpdated(DownloadRequest request, FileInfo fileInfo,
-                        int currentDownloadSize, int fullDownloadSize, int currentDecodedSize,
-                        int fullDecodedSize) {
-                    // only registered for state callback, this shouldn't happen!
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "Progress ERROR: received progress update for callback that didn't "
-                                    + "filter it", Toast.LENGTH_SHORT).show();
-                }
-
-                @Override
-                public void onStateUpdated(DownloadRequest request, FileInfo fileInfo,
-                        @MbmsDownloadSession.DownloadStatus int state) {
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "State Updated (" + fileInfo + ") state: " + state,
-                            Toast.LENGTH_SHORT).show();
-                }
-            }, sInstance.getMainThreadHandler());
+            mDownloadManager.addStatusListener(req, sInstance.getMainThreadHandler()::post,
+                    new DownloadStatusListener() {
+                        @Override
+                        public void onStatusUpdated(DownloadRequest request, FileInfo fileInfo,
+                                @MbmsDownloadSession.DownloadStatus int state) {
+                            Toast.makeText(EmbmsTestDownloadApp.this,
+                                    "State Updated (" + fileInfo + ") state: " + state,
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
         });
 
         Button registerAllCallbacks =
@@ -363,24 +361,30 @@ public class EmbmsTestDownloadApp extends Activity {
                         "No DownloadRequest Pending for state...", Toast.LENGTH_SHORT).show();
                 return;
             }
-            mDownloadManager.registerStateCallback(req, new DownloadStateCallback() {
-                @Override
-                public void onProgressUpdated(DownloadRequest request, FileInfo fileInfo,
-                        int currentDownloadSize, int fullDownloadSize, int currentDecodedSize,
-                        int fullDecodedSize) {
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "Progress Updated (" + fileInfo + ") cd: " + currentDecodedSize
-                                    + " fd: " + fullDownloadSize, Toast.LENGTH_SHORT).show();
-                }
 
-                @Override
-                public void onStateUpdated(DownloadRequest request, FileInfo fileInfo,
-                        @MbmsDownloadSession.DownloadStatus int state) {
-                    Toast.makeText(EmbmsTestDownloadApp.this,
-                            "State Updated (" + fileInfo + ") state: " + state,
-                            Toast.LENGTH_SHORT).show();
-                }
-            }, sInstance.getMainThreadHandler());
+            mDownloadManager.addStatusListener(req, sInstance.getMainThreadHandler()::post,
+                    new DownloadStatusListener() {
+                        @Override
+                        public void onStatusUpdated(DownloadRequest request, FileInfo fileInfo,
+                                @MbmsDownloadSession.DownloadStatus int state) {
+                            Toast.makeText(EmbmsTestDownloadApp.this,
+                                    "State Updated (" + fileInfo + ") state: " + state,
+                                    Toast.LENGTH_SHORT).show();
+                        }
+                    });
+
+            mDownloadManager.addProgressListener(req, sInstance.getMainThreadHandler()::post,
+                    new DownloadProgressListener() {
+                        @Override
+                        public void onProgressUpdated(DownloadRequest request, FileInfo fileInfo,
+                                int currentDownloadSize, int fullDownloadSize,
+                                int currentDecodedSize, int fullDecodedSize) {
+                            Toast.makeText(EmbmsTestDownloadApp.this,
+                                    "Progress Updated (" + fileInfo + ") cd: " + currentDecodedSize
+                                            + " fd: " + fullDownloadSize, Toast.LENGTH_SHORT)
+                                    .show();
+                        }
+                    });
         });
     }
 
@@ -423,13 +427,14 @@ public class EmbmsTestDownloadApp extends Activity {
         if (info.getServiceId().contains("2")) {
             sourceUriBuilder.path("/*");
         } else {
-            sourceUriBuilder.path("/image.png");
+            sourceUriBuilder.path("/sunAndTree.png");
         }
 
         Intent completionIntent = new Intent(DOWNLOAD_DONE_ACTION);
         completionIntent.setClass(this, DownloadCompletionReceiver.class);
 
-        DownloadRequest request = new DownloadRequest.Builder(sourceUriBuilder.build())
+        DownloadRequest request = new DownloadRequest.Builder(sourceUriBuilder.build(),
+                getDestination(info.getServiceId()))
                 .setServiceInfo(info)
                 .setAppIntent(completionIntent)
                 .setSubscriptionId(SubscriptionManager.getDefaultSubscriptionId())
@@ -437,5 +442,26 @@ public class EmbmsTestDownloadApp extends Activity {
 
         mDownloadManager.download(request);
         mDownloadRequestAdapter.add(request);
+    }
+
+    private Uri getDestination(String serviceId) {
+        File dest;
+        File baseDir = mIsTempDirExternal ? getExternalFilesDir(null) : getFilesDir();
+        try {
+            if (serviceId.contains("2")) {
+                dest = new File(baseDir.getCanonicalFile(), "images/animals/");
+                if (!dest.exists()) {
+                    dest.mkdirs();
+                }
+            } else {
+                dest = new File(baseDir.getCanonicalFile(), "images/");
+                if (!dest.exists()) {
+                    dest.mkdirs();
+                }
+            }
+            return Uri.fromFile(dest);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 }

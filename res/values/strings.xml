@@ -283,10 +283,10 @@
     <string name="exception_error">Network or SIM card error.</string>
     <!-- Status message displayed in the "Call settings error" dialog when
          current SS request is modified to a different request by STK CC -->
-    <string name="stk_cc_ss_to_dial_error">SS request modified to DIAL request.</string>
-    <string name="stk_cc_ss_to_ussd_error">SS request modified to USSD request.</string>
-    <string name="stk_cc_ss_to_ss_error">SS request modified to new SS request.</string>
-    <string name="stk_cc_ss_to_dial_video_error">SS request modified to Video DIAL request.</string>
+    <string name="stk_cc_ss_to_dial_error">SS request changed to regular call</string>
+    <string name="stk_cc_ss_to_ussd_error">SS request changed to USSD request</string>
+    <string name="stk_cc_ss_to_ss_error">Changed to new SS request</string>
+    <string name="stk_cc_ss_to_dial_video_error">SS request changed to video call</string>
 
     <!-- Status message displayed in the "Call settings error" dialog when operation fails due to FDN
          [CHAR LIMIT=NONE] -->
@@ -360,8 +360,6 @@
     <string name="vvm_unsupported_message_format">Unsupported message type, call <xliff:g id="number" example="*86">%s</xliff:g> to listen.</string>
 
     <!-- networks setting strings --><skip/>
-    <!-- Mobile network settings screen title -->
-    <string name="mobile_networks">Mobile network settings</string>
     <!-- Mobile network settings screen title/heading -->
     <string name="network_settings_title">Mobile network</string>
     <!-- Available networks screen title/heading -->
@@ -371,7 +369,7 @@
     <!-- Available networks screen, text when no networks are found -->
     <string name="empty_networks_list">No networks found.</string>
     <!-- Available networks screen, toast when an error is encountered when searching for networks -->
-    <string name="network_query_error">Error while searching for networks.</string>
+    <string name="network_query_error">Couldn\'t find networks. Try again.</string>
     <!-- Available networks screen, toast when registering on a specific network -->
     <string name="register_on_network">Registering on <xliff:g id="network">%s</xliff:g>\u2026</string>
     <!-- Available networks screen, toast when SIM card isn't allowed on a network -->
@@ -380,6 +378,8 @@
     <string name="connect_later">Can\'t connect to this network right now. Try again later.</string>
     <!-- Available networks screen, toast when registered on a specific network -->
     <string name="registration_done">Registered on network.</string>
+    <!-- Available networks, toast when user selects automatic selection  -->
+    <string name="already_auto">Already in automatic selection.</string>
     <!-- Available networks screen, name of switch button for whether to select network automatically -->
     <string name="select_automatically">Automatically select network</string>
     <!-- Available networks screen, name of button when user wants to select network manually  -->
@@ -389,6 +389,16 @@
     <string name="preferred_network_mode_summary">Change the network operating mode</string>
     <string name="preferred_network_mode_dialogtitle">Preferred network type</string>
     <string name="forbidden_network">(forbidden)</string>
+    <!-- Available networks screen, name of button when user wants to select network manually  -->
+    <string name="choose_network_title">Choose network</string>
+    <!-- Available networks screen, text when no networks connected -->
+    <string name="network_disconnected">Disconnected</string>
+    <!-- Available networks screen, text when network connected -->
+    <string name="network_connected">Connected</string>
+    <!-- Available networks screen, text when a network is connecting -->
+    <string name="network_connecting">Connecting...</string>
+    <!-- Available networks screen, text when a network cannot be connected -->
+    <string name="network_could_not_connect">Couldn’t connect</string>
 
     <!-- The preferred network modes in Mobile network settings -->
     <string-array name="preferred_network_mode_choices">
@@ -526,7 +536,9 @@
     <!-- Mobile network settings UI: notification message shown when you
          lose data connectivity because you're roaming and you have the
          "data roaming" feature turned off. -->
-    <string name="roaming_reenable_message">You\'ve lost data connectivity because you left your home network with data roaming turned off.</string>
+    <string name="roaming_reenable_message">Data roaming is turned off. Tap to turn on.</string>
+    <!-- Roaming notification tile, notifying lost of roaming data connection -->
+    <string name="roaming_notification_title">Lost mobile data connection</string>
     <!-- Mobile network settings screen, dialog message when user selects the Data roaming check box -->
     <string name="roaming_warning">You may incur significant charges.</string>
     <!-- Mobile network settings screen, dialog message title when user selects the Data roaming check box -->
@@ -921,7 +933,7 @@
     <!-- FDN settings: error message displayed in a popup (toast) -->
     <string name="pin2_invalid">FDN wasn\'t updated because you typed an incorrect PIN.</string>
     <!-- FDN settings: error message displayed in a popup (toast) -->
-    <string name="fdn_invalid_number">FDN wasn\'t updated because the number is empty or exceeds 20 digits.</string>
+    <string name="fdn_invalid_number">FDN wasn\'t updated because the number exceeds 20 digits.</string>
     <!-- FDN settings: error message displayed in a popup (toast), when the entered
          FDN number was inappropriate, OR, PIN2 the user entered was incorrect.
          Because of API restriction, there's no way to determine which is the exact
@@ -1088,6 +1100,9 @@
     <string name="incall_error_supp_service_unknown">Service not supported</string>
     <!-- In-call screen: message displayed in an error dialog -->
     <string name="incall_error_supp_service_switch">Can\'t switch calls.</string>
+    <!-- In-call screen: message displayed in an error dialog when the user attempts to resume a
+         call, and the system encountered an error which prevented the call from being resumed. -->
+    <string name="incall_error_supp_service_resume">Can\'t resume call.</string>
     <!-- In-call screen: message displayed in an error dialog -->
     <string name="incall_error_supp_service_separate">Can\'t separate call.</string>
     <!-- In-call screen: message displayed in an error dialog -->
@@ -1119,6 +1134,9 @@
     <string name="dial_emergency_error">Can\'t call. <xliff:g id="non_emergency_number">%s</xliff:g> is not an emergency number.</string>
     <!-- Emergency dialer: message displayed in an error dialog -->
     <string name="dial_emergency_empty_error">Can\'t call. Dial an emergency number.</string>
+    <!-- Message displayed over top of the emergency dialer dialpad indicating to the user that
+         emergency calling is not currently available. -->
+    <string name="dial_emergency_calling_not_available">Emergency calling not available</string>
 
     <!-- Displayed in the text entry box in the dialer when in landscape mode to guide the user
          to dial using the physical keyboard -->
@@ -1166,6 +1184,17 @@
     <!-- Hearing aid settings -->
     <string name="hac_mode_title">Hearing aids</string>
     <string name="hac_mode_summary">Turn on hearing aid compatibility</string>
+
+    <!-- RTT settings: used to turn on/off Real-Time Text, an accessibility feature similar to
+         TTY that allows users to send text over a phone call. -->
+    <string name="rtt_mode_title">Real-time text (RTT) call</string>
+    <string name="rtt_mode_summary">Allow messaging within a voice call</string>
+    <string name="rtt_mode_more_information">
+       RTT assists callers who are deaf, hard hearing, have a speech disability,
+       or need more than voice alone.&lt;br>
+       &lt;a href="<xliff:g example="http://www.google.com" id="url">http://support.google.com/mobile?p=telephony_rtt</xliff:g>">Learn more&lt;/a>
+       &lt;br>&lt;br> - RTT calls are saved as a message transcript
+       &lt;br> - RTT is not available for video calls</string>
 
     <!-- Service option entries.  -->
     <string-array name="tty_mode_entries">
@@ -1491,4 +1520,233 @@
     <string name="mobile_data_activate_button">ADD DATA</string>
     <!-- activate data plan dialogue button for cancel further actions-->
     <string name="mobile_data_activate_cancel_button">CANCEL</string>
+
+    <!-- Call failed messages -->
+    <!-- In-call screen: status label displayed briefly after a call ends -->
+    <string name="clh_card_title_call_ended_txt">Call ended</string>
+    <!-- In-call screen: call failure reason (radio is off) -->
+    <string name="clh_callFailed_powerOff_txt">Airplane mode is on</string>
+    <!-- In-call screen: call failure reason (SIM error) -->
+    <string name="clh_callFailed_simError_txt">Can\'t access SIM card</string>
+    <!-- In-call screen: call failure message displayed in an error dialog -->
+    <string name="clh_incall_error_out_of_service_txt">Mobile network not available</string>
+
+    <!-- See CallFailCause for details on what causes each message -->
+    <!-- In-call screen: call failure reason (Cause Number 1) -->
+    <string name="clh_callFailed_unassigned_number_txt">Issue with phone number you are trying to dial. Error code 1.</string>
+    <!-- In-call screen: call failure reason (Cause Number 3) -->
+    <string name="clh_callFailed_no_route_to_destination_txt">Couldn\'t complete call. Error code 3.</string>
+    <!-- In-call screen: call failure reason (Cause Number 6) -->
+    <string name="clh_callFailed_channel_unacceptable_txt">Couldn\'t complete call. Error code 6.</string>
+    <!-- In-call screen: call failure reason (Cause Number 8) -->
+    <string name="clh_callFailed_operator_determined_barring_txt">Couldn\'t complete call. Error code 8.</string>
+    <!-- In-call screen: call failure reason (Cause Number 16) -->
+    <string name="clh_callFailed_normal_call_clearing_txt">Couldn\'t complete call. Error code 16.</string>
+    <!-- In-call screen: call failure reason (Cause Number 17) -->
+    <string name="clh_callFailed_user_busy_txt">User busy</string>
+    <!-- In-call screen: call failure reason (Cause Number 18) -->
+    <string name="clh_callFailed_no_user_responding_txt">User not responding</string>
+    <!-- In-call screen: call failure reason (Cause Number 19) -->
+    <string name="clh_callFailed_user_alerting_txt">Couldn\'t complete call. Error code 19.</string>
+    <!-- In-call screen: call failure reason (Cause Number 21) -->
+    <string name="clh_callFailed_call_rejected_txt">Call rejected</string>
+    <!-- In-call screen: call failure reason (Cause Number 22) -->
+    <string name="clh_callFailed_number_changed_txt">Number changed</string>
+    <!-- In-call screen: call failure reason (Cause Number 25) -->
+    <string name="clh_callFailed_pre_emption_txt">Couldn\'t complete call. Error code 25.</string>
+    <!-- In-call screen: call failure reason (Cause Number 26) -->
+    <string name="clh_callFailed_non_selected_user_clearing_txt">Couldn\'t complete call. Error code 26.</string>
+    <!-- In-call screen: call failure reason (Cause Number 27) -->
+    <string name="clh_callFailed_destination_out_of_order_txt">Couldn\'t complete call. Error code 27.</string>
+    <!-- In-call screen: call failure reason (Cause Number 28) -->
+    <string name="clh_callFailed_invalid_number_format_txt">Invalid number format (incomplete number)</string>
+    <!-- In-call screen: call failure reason (Cause Number 29) -->
+    <string name="clh_callFailed_facility_rejected_txt">Couldn\'t complete call. Error code 29.</string>
+    <!-- In-call screen: call failure reason (Cause Number 30) -->
+    <string name="clh_callFailed_response_to_STATUS_ENQUIRY_txt">Couldn\'t complete call. Error code 30.</string>
+    <!-- In-call screen: call failure reason (Cause Number 31) -->
+    <string name="clh_callFailed_normal_unspecified_txt">Couldn\'t complete call. Error code 31.</string>
+    <!-- In-call screen: call failure reason (Cause Number 34) -->
+    <string name="clh_callFailed_no_circuit_available_txt">Couldn\'t complete call. Error code 34.</string>
+    <!-- In-call screen: call failure reason (Cause Number 38) -->
+    <string name="clh_callFailed_network_out_of_order_txt">Couldn\'t complete call. Error code 38.</string>
+    <!-- In-call screen: call failure reason (Cause Number 41) -->
+    <string name="clh_callFailed_temporary_failure_txt">Couldn\'t complete call. Error code 41.</string>
+    <!-- In-call screen: call failure reason (Cause Number 42) -->
+    <string name="clh_callFailed_switching_equipment_congestion_txt">Couldn\'t complete call. Error code 42.</string>
+    <!-- In-call screen: call failure reason (Cause Number 43) -->
+    <string name="clh_callFailed_access_information_discarded_txt">Couldn\'t complete call. Error code 43.</string>
+    <!-- In-call screen: call failure reason (Cause Number 44) -->
+    <string name="clh_callFailed_requested_circuit_txt">Couldn\'t complete call. Error code 44.</string>
+    <!-- In-call screen: call failure reason (Cause Number 47) -->
+    <string name="clh_callFailed_resources_unavailable_unspecified_txt">Couldn\'t complete call. Error code 47.</string>
+    <!-- In-call screen: call failure reason (Cause Number 49) -->
+    <string name="clh_callFailed_quality_of_service_unavailable_txt">Couldn\'t complete call. Error code 49.</string>
+    <!-- In-call screen: call failure reason (Cause Number 50) -->
+    <string name="clh_callFailed_requested_facility_not_subscribed_txt">Couldn\'t complete call. Error code 50.</string>
+    <!-- In-call screen: call failure reason (Cause Number 55) -->
+    <string name="clh_callFailed_incoming_calls_barred_within_the_CUG_txt">Couldn\'t complete call. Error code 55.</string>
+    <!-- In-call screen: call failure reason (Cause Number 57) -->
+    <string name="clh_callFailed_bearer_capability_not_authorized_txt">Couldn\'t complete call. Error code 57.</string>
+    <!-- In-call screen: call failure reason (Cause Number 58) -->
+    <string name="clh_callFailed_bearer_capability_not_presently_available_txt">Couldn\'t complete call. Error code 58.</string>
+    <!-- In-call screen: call failure reason (Cause Number 63) -->
+    <string name="clh_callFailed_service_or_option_not_available_unspecified_txt">Couldn\'t complete call. Error code 63.</string>
+    <!-- In-call screen: call failure reason (Cause Number 65) -->
+    <string name="clh_callFailed_bearer_service_not_implemented_txt">Couldn\'t complete call. Error code 65.</string>
+    <!-- In-call screen: call failure reason (Cause Number 68) -->
+    <string name="clh_callFailed_ACM_equal_to_or_greater_than_ACMmax_txt">Couldn\'t complete call. Error code 68.</string>
+    <!-- In-call screen: call failure reason (Cause Number 69) -->
+    <string name="clh_callFailed_requested_facility_not_implemented_txt">Couldn\'t complete call. Error code 69.</string>
+    <!-- In-call screen: call failure reason (Cause Number 70) -->
+    <string name="clh_callFailed_only_restricted_digital_information_bearer_capability_is_available_txt">Couldn\'t complete call. Error code 70.</string>
+    <!-- In-call screen: call failure reason (Cause Number 79) -->
+    <string name="clh_callFailed_service_or_option_not_implemented_unspecified_txt">Couldn\'t complete call. Error code 79.</string>
+    <!-- In-call screen: call failure reason (Cause Number 81) -->
+    <string name="clh_callFailed_invalid_transaction_identifier_value_txt">Couldn\'t complete call. Error code 81.</string>
+    <!-- In-call screen: call failure reason (Cause Number 87) -->
+    <string name="clh_callFailed_user_not_member_of_CUG_txt">Couldn\'t complete call. Error code 87.</string>
+    <!-- In-call screen: call failure reason (Cause Number 88) -->
+    <string name="clh_callFailed_incompatible_destination_txt">Couldn\'t complete call. Error code 88.</string>
+    <!-- In-call screen: call failure reason (Cause Number 91) -->
+    <string name="clh_callFailed_invalid_transit_network_selection_txt">Couldn\'t complete call. Error code 91.</string>
+    <!-- In-call screen: call failure reason (Cause Number 95) -->
+    <string name="clh_callFailed_semantically_incorrect_message_txt">Couldn\'t complete call. Error code 95.</string>
+    <!-- In-call screen: call failure reason (Cause Number 96) -->
+    <string name="clh_callFailed_invalid_mandatory_information_txt">Couldn\'t complete call. Error code 96.</string>
+    <!-- In-call screen: call failure reason (Cause Number 97) -->
+    <string name="clh_callFailed_message_type_non_existent_or_not_implemented_txt">Couldn\'t complete call. Error code 97.</string>
+    <!-- In-call screen: call failure reason (Cause Number 98) -->
+    <string name="clh_callFailed_message_type_not_compatible_with_protocol_state_txt">Couldn\'t complete call. Error code 98.</string>
+    <!-- In-call screen: call failure reason (Cause Number 99) -->
+    <string name="clh_callFailed_information_element_non_existent_or_not_implemented_txt">Couldn\'t complete call. Error code 99.</string>
+    <!-- In-call screen: call failure reason (Cause Number 100) -->
+    <string name="clh_callFailed_conditional_IE_error_txt">Couldn\'t complete call. Error code 100.</string>
+    <!-- In-call screen: call failure reason (Cause Number 101) -->
+    <string name="clh_callFailed_message_not_compatible_with_protocol_state_txt">Couldn\'t complete call. Error code 101.</string>
+    <!-- In-call screen: call failure reason (Cause Number 102) -->
+    <string name="clh_callFailed_recovery_on_timer_expiry_txt">Couldn\'t complete call. Error code 102.</string>
+    <!-- In-call screen: call failure reason (Cause Number 111) -->
+    <string name="clh_callFailed_protocol_Error_unspecified_txt">Couldn\'t complete call. Error code 111.</string>
+    <!-- In-call screen: call failure reason (Cause Number 127) -->
+    <string name="clh_callFailed_interworking_unspecified_txt">Couldn\'t complete call. Error code 127.</string>
+    <!-- Call settings screen, setting option name -->
+    <string name="labelCallBarring">Call barring</string>
+    <!-- Call barring settings screen, setting summary text when a call barring option is activated -->
+    <string name="sum_call_barring_enabled">On</string>
+    <!-- Call barring settings screen, setting summary text when a call barring option is deactivated -->
+    <string name="sum_call_barring_disabled">Off</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_baoc">All outgoing</string>
+    <!-- Call barring settings screen, Disable blocking of all outgoing calls -->
+    <string name="call_barring_baoc_enabled">Disable blocking of all outgoing calls?</string>
+    <!-- Call barring settings screen, Block all outgoing calls -->
+    <string name="call_barring_baoc_disabled">Block all outgoing calls?</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_baoic">Outgoing international</string>
+    <!-- Call barring settings screen, Disable blocking of outgoing international calls -->
+    <string name="call_barring_baoic_enabled">Disable blocking of outgoing international calls?</string>
+    <!-- Call barring settings screen, Block outgoing international calls-->
+    <string name="call_barring_baoic_disabled">Block outgoing international calls?</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_baoicr">Outgoing international roaming</string>
+    <!-- Call barring settings screen, Disable blocking of outgoing international roaming -->
+    <string name="call_barring_baoicr_enabled">Disable blocking of outgoing international roaming?</string>
+    <!-- Call barring settings screen, Block outgoing international roaming -->
+    <string name="call_barring_baoicr_disabled">Block outgoing international roaming?</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_baic">All incoming</string>
+    <!-- Call barring settings screen, Disable blocking of all incoming calls -->
+    <string name="call_barring_baic_enabled">Disable blocking of all incoming calls?</string>
+    <!-- Call barring settings screen, Block all incoming calls -->
+    <string name="call_barring_baic_disabled">Block all incoming calls?</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_baicr">Incoming international roaming</string>
+    <!-- Call barring settings screen, Disable blocking of all incoming international roaming -->
+    <string name="call_barring_baicr_enabled">Disable blocking of all incoming international roaming?</string>
+    <!-- Call barring settings screen, Block incoming international roaming-->
+    <string name="call_barring_baicr_disabled">Block incoming international roaming?</string>
+    <!-- Call barring settings screen, setting option name -->
+    <string name="call_barring_deactivate_all">Deactivate all</string>
+    <!-- Call barring settings screen, setting summary text when BAAll check box is selected -->
+    <string name="call_barring_deactivate_all_description">Deactivate all call barring settings</string>
+    <!-- Call barring settings screen, deactivate all successfully -->
+    <string name="call_barring_deactivate_success">Call barring deactivated</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_change_pwd">Change password</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_change_pwd_description">Change call barring password</string>
+    <!-- Call barring settings screen, not possible to change call barring password -->
+    <string name="call_barring_change_pwd_description_disabled">Cannot change call barring password.</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_pwd_not_match">Passwords do not match</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_right_pwd_number">Enter a password with 4 numbers</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_change_pwd_success">Password changed</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_old_pwd">Old password</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_new_pwd">New password</string>
+    <!-- Call barring settings screen, change password -->
+    <string name="call_barring_confirm_pwd">Confirm password</string>
+    <!-- Call forwarding dialog box, text field label -->
+    <string name="messageCallBarring">Enter password</string>
+    <!-- Call barring settings screen, section heading -->
+    <string name="call_barring_settings">Call barring settings</string>
+    <!-- Call barring settings screen, deactivate all call barring settings -->
+    <string name="call_barring_deactivate_all_no_password">Deactivate all call barring settings?</string>
+    <!-- Message displayed to the user when an outgoing call is deflected.  This means that the
+         party the user is calling has chosen to send the call to another phone number. -->
+    <string name="supp_service_notification_call_deflected">Call deflected.</string>
+    <!-- Message displayed to the user when an outgoing call is forwarded to another number.
+         This happens because the party the user is calling has call forwarding active. -->
+    <string name="supp_service_notification_call_forwarded">Call forwarded.</string>
+    <!-- Message displayed to the user when an outgoing call is waiting.  This happens when the
+         party the user is calling is already in another call. -->
+    <string name="supp_service_notification_call_waiting">Call is waiting.</string>
+    <!-- Message displayed to the user when they have chosen to block their phone number for an
+         outgoing call, but the network has rejected that request. -->
+    <string name="supp_service_clir_suppression_rejected">Number blocking is rejected.</string>
+    <!-- Message displayed to the user to inform them that the call is to or from a number which is
+         part of a closed user group.  A closed user group is a network feature which restricts
+         calls on a device to members of the closed user group. -->
+    <string name="supp_service_closed_user_group_call">Closed user group call.</string>
+    <!-- Message displayed to the user when incoming call barring is active.  This means that the
+         user has enabled the network feature which prevents all incoming calls. -->
+    <string name="supp_service_incoming_calls_barred">Incoming calls barred.</string>
+    <!-- Message displayed to the user when outgoing call barring is active.  This means that the
+         user has enabled the network feature which prevents all outgoing calls. -->
+    <string name="supp_service_outgoing_calls_barred">Outgoing calls barred.</string>
+    <!-- Message displayed to the user to indicate that call forwarding is active. -->
+    <string name="supp_service_call_forwarding_active">Call forwarding active.</string>
+    <!-- Message displayed to the user when they receive multiple incoming calls at the same time
+         and one of them is forwarded to the network.  Phones can't handle multiple incoming calls
+         so the network will typically forward one of the calls to voicemail or another number
+         defined by the user. -->
+    <string name="supp_service_additional_call_forwarded">Additional call forwarded.</string>
+    <!-- Message displayed to the user to indicate that a call has been successfully transferred
+         to another phone number. -->
+    <string name="supp_service_additional_ect_connected">Explicit call transfer complete.</string>
+    <!-- Message displayed to the user to indicate that the call is in the process of being
+         transferred to another phone number.-->
+    <string name="supp_service_additional_ect_connecting">Explicit call transfer in progress.</string>
+    <!-- Message displayed to the user to indicate that the remote party has put the user
+         on hold. -->
+    <string name="supp_service_call_on_hold">Call on hold.</string>
+    <!-- Message displayed to the user to indicate that the remote party has taken the user
+         off hold. -->
+    <string name="supp_service_call_resumed">Call resumed.</string>
+    <!-- Message displayed to the user to indicate that an incoming call was deflected from another
+         number.  This means that the call originated as a result of the original caller choosing
+         to forward the call to the current user rather than answering it themselves. -->
+    <string name="supp_service_deflected_call">Call was deflected.</string>
+    <!-- Message displayed to the user to indicate that an incoming call was forwarded from another
+         number. -->
+    <string name="supp_service_forwarded_call">Forwarded call.</string>
+    <!-- Message displayed to the user to indicate that they are joining a conference call. -->
+    <string name="supp_service_conference_call">Joining conference call.</string>
+    <!-- Message displayed to the user to indicate that a held call has been released /
+         disconnected. -->
+    <string name="supp_service_held_call_released">Held call has been released.</string>
 </resources>

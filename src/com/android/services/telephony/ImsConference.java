@@ -271,10 +271,10 @@ public class ImsConference extends Conference {
         long connectTime = conferenceHost.getOriginalConnection().getConnectTime();
         long connectElapsedTime = conferenceHost.getOriginalConnection().getConnectTimeReal();
         setConnectionTime(connectTime);
-        setConnectionElapsedTime(connectElapsedTime);
+        setConnectionStartElapsedRealTime(connectElapsedTime);
         // Set the connectTime in the connection as well.
         conferenceHost.setConnectTimeMillis(connectTime);
-        conferenceHost.setConnectElapsedTimeMillis(connectElapsedTime);
+        conferenceHost.setConnectionStartElapsedRealTime(connectElapsedTime);
 
         mTelephonyConnectionService = telephonyConnectionService;
         setConferenceHost(conferenceHost);
@@ -758,7 +758,8 @@ public class ImsConference extends Conference {
 
         participant.removeConnectionListener(mParticipantListener);
         synchronized(mUpdateSyncRoot) {
-            mConferenceParticipantConnections.remove(participant.getUserEntity());
+            mConferenceParticipantConnections.remove(new Pair<>(participant.getUserEntity(),
+                    participant.getEndpoint()));
         }
         mTelephonyConnectionService.removeConnection(participant);
     }
@@ -891,7 +892,6 @@ public class ImsConference extends Conference {
                         mConferenceHost.isOutgoingCall());
                 // This is a newly created conference connection as a result of SRVCC
                 c.setConferenceSupported(true);
-                c.addCapability(Connection.CAPABILITY_CONFERENCE_HAS_NO_CHILDREN);
                 c.setConnectionProperties(
                         c.getConnectionProperties() | Connection.PROPERTY_IS_DOWNGRADED_CONFERENCE);
                 c.updateState();

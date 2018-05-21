@@ -21,12 +21,14 @@ import android.os.PersistableBundle;
 import android.preference.Preference;
 import android.preference.PreferenceFragment;
 import android.preference.PreferenceScreen;
-import android.preference.TwoStatePreference;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 
+import com.android.internal.logging.MetricsLogger;
+import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
-import com.android.internal.telephony.PhoneFactory;
+import com.android.settingslib.RestrictedLockUtils;
 
 /**
  * List of Network-specific settings screens.
@@ -34,7 +36,7 @@ import com.android.internal.telephony.PhoneFactory;
 public class GsmUmtsOptions {
     private static final String LOG_TAG = "GsmUmtsOptions";
 
-    private Preference mButtonAPNExpand;
+    private RestrictedPreference mButtonAPNExpand;
     private Preference mCategoryAPNExpand;
     Preference mCarrierSettingPref;
 
@@ -53,7 +55,7 @@ public class GsmUmtsOptions {
         mPrefFragment = prefFragment;
         mPrefScreen = prefScreen;
         mPrefFragment.addPreferencesFromResource(R.xml.gsm_umts_options);
-        mButtonAPNExpand = mPrefScreen.findPreference(BUTTON_APN_EXPAND_KEY);
+        mButtonAPNExpand = (RestrictedPreference) mPrefScreen.findPreference(BUTTON_APN_EXPAND_KEY);
         mCategoryAPNExpand = mPrefScreen.findPreference(CATEGORY_APN_EXPAND_KEY);
         mNetworkOperator = (NetworkOperators) mPrefScreen
                 .findPreference(NetworkOperators.CATEGORY_NETWORK_OPERATORS_KEY);
@@ -70,9 +72,11 @@ public class GsmUmtsOptions {
         boolean addAPNExpand = true;
         boolean addNetworkOperatorsCategory = true;
         boolean addCarrierSettings = true;
-        if (PhoneFactory.getDefaultPhone().getPhoneType() != PhoneConstants.PHONE_TYPE_GSM) {
+        Phone phone = PhoneGlobals.getPhone(subId);
+        if (phone == null) return;
+        if (phone.getPhoneType() != PhoneConstants.PHONE_TYPE_GSM) {
             log("Not a GSM phone");
-            mCategoryAPNExpand.setEnabled(false);
+            addAPNExpand = false;
             mNetworkOperator.setEnabled(false);
         } else {
             log("Not a CDMA phone");
@@ -94,7 +98,7 @@ public class GsmUmtsOptions {
             }
 
             if (carrierConfig.getBoolean(CarrierConfigManager.KEY_CSP_ENABLED_BOOL)) {
-                if (PhoneFactory.getDefaultPhone().isCspPlmnEnabled()) {
+                if (phone.isCspPlmnEnabled()) {
                     log("[CSP] Enabling Operator Selection menu.");
                     mNetworkOperator.setEnabled(true);
                 } else {
@@ -112,10 +116,17 @@ public class GsmUmtsOptions {
         // Calling add or remove explicitly to make sure they are updated.
 
         if (addAPNExpand) {
+            log("update: addAPNExpand");
+            mButtonAPNExpand.setDisabledByAdmin(
+                    MobileNetworkSettings.isDpcApnEnforced(mButtonAPNExpand.getContext())
+                            ? RestrictedLockUtils.getDeviceOwner(mButtonAPNExpand.getContext())
+                            : null);
             mButtonAPNExpand.setOnPreferenceClickListener(
                     new Preference.OnPreferenceClickListener() {
                         @Override
                         public boolean onPreferenceClick(Preference preference) {
+                            MetricsLogger.action(mButtonAPNExpand.getContext(),
+                                    MetricsEvent.ACTION_MOBILE_NETWORK_APN_SETTINGS);
                             // We need to build the Intent by hand as the Preference Framework
                             // does not allow to add an Intent with some extras into a Preference
                             // XML file
