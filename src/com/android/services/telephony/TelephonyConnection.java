@@ -538,6 +538,7 @@ abstract class TelephonyConnection extends Connection {
         @Override
         public void onRttModifyResponseReceived(int status) {
             updateConnectionProperties();
+            refreshConferenceSupported();
             if (status == RttModifyStatus.SESSION_MODIFY_REQUEST_SUCCESS) {
                 sendRttInitiationSuccess();
             } else {
@@ -554,7 +555,12 @@ abstract class TelephonyConnection extends Connection {
 
         @Override
         public void onRttInitiated() {
-            updateConnectionProperties();
+            if (mOriginalConnection != null) {
+                // if mOriginalConnection is null, the properties will get set when
+                // mOriginalConnection gets set.
+                updateConnectionProperties();
+                refreshConferenceSupported();
+            }
             sendRttInitiationSuccess();
         }
 
@@ -831,7 +837,11 @@ abstract class TelephonyConnection extends Connection {
     public void onStartRtt(RttTextStream textStream) {
         if (isImsConnection()) {
             ImsPhoneConnection originalConnection = (ImsPhoneConnection) mOriginalConnection;
-            originalConnection.sendRttModifyRequest(textStream);
+            if (originalConnection.isRttEnabledForCall()) {
+                originalConnection.setCurrentRttTextStream(textStream);
+            } else {
+                originalConnection.sendRttModifyRequest(textStream);
+            }
         } else {
             Log.w(this, "onStartRtt - not in IMS, so RTT cannot be enabled.");
         }
@@ -1179,7 +1189,7 @@ abstract class TelephonyConnection extends Connection {
                 wasVideoCall = call.wasVideoCall();
             }
 
-            isVowifiEnabled = ImsUtil.isWfcEnabled(phone.getContext());
+            isVowifiEnabled = ImsUtil.isWfcEnabled(phone.getContext(), phone.getPhoneId());
         }
 
         if (isCurrentVideoCall) {
@@ -1556,7 +1566,8 @@ abstract class TelephonyConnection extends Connection {
                         setDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
                                 mOriginalConnection.getDisconnectCause(),
                                 preciseDisconnectCause,
-                                mOriginalConnection.getVendorDisconnectCause()));
+                                mOriginalConnection.getVendorDisconnectCause(),
+                                getPhone().getPhoneId()));
                         close();
                     }
                     break;
@@ -2064,7 +2075,7 @@ abstract class TelephonyConnection extends Connection {
         boolean isVoWifiEnabled = false;
         if (isIms) {
             ImsPhone imsPhone = (ImsPhone) phone;
-            isVoWifiEnabled = ImsUtil.isWfcEnabled(phone.getContext());
+            isVoWifiEnabled = ImsUtil.isWfcEnabled(phone.getContext(), phone.getPhoneId());
         }
         PhoneAccountHandle phoneAccountHandle = isIms ? PhoneUtils
                 .makePstnPhoneAccountHandle(phone.getDefaultPhone())
@@ -2090,6 +2101,9 @@ abstract class TelephonyConnection extends Connection {
         if (mTreatAsEmergencyCall) {
             isConferenceSupported = false;
             Log.d(this, "refreshConferenceSupported = false; emergency call");
+        } else if (isRtt()) {
+            isConferenceSupported = false;
+            Log.d(this, "refreshConferenceSupported = false; rtt call");
         } else if (!isConferencingSupported || isIms && !isImsConferencingSupported) {
             isConferenceSupported = false;
             Log.d(this, "refreshConferenceSupported = false; carrier doesn't support conf.");

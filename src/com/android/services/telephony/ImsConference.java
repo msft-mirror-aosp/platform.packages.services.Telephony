@@ -673,6 +673,7 @@ public class ImsConference extends Conference {
                     Log.i(this, "handleConferenceParticipantsUpdate: updateState, participant = %s",
                             participant);
                     connection.updateState(participant.getState());
+                    connection.setVideoState(parent.getVideoState());
                 }
             }
 
@@ -685,6 +686,7 @@ public class ImsConference extends Conference {
                                     newParticipant.getHandle(),
                                     newParticipant.getEndpoint()));
                     connection.updateState(newParticipant.getState());
+                    connection.setVideoState(parent.getVideoState());
                 }
             }
 
@@ -933,8 +935,14 @@ public class ImsConference extends Conference {
                 if (mConferenceHost == null) {
                     disconnectCause = new DisconnectCause(DisconnectCause.CANCELED);
                 } else {
-                    disconnectCause = DisconnectCauseUtil.toTelecomDisconnectCause(
-                            mConferenceHost.getOriginalConnection().getDisconnectCause());
+                    if (mConferenceHost.getPhone() != null) {
+                        disconnectCause = DisconnectCauseUtil.toTelecomDisconnectCause(
+                                mConferenceHost.getOriginalConnection().getDisconnectCause(),
+                                null, mConferenceHost.getPhone().getPhoneId());
+                    } else {
+                        disconnectCause = DisconnectCauseUtil.toTelecomDisconnectCause(
+                                mConferenceHost.getOriginalConnection().getDisconnectCause());
+                    }
                 }
                 setDisconnected(disconnectCause);
                 disconnectConferenceParticipants();

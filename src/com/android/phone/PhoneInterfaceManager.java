@@ -42,6 +42,7 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.ServiceManager;
+import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
@@ -217,6 +218,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final String ISDR_AID = "A0000005591010FFFFFFFF8900000100";
 
     private NetworkScanRequestTracker mNetworkScanRequestTracker;
+
+    private static final int TYPE_ALLOCATION_CODE_LENGTH = 8;
+    private static final int MANUFACTURER_CODE_LENGTH = 8;
 
     /**
      * A request object to use for transmitting data to an ICC.
@@ -1697,7 +1701,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return null;
         }
 
-        WorkSource workSource = getWorkSource(null, Binder.getCallingUid());
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
         phone.getCellLocation(workSource).fillInNotifierBundle(data);
         return data;
     }
@@ -1781,7 +1785,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         ArrayList<NeighboringCellInfo> cells = null;
 
-        WorkSource workSource = getWorkSource(null, Binder.getCallingUid());
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
         try {
             cells = (ArrayList<NeighboringCellInfo>) sendRequest(
                     CMD_HANDLE_NEIGHBORING_CELL, workSource,
@@ -1803,7 +1807,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
 
         if (DBG_LOC) log("getAllCellInfo: is active user");
-        WorkSource workSource = getWorkSource(null, Binder.getCallingUid());
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
         List<CellInfo> cellInfos = new ArrayList<CellInfo>();
         for (Phone phone : PhoneFactory.getPhones()) {
             final List<CellInfo> info = phone.getAllCellInfo(workSource);
@@ -1815,7 +1819,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void setCellInfoListRate(int rateInMillis) {
         enforceModifyPermission();
-        WorkSource workSource = getWorkSource(null, Binder.getCallingUid());
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
         mPhone.setCellInfoListRate(rateInMillis, workSource);
     }
 
@@ -1834,6 +1838,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
+    public String getTypeAllocationCodeForSlot(int slotIndex) {
+        Phone phone = PhoneFactory.getPhone(slotIndex);
+        String tac = null;
+        if (phone != null) {
+            String imei = phone.getImei();
+            tac = imei == null ? null : imei.substring(0, TYPE_ALLOCATION_CODE_LENGTH);
+        }
+        return tac;
+    }
+
+    @Override
     public String getMeidForSlot(int slotIndex, String callingPackage) {
         Phone phone = PhoneFactory.getPhone(slotIndex);
         if (phone == null) {
@@ -1845,6 +1860,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return null;
         }
         return phone.getMeid();
+    }
+
+    @Override
+    public String getManufacturerCodeForSlot(int slotIndex) {
+        Phone phone = PhoneFactory.getPhone(slotIndex);
+        String manufacturerCode = null;
+        if (phone != null) {
+            String meid = phone.getMeid();
+            manufacturerCode = meid == null ? null : meid.substring(0, MANUFACTURER_CODE_LENGTH);
+        }
+        return manufacturerCode;
     }
 
     @Override
@@ -2733,6 +2759,45 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public boolean isResolvingImsBinding() {
         enforceModifyPermission();
         return PhoneFactory.getImsResolver().isResolvingBinding();
+    }
+
+    /**
+     * Sets the ImsService Package Name that Telephony will bind to.
+     *
+     * @param slotId the slot ID that the ImsService should bind for.
+     * @param isCarrierImsService true if the ImsService is the carrier override, false if the
+     *         ImsService is the device default ImsService.
+     * @param packageName The package name of the application that contains the ImsService to bind
+     *         to.
+     * @return true if setting the ImsService to bind to succeeded, false if it did not.
+     * @hide
+     */
+    public boolean setImsService(int slotId, boolean isCarrierImsService, String packageName) {
+        int[] subIds = SubscriptionManager.getSubId(slotId);
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
+                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
+                "setImsService");
+
+        return PhoneFactory.getImsResolver().overrideImsServiceConfiguration(slotId,
+                isCarrierImsService, packageName);
+    }
+
+    /**
+     * Return the ImsService configuration.
+     *
+     * @param slotId The slot that the ImsService is associated with.
+     * @param isCarrierImsService true, if the ImsService is a carrier override, false if it is
+     *         the device default.
+     * @return the package name of the ImsService configuration.
+     */
+    public String getImsService(int slotId, boolean isCarrierImsService) {
+        int[] subIds = SubscriptionManager.getSubId(slotId);
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
+                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
+                "getImsService");
+
+        return PhoneFactory.getImsResolver().getImsServiceConfiguration(slotId,
+                isCarrierImsService);
     }
 
     public void setImsRegistrationState(boolean registered) {
@@ -3983,6 +4048,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         DumpsysHandler.dump(mPhone.getContext(), fd, writer, args);
     }
 
+    @Override
+    public void onShellCommand(FileDescriptor in, FileDescriptor out, FileDescriptor err,
+            String[] args, ShellCallback callback, ResultReceiver resultReceiver)
+            throws RemoteException {
+        (new TelephonyShellCommand(this)).exec(this, in, out, err, args, callback, resultReceiver);
+    }
+
     /**
      * Get aggregated video call data usage since boot.
      *
@@ -4040,14 +4112,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         return null;
     }
 
-    private WorkSource getWorkSource(WorkSource workSource, int uid) {
-        if (workSource != null) {
-            return workSource;
-        }
-
+    private WorkSource getWorkSource(int uid) {
         String packageName = mPhone.getContext().getPackageManager().getNameForUid(uid);
-        workSource = new WorkSource(uid, packageName);
-        return workSource;
+        return new WorkSource(uid, packageName);
     }
 
     /**

@@ -66,6 +66,11 @@
     <protected-broadcast android:name= "com.android.internal.telephony.CARRIER_SIGNAL_DEFAULT_NETWORK_AVAILABLE" />
     <protected-broadcast android:name= "com.android.internal.provider.action.VOICEMAIL_SMS_RECEIVED" />
     <protected-broadcast android:name= "com.android.intent.isim_refresh" />
+    <protected-broadcast android:name= "com.android.ims.ACTION_RCS_SERVICE_AVAILABLE" />
+    <protected-broadcast android:name= "com.android.ims.ACTION_RCS_SERVICE_UNAVAILABLE" />
+    <protected-broadcast android:name= "com.android.ims.ACTION_RCS_SERVICE_DIED" />
+    <protected-broadcast android:name= "com.android.ims.ACTION_PRESENCE_CHANGED" />
+    <protected-broadcast android:name= "com.android.ims.ACTION_PUBLISH_STATUS_CHANGED" />
     <protected-broadcast android:name= "com.android.ims.IMS_SERVICE_UP" />
     <protected-broadcast android:name= "com.android.ims.IMS_SERVICE_DOWN" />
     <protected-broadcast android:name= "com.android.ims.IMS_INCOMING_CALL" />
@@ -93,6 +98,7 @@
          So, declare this permission here for backwards compatibility so the phone process can send
          the broadcasts to those same receivers. -->
     <uses-permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE" />
+    <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.WRITE_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
     <uses-permission android:name="android.permission.READ_CONTACTS" />
@@ -266,10 +272,7 @@
             android:theme="@style/NetworkOperatorsSettingsTheme"
             android:configChanges="orientation|screenSize">
             <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
                 <action android:name="android.intent.action.MAIN" />
-                <action android:name="android.settings.NETWORK_OPERATOR_SETTINGS" />
-                <action android:name="android.settings.DATA_ROAMING_SETTINGS" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
