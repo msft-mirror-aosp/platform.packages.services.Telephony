@@ -133,7 +133,7 @@ public class CallFeaturesSetting extends PreferenceActivity
 
         if (preference == mEnableVideoCalling) {
             if (mImsMgr.isEnhanced4gLteModeSettingEnabledByUser()) {
-                PhoneGlobals.getInstance().phoneMgr.enableVideoCalling((boolean) objValue);
+                mImsMgr.setVtSetting((boolean) objValue);
             } else {
                 AlertDialog.Builder builder = new AlertDialog.Builder(this);
                 DialogInterface.OnClickListener networkSettingsClickListener =
@@ -190,19 +190,26 @@ public class CallFeaturesSetting extends PreferenceActivity
         }
     }
 
+    private void listenPhoneState(boolean listen) {
+        TelephonyManager telephonyManager =
+                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        telephonyManager.listen(mPhoneStateListener, listen
+                ? PhoneStateListener.LISTEN_CALL_STATE : PhoneStateListener.LISTEN_NONE);
+    }
+
     private final PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
         @Override
         public void onCallStateChanged(int state, String incomingNumber) {
             if (DBG) log("PhoneStateListener onCallStateChanged: state is " + state);
+            // Use TelecomManager#getCallStete instead of 'state' parameter because it needs
+            // to check the current state of all phone calls.
+            boolean isCallStateIdle =
+                    mTelecomManager.getCallState() == TelephonyManager.CALL_STATE_IDLE;
             if (mEnableVideoCalling != null) {
-                // Use TelephonyManager#getCallStete instead of 'state' parameter because it needs
-                // to check the current state of all phone calls.
-                TelephonyManager telephonyManager =
-                        (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-                mEnableVideoCalling.setEnabled(
-                        telephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE);
-                mButtonWifiCalling.setEnabled(
-                        telephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE);
+                mEnableVideoCalling.setEnabled(isCallStateIdle);
+            }
+            if (mButtonWifiCalling != null) {
+                mButtonWifiCalling.setEnabled(isCallStateIdle);
             }
         }
     };
@@ -210,9 +217,7 @@ public class CallFeaturesSetting extends PreferenceActivity
     @Override
     protected void onPause() {
         super.onPause();
-        TelephonyManager telephonyManager =
-                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-        telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+        listenPhoneState(false);
     }
 
     @Override
@@ -220,6 +225,7 @@ public class CallFeaturesSetting extends PreferenceActivity
         super.onResume();
 
         updateImsManager(mPhone);
+        listenPhoneState(true);
         PreferenceScreen preferenceScreen = getPreferenceScreen();
         if (preferenceScreen != null) {
             preferenceScreen.removeAll();
@@ -227,9 +233,8 @@ public class CallFeaturesSetting extends PreferenceActivity
 
         addPreferencesFromResource(R.xml.call_feature_setting);
 
-        TelephonyManager telephonyManager =
-                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-        telephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE);
+        TelephonyManager telephonyManager = getSystemService(TelephonyManager.class)
+                .createForSubscriptionId(mPhone.getSubId());
 
         PreferenceScreen prefSet = getPreferenceScreen();
         mVoicemailSettingsScreen =
@@ -301,19 +306,11 @@ public class CallFeaturesSetting extends PreferenceActivity
                 || mPhone.mDcTracker.isDataEnabled())) {
             boolean currentValue =
                     mImsMgr.isEnhanced4gLteModeSettingEnabledByUser()
-                    ? PhoneGlobals.getInstance().phoneMgr.isVideoCallingEnabled(
-                            getOpPackageName()) : false;
+                    ? mImsMgr.isVtEnabledByUser() : false;
             mEnableVideoCalling.setChecked(currentValue);
             mEnableVideoCalling.setOnPreferenceChangeListener(this);
         } else {
             prefSet.removePreference(mEnableVideoCalling);
-        }
-
-        if (mImsMgr.isVolteEnabledByPlatform()
-                && !carrierConfig.getBoolean(
-                        CarrierConfigManager.KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL)) {
-            TelephonyManager tm = (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
-            /* tm.listen(mPhoneStateListener, PhoneStateListener.LISTEN_CALL_STATE); */
         }
 
         final PhoneAccountHandle simCallManager = mTelecomManager.getSimCallManager();
