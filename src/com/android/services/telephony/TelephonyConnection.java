@@ -569,6 +569,12 @@ abstract class TelephonyConnection extends Connection {
             updateConnectionProperties();
             sendRttSessionRemotelyTerminated();
         }
+
+        @Override
+        public void onOriginalConnectionReplaced(
+                com.android.internal.telephony.Connection newConnection) {
+            setOriginalConnection(newConnection);
+        }
     };
 
     protected com.android.internal.telephony.Connection mOriginalConnection;
@@ -1660,7 +1666,7 @@ abstract class TelephonyConnection extends Connection {
         setActive();
     }
 
-    private void close() {
+    protected void close() {
         Log.v(this, "close");
         clearOriginalConnection();
         destroy();
