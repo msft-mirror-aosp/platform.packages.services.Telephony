@@ -23,8 +23,6 @@ import android.preference.PreferenceManager;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.util.ArraySet;
 
-import com.android.phone.vvm.RemoteVvmTaskManager;
-
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -92,6 +90,7 @@ public class VisualVoicemailSmsFilterConfig {
                         VisualVoicemailSmsFilterSettings.DEFAULT_ORIGINATING_NUMBERS))
                 .setDestinationPort(reader.getInt(DESTINATION_PORT_KEY,
                         VisualVoicemailSmsFilterSettings.DEFAULT_DESTINATION_PORT))
+                .setPackageName(packageName)
                 .build();
     }
 
