@@ -69,8 +69,10 @@ import android.view.KeyEvent;
 import android.view.MenuItem;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.View.AccessibilityDelegate;
 import android.view.ViewGroup;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityEvent;
 import android.widget.TextView;
 
 import com.android.internal.colorextraction.ColorExtractor;
@@ -105,17 +107,12 @@ import java.util.Locale;
  * moved into a shared base class that would live in the framework?
  * Or could we figure out some way to move *this* class into apps/Contacts
  * also?
- *
- * TODO: Implement emergency dialer shortcut.
- *  Emergency dialer shortcut offer a local emergency number list. Directly clicking a call button
- *  to place an emergency phone call without entering numbers from dialpad.
- *  TODO item:
- *     1.integrate emergency phone number table.
  */
 public class EmergencyDialer extends Activity implements View.OnClickListener,
         View.OnLongClickListener, View.OnKeyListener, TextWatcher,
         DialpadKeyButton.OnPressedListener, ColorExtractor.OnColorsChangedListener,
-        EmergencyShortcutButton.OnConfirmClickListener, SensorEventListener {
+        EmergencyShortcutButton.OnConfirmClickListener, SensorEventListener,
+        EmergencyInfoGroup.OnConfirmClickListener {
 
     private class MetricsWriter {
         // Metrics constants indicating the entry type that user opened emergency dialer.
@@ -212,9 +209,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
     private static final int BAD_EMERGENCY_NUMBER_DIALOG = 0;
 
-    /** 90% opacity, different from other gradients **/
-    private static final int BACKGROUND_GRADIENT_ALPHA = 230;
-
     /** 85% opacity for black background **/
     private static final int BLACK_BACKGROUND_GRADIENT_ALPHA = 217;
 
@@ -241,6 +235,8 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
     private EmergencyActionGroup mEmergencyActionGroup;
 
+    private EmergencyInfoGroup mEmergencyInfoGroup;
+
     // close activity when screen turns off
     private BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
@@ -248,6 +244,30 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
             if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
                 finishAndRemoveTask();
             }
+        }
+    };
+
+    /**
+     * Customize accessibility methods in View.
+     */
+    private AccessibilityDelegate mAccessibilityDelegate = new AccessibilityDelegate() {
+
+        /**
+         * Stop AccessiblityService from reading the title of a hidden View.
+         *
+         * <p>The crossfade animation will set the visibility of fade out view to {@link View.GONE}
+         * in the animation end. The view with an accessibility pane title would call the
+         * {@link AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED} event, which would trigger the
+         * accessibility service to read the pane title of fade out view instead of pane title of
+         * fade in view. So it need to filter out the event called by vanished pane.
+         */
+        @Override
+        public void onPopulateAccessibilityEvent(View host, AccessibilityEvent event) {
+            if (event.getEventType() == AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED
+                    && host.getVisibility() == View.GONE) {
+                return;
+            }
+            super.onPopulateAccessibilityEvent(host, event);
         }
     };
 
@@ -260,8 +280,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
     private boolean mIsWfcEmergencyCallingWarningEnabled;
     private float mDefaultDigitsTextSize;
-
-    private boolean mAreEmergencyDialerShortcutsEnabled;
 
     private MetricsWriter mMetricsWriter;
     private SensorManager mSensorManager;
@@ -329,22 +347,11 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
         getWindow().setAttributes(lp);
 
-        mAreEmergencyDialerShortcutsEnabled = Settings.Global.getInt(getContentResolver(),
-                Settings.Global.FASTER_EMERGENCY_PHONE_CALL_ENABLED, 0) != 0;
-        Log.d(LOG_TAG, "Enable emergency dialer shortcut: "
-                + mAreEmergencyDialerShortcutsEnabled);
-
         mColorExtractor = new ColorExtractor(this);
 
         // It does not support dark text theme, when emergency dialer shortcuts are enabled.
         // And the background color is black with 85% opacity.
-        if (mAreEmergencyDialerShortcutsEnabled) {
-            updateTheme(false);
-        } else {
-            GradientColors lockScreenColors = mColorExtractor.getColors(WallpaperManager.FLAG_LOCK,
-                    ColorExtractor.TYPE_EXTRA_DARK);
-            updateTheme(lockScreenColors.supportsDarkText());
-        }
+        updateTheme(false);
 
         setContentView(R.layout.emergency_dialer);
 
@@ -362,8 +369,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         ((WindowManager) getSystemService(Context.WINDOW_SERVICE))
                 .getDefaultDisplay().getSize(displaySize);
         mBackgroundGradient.setScreenSize(displaySize.x, displaySize.y);
-        mBackgroundGradient.setAlpha(mAreEmergencyDialerShortcutsEnabled
-                ? BLACK_BACKGROUND_GRADIENT_ALPHA : BACKGROUND_GRADIENT_ALPHA);
+        mBackgroundGradient.setAlpha(BLACK_BACKGROUND_GRADIENT_ALPHA);
         getWindow().setBackgroundDrawable(mBackgroundGradient);
 
         // Check for the presence of the keypad
@@ -429,10 +435,10 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
         mEmergencyActionGroup = (EmergencyActionGroup) findViewById(R.id.emergency_action_group);
 
-        if (mAreEmergencyDialerShortcutsEnabled) {
-            mEccInfoHelper = new EccInfoHelper(new IsoToEccProtobufRepository());
-            setupEmergencyShortcutsView();
-        }
+        mEmergencyInfoGroup = (EmergencyInfoGroup) findViewById(R.id.emergency_info_button);
+
+        mEccInfoHelper = new EccInfoHelper(new IsoToEccProtobufRepository());
+        setupEmergencyShortcutsView();
     }
 
     @Override
@@ -497,8 +503,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         // If emergency dialer shortcut is enabled and Dialpad view is visible, pressing the
         // back key will back to display EmergencyShortcutView view.
         // Otherwise, it would finish the activity.
-        if (mAreEmergencyDialerShortcutsEnabled && mDialpadView != null
-                && mDialpadView.getVisibility() == View.VISIBLE) {
+        if (mDialpadView != null && mDialpadView.getVisibility() == View.VISIBLE) {
             switchView(mEmergencyShortcutView, mDialpadView, true);
             return;
         }
@@ -584,6 +589,17 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     }
 
     @Override
+    public void onConfirmClick(EmergencyInfoGroup button) {
+        if (button == null) return;
+
+        mUserActions |= MetricsWriter.USER_ACTION_OPEN_EMERGENCY_INFO;
+        Intent intent = (Intent) button.getTag(R.id.tag_intent);
+        if (intent != null) {
+            startActivity(intent);
+        }
+    }
+
+    @Override
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.deleteButton: {
@@ -605,14 +621,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
                 mUserActions |= MetricsWriter.USER_ACTION_OPEN_DIALPAD;
                 mDigits.getText().clear();
                 switchView(mDialpadView, mEmergencyShortcutView, true);
-                return;
-            }
-            case R.id.emergency_info_button: {
-                mUserActions |= MetricsWriter.USER_ACTION_OPEN_EMERGENCY_INFO;
-                Intent intent = (Intent) view.getTag(R.id.tag_intent);
-                if (intent != null) {
-                    startActivity(intent);
-                }
                 return;
             }
         }
@@ -715,21 +723,10 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         mUserActions = MetricsWriter.USER_ACTION_NONE;
         mMetricsWriter.writeMetricsForEnter();
 
-        // It does not support dark text theme, when emergency dialer shortcuts are enabled.
-        // And set background color to black.
-        if (mAreEmergencyDialerShortcutsEnabled) {
-            mBackgroundGradient.setColors(Color.BLACK, Color.BLACK, false);
-            updateTheme(false);
-        } else {
-            mColorExtractor.addOnColorsChangedListener(this);
-            GradientColors lockScreenColors = mColorExtractor.getColors(WallpaperManager.FLAG_LOCK,
-                    ColorExtractor.TYPE_EXTRA_DARK);
-            // Do not animate when view isn't visible yet, just set an initial state.
-            mBackgroundGradient.setColors(lockScreenColors, false);
-            updateTheme(lockScreenColors.supportsDarkText());
-        }
+        mBackgroundGradient.setColors(Color.BLACK, Color.BLACK, false);
+        updateTheme(false);
 
-        if (mAreEmergencyDialerShortcutsEnabled && mEccInfoHelper != null) {
+        if (mEccInfoHelper != null) {
             final Context context = this;
             mEccInfoHelper.getCountryEccInfoAsync(context,
                     new EccInfoHelper.CountryEccInfoResultCallback() {
@@ -1071,11 +1068,13 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         mEmergencyShortcutView = findViewById(R.id.emergency_dialer_shortcuts);
         mDialpadView = findViewById(R.id.emergency_dialer);
 
+        mEmergencyShortcutView.setAccessibilityDelegate(mAccessibilityDelegate);
+        mDialpadView.setAccessibilityDelegate(mAccessibilityDelegate);
+
         final View dialpadButton = findViewById(R.id.floating_action_button_dialpad);
         dialpadButton.setOnClickListener(this);
 
-        final View emergencyInfoButton = findViewById(R.id.emergency_info_button);
-        emergencyInfoButton.setOnClickListener(this);
+        mEmergencyInfoGroup.setOnConfirmClickListener(this);
 
         // EmergencyActionGroup is replaced by EmergencyInfoGroup.
         mEmergencyActionGroup.setVisibility(View.GONE);
@@ -1154,10 +1153,15 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
                     shortcutButtonContainer.addView(button);
                 }
 
-                // update emergency numbers title for numerous buttons.
+                // Update emergency numbers title for numerous buttons.
                 if (mEmergencyShortcutButtonList.size() > 1) {
                     emergencyNumberTitle.setText(getString(
                             R.string.numerous_emergency_numbers_title));
+                    // Update mEmergencyInfoGroup margin to avoid UI overlay when
+                    // emergency shortcut button more than 2.
+                    if (mEmergencyShortcutButtonList.size() > 2) {
+                        mEmergencyInfoGroup.updateLayoutMargin();
+                    }
                 } else {
                     emergencyNumberTitle.setText(getText(R.string.single_emergency_number_title));
                 }
@@ -1180,6 +1184,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
      */
     private void onPreTouchEvent(MotionEvent event) {
         mEmergencyActionGroup.onPreTouchEvent(event);
+        mEmergencyInfoGroup.onPreTouchEvent(event);
 
         if (mEmergencyShortcutButtonList != null) {
             for (EmergencyShortcutButton button : mEmergencyShortcutButtonList) {
@@ -1193,6 +1198,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
      */
     private void onPostTouchEvent(MotionEvent event) {
         mEmergencyActionGroup.onPostTouchEvent(event);
+        mEmergencyInfoGroup.onPostTouchEvent(event);
 
         if (mEmergencyShortcutButtonList != null) {
             for (EmergencyShortcutButton button : mEmergencyShortcutButtonList) {
