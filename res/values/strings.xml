@@ -51,7 +51,7 @@
     <!-- Label for "cancel" button on the MMI dialog -->
     <string name="cancel">Cancel</string>
     <!-- Toast string displayed to user if the input in MMI dialog is < 1 or > 160 -->
-    <string name="enter_input">USSD message must be between <xliff:g id="min_len" >%d</xliff:g> and <xliff:g id="max_len" >%d</xliff:g> characters. Please try again.</string>
+    <string name="enter_input">USSD message must be between <xliff:g id="min_len" >%1$d</xliff:g> and <xliff:g id="max_len" >%2$d</xliff:g> characters. Please try again.</string>
 
     <!-- Label for "Manage conference call" panel [CHAR LIMIT=40] -->
     <string name="manageConferenceLabel">Manage conference call</string>
@@ -382,6 +382,8 @@
     <string name="already_auto">Already in automatic selection.</string>
     <!-- Available networks screen, name of switch button for whether to select network automatically -->
     <string name="select_automatically">Automatically select network</string>
+    <!-- Available networks screen, summary when button disallowed due to permanent automatic mode -->
+    <string name="manual_mode_disallowed_summary">Unavailable when connected to %1$s</string>
     <!-- Available networks screen, name of button when user wants to select network manually  -->
     <string name="network_select_title">Network</string>
     <string name="register_automatically">Automatic registration\u2026</string>
@@ -517,9 +519,27 @@
     <!-- Mobile network 4G title [CHAR LIMIT=30] -->
     <string name="enhanced_4g_lte_mode_title">Enhanced 4G LTE Mode</string>
     <!-- Carrier variant of Enhaced 4G LTE Mode title.  [CHAR LIMIT=50] -->
-    <string name="enhanced_4g_lte_mode_title_variant">Advanced Calling</string>
+    <string-array name="enhanced_4g_lte_mode_title_variant">
+        <!-- 0: Default -->
+        <item>@string/enhanced_4g_lte_mode_title</item>
+        <!-- 1: Verizon -->
+        <item>Advanced Calling</item>
+        <!-- 2: O2 UK -->
+        <item>4G Calling</item>
+    </string-array>
+
     <!-- Mobile network 4G summary [CHAR LIMIT=80] -->
     <string name="enhanced_4g_lte_mode_summary">Use LTE services to improve voice and other communications (recommended)</string>
+    <string name="enhanced_4g_lte_mode_summary_o2">Use 4G services to improve voice and other communications (recommended)</string>
+    <!-- Carrier variant of Enhaced 4G LTE Mode summary.  [CHAR LIMIT=80] -->
+    <string-array name="enhanced_4g_lte_mode_sumary_variant">
+        <!-- 0: Default -->
+        <item>@string/enhanced_4g_lte_mode_summary</item>
+        <!-- 1: Verizon -->
+        <item>@string/enhanced_4g_lte_mode_summary</item>
+        <!-- 2: O2 UK -->
+        <item>@string/enhanced_4g_lte_mode_summary_o2</item>
+    </string-array>
 
     <!-- Mobile network settings screen, data enabling checkbox name -->
     <string name="data_enabled">Data enabled</string>
@@ -1074,8 +1094,8 @@
     <!-- Label for the "No service" notification item, when expanded. -->
     <string name="notification_network_selection_title">No service</string>
     <!-- Label for the expanded "No service" notification item, including the
-         operator name set by user -->
-    <string name="notification_network_selection_text">Selected network (<xliff:g id="operator_name">%s</xliff:g>) unavailable</string>
+         operator name set by user. No space after "network", appended in nonempty value. -->
+    <string name="notification_network_selection_text">Selected network<xliff:g id="operator_name">%s</xliff:g> unavailable</string>
 
     <!-- In-call screen: call failure message displayed in an error dialog. [CHAR_LIMIT=NONE] -->
     <string name="incall_error_power_off" product="watch">Turn on mobile network, turn off airplane mode or turn off battery saver mode to make a call.</string>
@@ -1109,8 +1129,10 @@
     <string name="incall_error_supp_service_separate">Can\'t separate call.</string>
     <!-- In-call screen: message displayed in an error dialog -->
     <string name="incall_error_supp_service_transfer">Can\'t transfer.</string>
-    <!-- In-call screen: message displayed in an error dialog -->
-    <string name="incall_error_supp_service_conference">Unable to conference calls.</string>
+    <!-- In-call screen: message displayed in an error dialog.  Shown when the user attempts to
+        merge calls to form a conference call, but there was an error which prevented this from
+        occurring. -->
+    <string name="incall_error_supp_service_conference">Unable to merge calls.</string>
     <!-- In-call screen: message displayed in an error dialog -->
     <string name="incall_error_supp_service_reject">Can\'t reject call.</string>
     <!-- In-call screen: message displayed in an error dialog -->
@@ -1122,8 +1144,22 @@
     <!-- In-call screen: call failure message displayed in an error dialog when the user is connected to a wireless network, but wifi calling is turned off. [CHAR_LIMIT=NONE] -->
     <string name="incall_error_promote_wfc">Enable Wi-Fi calling to make a call.</string>
 
+    <!-- Hint for the button of emergency information -->
+    <string name="emergency_information_hint">Emergency information</string>
+    <!-- Hint for the owner of emergency information -->
+    <string name="emergency_information_owner_hint">Owner</string>
+    <!-- Hint for confirm the emergency information -->
+    <string name="emergency_information_confirm_hint">Tap again to view info</string>
     <!-- Dialog title for the "radio enable" UI for emergency calls -->
     <string name="emergency_enable_radio_dialog_title">Emergency call</string>
+    <!-- Title for the emergency dialpad UI -->
+    <string name="emergency_dialpad_title">Emergency calls only</string>
+    <!-- Emergency dialer: Title of single emergency shortcut button -->
+    <string name="single_emergency_number_title">Emergency number</string>
+    <!-- Emergency dialer: Title of numerous emergency shortcut buttons -->
+    <string name="numerous_emergency_numbers_title">Emergency numbers</string>
+    <!-- Emergency dialer: Hint of selected emergency shortcut button -->
+    <string name="emergency_call_shortcut_hint">Tap again to call <xliff:g id="emergency_number">%s</xliff:g></string>
     <!-- Status message for the "radio enable" UI for emergency calls -->
     <string name="emergency_enable_radio_dialog_message">Turning on radio\u2026</string>
     <!-- Status message for the "radio enable" UI for emergency calls -->
@@ -1139,6 +1175,19 @@
     <!-- Message displayed over top of the emergency dialer dialpad indicating to the user that
          emergency calling is not currently available. -->
     <string name="dial_emergency_calling_not_available">Emergency calling not available</string>
+
+    <!-- Text for description of police calling type -->
+    <string name="police_type_description">Police</string>
+    <!-- Text for description of ambulance calling type -->
+    <string name="ambulance_type_description">Ambulance</string>
+    <!-- Text for description of fire calling type -->
+    <string name="fire_type_description">Fire</string>
+
+    <!-- Format for concatenating multiple emergency type descriptions. The separator may differ in
+         different locales, for example arabic comma "،" is used in some countries. Some languages
+         may use full-width separator without leading or trailing spaces, eg. Ideographic comma "、"
+         in Chinese and Japanese. -->
+    <string name="description_concat_format">%1$s, %2$s</string>
 
     <!-- Displayed in the text entry box in the dialer when in landscape mode to guide the user
          to dial using the physical keyboard -->
@@ -1366,6 +1415,20 @@
          [CHAR LIMIT=NONE]
     -->
     <string name="description_dial_button">dial</string>
+
+    <!-- String describing the Dialpad ImageButton
+
+         Used by AccessibilityService to announce the purpose of the button.
+         [CHAR LIMIT=NONE]
+    -->
+    <string name="description_dialpad_button">show dialpad</string>
+
+    <!-- Pane title of the Emergency Dialpad
+
+     Used by AccessibilityService to announce the purpose of the pane of emergency dialpad.
+     [CHAR LIMIT=NONE]
+    -->
+    <string name="pane_title_emergency_dialpad">Emergency Dialpad</string>
 
     <!-- Visual voicemail on/off title [CHAR LIMIT=40] -->
     <string name="voicemail_visual_voicemail_switch_title">Visual Voicemail</string>
@@ -1751,4 +1814,21 @@
     <!-- Message displayed to the user to indicate that a held call has been released /
          disconnected. -->
     <string name="supp_service_held_call_released">Held call has been released.</string>
+    <!-- In-call screen: error message shown when the user attempts to place a call, but the device
+         is currently in the process of being provisioned for service.  Provisioning is the process
+         by which a device confirms which services are available to the user by contacting the
+         mobile service provider. -->
+    <string name="callFailed_otasp_provisioning_in_process">Cannot place a call as the device is currently being provisioned.</string>
+    <!-- In-call screen: error message shown when the user has attempted to place a new outgoing
+         call, but there is already a call in dialing state. -->
+    <string name="callFailed_already_dialing">Cannot place a call as another outgoing call is already dialing.</string>
+    <!-- In-call screen: error message shown when the user has attempted to place a new outgoing
+         call while there is already a call in ringing state. -->
+    <string name="callFailed_already_ringing">Cannot place a call as there is an unanswered incoming call.  Answer or reject the incoming call prior to placing a new call.</string>
+    <!-- In-call screen: error message shown when the user attempts to place a call, but calling has
+         been disabled using a debug property. -->
+    <string name="callFailed_calling_disabled">Cannot place a call as calling has been disabled using the ro.telephony.disable-call system property.</string>
+    <!-- In-call screen: error message shown when the user attempts to place a call, but calling has
+         been disabled using a debug property. -->
+    <string name="callFailed_too_many_calls">Cannot place a call a there are already two calls in progress.  Disconnect one of the calls or merge them into a conference prior to placing a new call.</string>
 </resources>

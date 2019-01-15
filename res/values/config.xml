@@ -137,7 +137,7 @@
     <!-- DEPRECATED: Use CarrierConfigManager#KEY_PREFER_2G_BOOL -->
     <bool name="config_prefer_2g" translatable="false">true</bool>
     <!-- Show enabled lte option for lte device -->
-    <bool name="config_enabled_lte" translatable="false">false</bool>
+    <bool name="config_enabled_lte" translatable="false">true</bool>
     <!-- Show enabled tdscdma option for device -->
     <bool name="config_support_tdscdma" translatable="false">false</bool>
     <!-- Show enabled tdscdma option for device when connect roaming network -->
@@ -235,6 +235,9 @@
     <!-- Flag indicating whether the device supports RTT (real-time text) -->
     <bool name="config_support_rtt">false</bool>
 
+    <!-- The package name for the platform number verification supplier app. -->
+    <string name="platform_number_verification_package" translatable="false"></string>
+
     <!-- Flag indicating whether a system app can use video calling fallback if carrier video
          calling is not available. -->
     <bool name="config_support_video_calling_fallback">true</bool>
@@ -247,4 +250,10 @@
          When this is true, the Telephony stack is able to add additional audio to the outgoing
          audio stream which the remote party will be able to hear. -->
     <bool name="config_support_telephony_audio_device">false</bool>
+
+    <!-- Intent action to launch target emergency app. -->
+    <string name="config_emergency_app_intent" translatable="false"></string>
+
+    <!-- Flag indicating whether shortcut view of promoted emergency numbers should be enabled. -->
+    <bool name="config_emergency_shortcut_view_enabled">false</bool>
 </resources>
