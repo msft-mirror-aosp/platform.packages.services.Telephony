@@ -57,10 +57,17 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             if (DBG) Log.d(LOG_TAG, "PhoneStateListener.onCallStateChanged: state=" + state);
             Preference pref = getPreferenceScreen().findPreference(BUTTON_TTY_KEY);
             if (pref != null) {
-                final boolean isVolteTtySupported = ImsManager.isVolteEnabledByPlatform(mContext)
-                        && getVolteTtySupported();
-                pref.setEnabled((isVolteTtySupported && !isVideoCallOrConferenceInProgress()) ||
-                        (state == TelephonyManager.CALL_STATE_IDLE));
+                // Use TelephonyManager#getCallState instead of 'state' parameter because
+                // needs to check the current state of all phone calls to
+                // support multi sim configuration.
+                TelephonyManager telephonyManager =
+                        (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
+                final boolean isVolteTtySupported = getVolteTtySupported();
+                final boolean isVolteCurrentlyEnabled =
+                        ImsManager.isVolteEnabledByPlatform(mContext);
+                pref.setEnabled((isVolteTtySupported && isVolteCurrentlyEnabled &&
+                        !isVideoCallOrConferenceInProgress()) ||
+                        (telephonyManager.getCallState() == TelephonyManager.CALL_STATE_IDLE));
             }
         }
     };
@@ -102,7 +109,8 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             mButtonHac = null;
         }
 
-        if (PhoneGlobals.getInstance().phoneMgr.isRttSupported()) {
+        if (PhoneGlobals.getInstance().phoneMgr
+                .isRttSupported(SubscriptionManager.getDefaultVoiceSubscriptionId())) {
             // TODO: this is going to be a on/off switch for now. Ask UX about how to integrate
             // this settings with TTY
             boolean rttOn = Settings.Secure.getInt(

@@ -169,6 +169,11 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.SERVER_ERROR:
             case android.telephony.DisconnectCause.SERVER_UNREACHABLE:
             case android.telephony.DisconnectCause.TIMED_OUT:
+            case android.telephony.DisconnectCause.ALREADY_DIALING:
+            case android.telephony.DisconnectCause.CANT_CALL_WHILE_RINGING:
+            case android.telephony.DisconnectCause.CALLING_DISABLED:
+            case android.telephony.DisconnectCause.TOO_MANY_ONGOING_CALLS:
+            case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
             case android.telephony.DisconnectCause.UNOBTAINABLE_NUMBER:
             case android.telephony.DisconnectCause.VOICEMAIL_NUMBER_MISSING:
             case android.telephony.DisconnectCause.DIAL_MODIFIED_TO_USSD:
@@ -187,6 +192,7 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.IMEI_NOT_ACCEPTED:
             case android.telephony.DisconnectCause.WIFI_LOST:
             case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
+            case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
                 return DisconnectCause.ERROR;
 
             case android.telephony.DisconnectCause.DIALED_MMI:
@@ -305,6 +311,10 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_unobtainable_number;
                 break;
 
+            case android.telephony.DisconnectCause.VOICEMAIL_NUMBER_MISSING:
+                resourceId = R.string.incall_error_missing_voicemail_number;
+                break;
+
             case android.telephony.DisconnectCause.CALL_PULLED:
                 resourceId = R.string.callEnded_pulled;
                 break;
@@ -320,7 +330,24 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.DATA_LIMIT_REACHED:
                 resourceId = R.string.callFailed_data_limit_reached;
                 break;
-
+            case android.telephony.DisconnectCause.ALREADY_DIALING:
+                resourceId = R.string.callFailed_already_dialing;
+                break;
+            case android.telephony.DisconnectCause.CANT_CALL_WHILE_RINGING:
+                resourceId = R.string.callFailed_already_ringing;
+                break;
+            case android.telephony.DisconnectCause.CALLING_DISABLED:
+                resourceId = R.string.callFailed_calling_disabled;
+                break;
+            case android.telephony.DisconnectCause.TOO_MANY_ONGOING_CALLS:
+                resourceId = R.string.callFailed_too_many_calls;
+                break;
+            case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
+                resourceId = R.string.incall_error_power_off;
+                break;
+            case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
+                resourceId = R.string.callFailed_otasp_provisioning_in_process;
+                break;
             default:
                 break;
         }
@@ -643,8 +670,6 @@ public class DisconnectCauseUtil {
                 break;
 
             case android.telephony.DisconnectCause.VOICEMAIL_NUMBER_MISSING:
-                // TODO: Need to bring up the "Missing Voicemail Number" dialog, which
-                // will ultimately take us to the Call Settings.
                 resourceId = R.string.incall_error_missing_voicemail_number;
                 break;
 
@@ -684,7 +709,24 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.WIFI_LOST:
                 resourceId = R.string.callFailed_wifi_lost;
                 break;
-
+            case android.telephony.DisconnectCause.ALREADY_DIALING:
+                resourceId = R.string.callFailed_already_dialing;
+                break;
+            case android.telephony.DisconnectCause.CANT_CALL_WHILE_RINGING:
+                resourceId = R.string.callFailed_already_ringing;
+                break;
+            case android.telephony.DisconnectCause.CALLING_DISABLED:
+                resourceId = R.string.callFailed_calling_disabled;
+                break;
+            case android.telephony.DisconnectCause.TOO_MANY_ONGOING_CALLS:
+                resourceId = R.string.callFailed_too_many_calls;
+                break;
+            case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
+                resourceId = R.string.incall_error_power_off;
+                break;
+            case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
+                resourceId = R.string.callFailed_otasp_provisioning_in_process;
+                break;
             default:
                 break;
         }
