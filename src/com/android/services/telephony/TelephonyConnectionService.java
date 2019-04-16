@@ -239,12 +239,12 @@ public class TelephonyConnectionService extends ConnectionService {
 
         @Override
         public boolean isCurrentEmergencyNumber(String number) {
-            return mTelephonyManager.isCurrentEmergencyNumber(number);
+            return mTelephonyManager.isEmergencyNumber(number);
         }
 
         @Override
         public Map<Integer, List<EmergencyNumber>> getCurrentEmergencyNumberList() {
-            return mTelephonyManager.getCurrentEmergencyNumberList();
+            return mTelephonyManager.getEmergencyNumberList();
         }
     }
 
@@ -518,6 +518,7 @@ public class TelephonyConnectionService extends ConnectionService {
     }
 
     private boolean isEmergencyNumberTestNumber(String number) {
+        number = PhoneNumberUtils.stripSeparators(number);
         Map<Integer, List<EmergencyNumber>> list =
                 mTelephonyManagerProxy.getCurrentEmergencyNumberList();
         // Do not worry about which subscription the test emergency call is on yet, only detect that

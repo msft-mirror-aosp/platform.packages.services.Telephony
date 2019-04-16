@@ -43,8 +43,8 @@ import android.os.UserManager;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
+import android.telephony.AnomalyReporter;
 import android.telephony.CarrierConfigManager;
-import android.telephony.DebugEventReporter;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -226,7 +226,8 @@ public class PhoneGlobals extends ContextWrapper {
                     // Marks the event where the SIM goes into ready state.
                     // Right now, this is only used for the PUK-unlocking
                     // process.
-                    if (msg.obj.equals(IccCardConstants.INTENT_VALUE_ICC_READY)) {
+                    if (msg.obj.equals(IccCardConstants.INTENT_VALUE_ICC_READY)
+                            || msg.obj.equals(IccCardConstants.INTENT_VALUE_ICC_LOADED)) {
                         // when the right event is triggered and there
                         // are UI objects in the foreground, we close
                         // them to display the lock panel.
@@ -284,8 +285,8 @@ public class PhoneGlobals extends ContextWrapper {
         //   getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_VOICE_CALLS);
 
         if (mCM == null) {
-            // Initialize DebugEventReporter early so that it can be used
-            DebugEventReporter.initialize(this);
+            // Initialize AnomalyReporter early so that it can be used
+            AnomalyReporter.initialize(this);
 
             // Inject telephony component factory if configured using other jars.
             XmlResourceParser parser = getResources().getXml(R.xml.telephony_injection);
@@ -598,14 +599,22 @@ public class PhoneGlobals extends ContextWrapper {
                     airplaneMode = AIRPLANE_ON;
                 }
                 handleAirplaneModeChange(context, airplaneMode);
-            } else if ((action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) &&
-                    (mPUKEntryActivity != null)) {
-                // if an attempt to un-PUK-lock the device was made, while we're
-                // receiving this state change notification, notify the handler.
-                // NOTE: This is ONLY triggered if an attempt to un-PUK-lock has
-                // been attempted.
-                mHandler.sendMessage(mHandler.obtainMessage(EVENT_SIM_STATE_CHANGED,
-                        intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE)));
+            } else if (action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) {
+                // re-register as it may be a new IccCard
+                int phoneId = intent.getIntExtra(PhoneConstants.PHONE_KEY,
+                        SubscriptionManager.INVALID_PHONE_INDEX);
+                if (SubscriptionManager.isValidPhoneId(phoneId)) {
+                    PhoneUtils.unregisterIccStatus(mHandler, phoneId);
+                    PhoneUtils.registerIccStatus(mHandler, EVENT_SIM_NETWORK_LOCKED, phoneId);
+                }
+                if (mPUKEntryActivity != null) {
+                    // if an attempt to un-PUK-lock the device was made, while we're
+                    // receiving this state change notification, notify the handler.
+                    // NOTE: This is ONLY triggered if an attempt to un-PUK-lock has
+                    // been attempted.
+                    mHandler.sendMessage(mHandler.obtainMessage(EVENT_SIM_STATE_CHANGED,
+                            intent.getStringExtra(IccCardConstants.INTENT_KEY_ICC_STATE)));
+                }
             } else if (action.equals(TelephonyIntents.ACTION_RADIO_TECHNOLOGY_CHANGED)) {
                 String newPhone = intent.getStringExtra(PhoneConstants.PHONE_NAME_KEY);
                 Log.d(LOG_TAG, "Radio technology switched. Now " + newPhone + " is active.");

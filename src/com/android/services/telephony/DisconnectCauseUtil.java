@@ -193,6 +193,7 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.WIFI_LOST:
             case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
+            case android.telephony.DisconnectCause.MEDIA_TIMEOUT:
                 return DisconnectCause.ERROR;
 
             case android.telephony.DisconnectCause.DIALED_MMI:
@@ -247,6 +248,14 @@ public class DisconnectCauseUtil {
         switch (telephonyDisconnectCause) {
             case android.telephony.DisconnectCause.BUSY:
                 resourceId = R.string.callFailed_userBusy;
+                break;
+
+            case android.telephony.DisconnectCause.CDMA_REORDER:
+                resourceId = R.string.callFailed_NetworkBusy;
+                break;
+
+            case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
+                resourceId = R.string.callFailed_NetworkCongested;
                 break;
 
             case android.telephony.DisconnectCause.CONGESTION:
@@ -555,6 +564,14 @@ public class DisconnectCauseUtil {
 
             case android.telephony.DisconnectCause.CDMA_ALREADY_ACTIVATED:
                 resourceId = R.string.callFailed_cdma_activation;
+                break;
+
+            case android.telephony.DisconnectCause.CDMA_REORDER:
+                resourceId = R.string.callFailed_NetworkBusy;
+                break;
+
+            case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
+                resourceId = R.string.callFailed_NetworkCongested;
                 break;
 
             case android.telephony.DisconnectCause.FDN_BLOCKED:
