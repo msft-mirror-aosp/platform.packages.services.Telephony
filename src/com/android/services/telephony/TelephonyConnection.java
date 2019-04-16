@@ -46,7 +46,6 @@ import com.android.ims.ImsCall;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallFailCause;
 import com.android.internal.telephony.CallStateException;
-import com.android.internal.telephony.Call.HoldingRequestState;
 import com.android.internal.telephony.Connection.Capability;
 import com.android.internal.telephony.Connection.PostDialListener;
 import com.android.internal.telephony.Phone;
@@ -933,12 +932,6 @@ abstract class TelephonyConnection extends Connection implements Holdable {
             try {
                 Phone phone = mOriginalConnection.getCall().getPhone();
 
-                // New behavior for IMS -- don't use the clunky switchHoldingAndActive logic.
-                if (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS) {
-                    ImsPhone imsPhone = (ImsPhone) phone;
-                    imsPhone.holdActiveCall();
-                    return;
-                }
                 Call ringingCall = phone.getRingingCall();
 
                 // Although the method says switchHoldingAndActive, it eventually calls a RIL method
@@ -952,8 +945,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 // could "fake" hold by silencing the audio and microphone streams for this call
                 // instead of actually putting it on hold.
                 if (ringingCall.getState() != Call.State.WAITING) {
+                    // New behavior for IMS -- don't use the clunky switchHoldingAndActive logic.
+                    if (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS) {
+                        ImsPhone imsPhone = (ImsPhone) phone;
+                        imsPhone.holdActiveCall();
+                        return;
+                    }
                     phone.switchHoldingAndActive();
-                    mOriginalConnection.getCall().updateHoldingRequestState(HoldingRequestState.STARTED);
                 }
 
                 // TODO: Cdma calls are slightly different.
@@ -2109,8 +2107,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
             setStatusHints(new StatusHints(
                     context.getString(labelId),
                     Icon.createWithResource(
-                            context.getResources(),
-                            R.drawable.ic_signal_wifi_4_bar_24dp),
+                            context, R.drawable.ic_signal_wifi_4_bar_24dp),
                     null /* extras */));
         } else {
             setStatusHints(null);

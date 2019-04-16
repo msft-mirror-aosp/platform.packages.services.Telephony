@@ -87,11 +87,12 @@
     <protected-broadcast android:name= "android.telephony.action.SIM_APPLICATION_STATE_CHANGED" />
     <protected-broadcast android:name= "android.telephony.action.SIM_SLOT_STATUS_CHANGED" />
     <protected-broadcast android:name= "android.telephony.action.SUBSCRIPTION_CARRIER_IDENTITY_CHANGED" />
-    <protected-broadcast android:name= "android.telephony.action.SUBSCRIPTION_PRECISE_CARRIER_IDENTITY_CHANGED" />
+    <protected-broadcast android:name= "android.telephony.action.SUBSCRIPTION_SPECIFIC_CARRIER_IDENTITY_CHANGED" />
     <protected-broadcast android:name= "android.telephony.action.NETWORK_COUNTRY_CHANGED" />
+    <protected-broadcast android:name= "android.telephony.action.PRIMARY_SUBSCRIPTION_LIST_CHANGED" />
 
     <!-- For Vendor Debugging in Telephony -->
-    <protected-broadcast android:name="android.telephony.debug.action.DEBUG_EVENT" />
+    <protected-broadcast android:name="android.telephony.action.ANOMALY_REPORTED" />
 
     <uses-permission android:name="android.permission.BROADCAST_STICKY" />
     <uses-permission android:name="android.permission.CALL_PHONE" />
@@ -119,6 +120,7 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
     <uses-permission android:name="android.permission.STATUS_BAR" />
+    <uses-permission android:name="android.permission.STATUS_BAR_SERVICE" />
     <uses-permission android:name="android.permission.RECEIVE_SMS" />
     <uses-permission android:name="android.permission.READ_SMS" />
     <uses-permission android:name="android.permission.WRITE_SMS" />
@@ -432,7 +434,8 @@
 
         <!-- Handler for EuiccManager's public-facing intents. -->
         <activity android:name=".euicc.EuiccUiDispatcherActivity"
-            android:theme="@android:style/Theme.NoDisplay">
+            android:theme="@android:style/Theme.NoDisplay"
+            android:permission="android.permission.MODIFY_PHONE_STATE">
             <!-- Max out priority to ensure nobody else will handle these intents. -->
             <intent-filter android:priority="1000">
                 <action android:name=
@@ -454,6 +457,24 @@
             <intent-filter android:priority="1000">
                 <action android:name=
                             "android.telephony.euicc.action.RESOLVE_ERROR" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!--
+            Handler for EuiccManager's privileged action intents. These are locked down so that only
+            privileged processes can start them.
+        -->
+        <activity android:name=".euicc.EuiccPrivilegedActionUiDispatcherActivity"
+                  android:permission="android.permission.CALL_PRIVILEGED">
+            <!-- Max out priority to ensure nobody else will handle these intents. -->
+            <intent-filter android:priority="1000">
+                <action android:name=
+                            "android.telephony.euicc.action.TOGGLE_SUBSCRIPTION_PRIVILEGED" />
+                <action android:name=
+                            "android.telephony.euicc.action.DELETE_SUBSCRIPTION_PRIVILEGED" />
+                <action android:name=
+                            "android.telephony.euicc.action.RENAME_SUBSCRIPTION_PRIVILEGED" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
@@ -534,6 +555,7 @@
         <activity android:name="com.android.phone.settings.VoicemailSettingsActivity"
             android:label="@string/voicemail"
             android:configChanges="orientation|screenSize|keyboardHidden|screenLayout"
+            android:screenOrientation="portrait"
             android:theme="@style/DialerSettingsLight">
             <intent-filter >
                 <!-- DO NOT RENAME. There are existing apps which use this string. -->

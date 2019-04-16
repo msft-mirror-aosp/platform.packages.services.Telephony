@@ -21,6 +21,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
@@ -115,7 +116,10 @@ public class TelecomAccountRegistry {
             }
 
             try {
-                mMmTelManager = ImsMmTelManager.createForSubscriptionId(getSubId());
+                if (mPhone.getContext().getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_TELEPHONY_IMS)) {
+                    mMmTelManager = ImsMmTelManager.createForSubscriptionId(getSubId());
+                }
             } catch (IllegalArgumentException e) {
                 Log.i(this, "Not registering MmTel capabilities listener because the subid '"
                         + getSubId() + "' is invalid: " + e.getMessage());
@@ -267,7 +271,14 @@ public class TelecomAccountRegistry {
                 capabilities |= PhoneAccount.CAPABILITY_PLACE_EMERGENCY_CALLS;
             }
 
-            mIsVideoCapable = mPhone.isVideoEnabled();
+            if (isRttCurrentlySupported()) {
+                capabilities |= PhoneAccount.CAPABILITY_RTT;
+                mIsRttCapable = true;
+            } else {
+                mIsRttCapable = false;
+            }
+
+            mIsVideoCapable = mPhone.isVideoEnabled() && !mIsRttCapable;
             boolean isVideoEnabledByPlatform = ImsManager.getInstance(mPhone.getContext(),
                     mPhone.getPhoneId()).isVtEnabledByPlatform();
 
@@ -315,14 +326,6 @@ public class TelecomAccountRegistry {
             if (isTelephonyAudioDeviceSupported && !isEmergency
                     && isCarrierUseCallRecordingTone()) {
                 extras.putBoolean(PhoneAccount.EXTRA_PLAY_CALL_RECORDING_TONE, true);
-            }
-
-            if (PhoneGlobals.getInstance().phoneMgr.isRttEnabled(subId)
-                    && isImsVoiceAvailable()) {
-                capabilities |= PhoneAccount.CAPABILITY_RTT;
-                mIsRttCapable = true;
-            } else {
-                mIsRttCapable = false;
             }
 
             extras.putBoolean(PhoneAccount.EXTRA_SUPPORTS_VIDEO_CALLING_FALLBACK,
@@ -586,17 +589,28 @@ public class TelecomAccountRegistry {
         }
 
         public void updateRttCapability() {
-            boolean hasVoiceAvailability = isImsVoiceAvailable();
-
-            boolean isRttSupported = PhoneGlobals.getInstance().phoneMgr
-                    .isRttEnabled(mPhone.getSubId());
-
-            boolean isRttEnabled = hasVoiceAvailability && isRttSupported;
+            boolean isRttEnabled = isRttCurrentlySupported();
             if (isRttEnabled != mIsRttCapable) {
                 Log.i(this, "updateRttCapability - changed, new value: " + isRttEnabled);
                 mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
             }
         }
+
+        /**
+         * Determines whether RTT is supported given the current state of the
+         * device.
+         */
+        private boolean isRttCurrentlySupported() {
+            boolean hasVoiceAvailability = isImsVoiceAvailable();
+
+            boolean isRttSupported = PhoneGlobals.getInstance().phoneMgr
+                    .isRttEnabled(mPhone.getSubId());
+
+            boolean isRoaming = mTelephonyManager.isNetworkRoaming(mPhone.getSubId());
+
+            return hasVoiceAvailability && isRttSupported && !isRoaming;
+        }
+
         /**
          * Indicates whether this account supports pausing video calls.
          * @return {@code true} if the account supports pausing video calls, {@code false}
@@ -719,6 +733,12 @@ public class TelecomAccountRegistry {
             if (newState == ServiceState.STATE_IN_SERVICE && mServiceState != newState) {
                 tearDownAccounts();
                 setupAccounts();
+            } else {
+                synchronized (mAccountsLock) {
+                    for (AccountEntry account : mAccounts) {
+                        account.updateRttCapability();
+                    }
+                }
             }
             mServiceState = newState;
         }
@@ -1015,10 +1035,16 @@ public class TelecomAccountRegistry {
                     Log.d(this, "Phone with subscription id %d", subscriptionId);
                     // setupAccounts can be called multiple times during service changes. Don't add an
                     // account if the Icc has not been set yet.
-                    if (subscriptionId >= 0 && phone.getFullIccSerialNumber() != null) {
-                        mAccounts.add(new AccountEntry(phone, false /* emergency */,
-                                false /* isDummy */));
-                    }
+                    if (!SubscriptionManager.isValidSubscriptionId(subscriptionId)
+                            || phone.getFullIccSerialNumber() == null) return;
+                    // Don't add account if it's opportunistic subscription, which is considered
+                    // data only for now.
+                    SubscriptionInfo info = SubscriptionManager.from(mContext)
+                            .getActiveSubscriptionInfo(subscriptionId);
+                    if (info == null || info.isOpportunistic()) return;
+
+                    mAccounts.add(new AccountEntry(phone, false /* emergency */,
+                            false /* isDummy */));
                 }
             }
 

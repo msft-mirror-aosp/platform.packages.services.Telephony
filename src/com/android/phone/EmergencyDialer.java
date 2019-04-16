@@ -111,13 +111,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         EmergencyInfoGroup.OnConfirmClickListener {
 
     private class MetricsWriter {
-        // Metrics constants indicating the entry type that user opened emergency dialer.
-        // This info is sent from system UI with EXTRA_ENTRY_TYPE. Please make them being
-        // in sync with those in com.android.systemui.util.EmergencyDialerConstants.
-        public static final int ENTRY_TYPE_UNKNOWN = 0;
-        public static final int ENTRY_TYPE_LOCKSCREEN_BUTTON = 1;
-        public static final int ENTRY_TYPE_POWER_MENU = 2;
-
         // Metrics constants indicating the UI that user made phone call.
         public static final int CALL_SOURCE_DIALPAD = 0;
         public static final int CALL_SOURCE_SHORTCUT = 1;
@@ -136,29 +129,27 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         private MetricsLogger mMetricsLogger = new MetricsLogger();
 
         public void writeMetricsForEnter() {
-            if (!mIsShortcutViewEnabled) {
+            if (!mShortcutViewConfig.isEnabled()) {
                 return;
             }
 
-            int entryType = getIntent().getIntExtra(EXTRA_ENTRY_TYPE, ENTRY_TYPE_UNKNOWN);
             KeyguardManager keyguard = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
             mMetricsLogger.write(new LogMaker(MetricsEvent.EMERGENCY_DIALER)
                     .setType(MetricsEvent.TYPE_OPEN)
-                    .setSubtype(entryType)
+                    .setSubtype(mEntryType)
                     .addTaggedData(MetricsEvent.FIELD_EMERGENCY_DIALER_IS_SCREEN_LOCKED,
                             keyguard.isKeyguardLocked() ? 1 : 0));
         }
 
         public void writeMetricsForExit() {
-            if (!mIsShortcutViewEnabled) {
+            if (!mShortcutViewConfig.isEnabled()) {
                 return;
             }
 
-            int entryType = getIntent().getIntExtra(EXTRA_ENTRY_TYPE, ENTRY_TYPE_UNKNOWN);
             long userStayDuration = SystemClock.elapsedRealtime() - mUserEnterTimeMillis;
             mMetricsLogger.write(new LogMaker(MetricsEvent.EMERGENCY_DIALER)
                     .setType(MetricsEvent.TYPE_CLOSE)
-                    .setSubtype(entryType)
+                    .setSubtype(mEntryType)
                     .addTaggedData(MetricsEvent.FIELD_EMERGENCY_DIALER_USER_ACTIONS, mUserActions)
                     .addTaggedData(
                             MetricsEvent.FIELD_EMERGENCY_DIALER_DURATION_MS, userStayDuration));
@@ -166,7 +157,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
         public void writeMetricsForMakingCall(int callSource, int phoneNumberType,
                 boolean hasShortcut) {
-            if (!mIsShortcutViewEnabled) {
+            if (!mShortcutViewConfig.isEnabled()) {
                 return;
             }
 
@@ -194,6 +185,13 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
      */
     public static final String EXTRA_ENTRY_TYPE =
             "com.android.phone.EmergencyDialer.extra.ENTRY_TYPE";
+
+    // Constants indicating the entry type that user opened emergency dialer.
+    // This info is sent from system UI with EXTRA_ENTRY_TYPE. Please make them being
+    // in sync with those in com.android.systemui.util.EmergencyDialerConstants.
+    public static final int ENTRY_TYPE_UNKNOWN = 0;
+    public static final int ENTRY_TYPE_LOCKSCREEN_BUTTON = 1;
+    public static final int ENTRY_TYPE_POWER_MENU = 2;
 
     // List of dialer button IDs.
     private static final int[] DIALER_KEYS = new int[]{
@@ -231,8 +229,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     private View mDelete;
     private View mEmergencyShortcutView;
     private View mDialpadView;
-
-    private ShortcutViewUtils.PhoneInfo mPhoneInfo;
 
     private List<EmergencyShortcutButton> mEmergencyShortcutButtonList;
     private EccShortcutAdapter mShortcutAdapter;
@@ -292,7 +288,8 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     private boolean mIsWfcEmergencyCallingWarningEnabled;
     private float mDefaultDigitsTextSize;
 
-    private boolean mIsShortcutViewEnabled;
+    private int mEntryType;
+    private ShortcutViewUtils.Config mShortcutViewConfig;
 
     private MetricsWriter mMetricsWriter;
     private SensorManager mSensorManager;
@@ -344,6 +341,9 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     protected void onCreate(Bundle icicle) {
         super.onCreate(icicle);
 
+        mEntryType = getIntent().getIntExtra(EXTRA_ENTRY_TYPE, ENTRY_TYPE_UNKNOWN);
+        Log.d(LOG_TAG, "Launched from " + entryTypeToString(mEntryType));
+
         mMetricsWriter = new MetricsWriter();
         mSensorManager = (SensorManager) getSystemService(Context.SENSOR_SERVICE);
         if (mSensorManager != null) {
@@ -359,20 +359,13 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         PersistableBundle carrierConfig =
                 configMgr.getConfigForSubId(SubscriptionManager.getDefaultVoiceSubscriptionId());
 
-        mIsShortcutViewEnabled = false;
-        mPhoneInfo = null;
-        if (canEnableShortcutView(carrierConfig)) {
-            mPhoneInfo = ShortcutViewUtils.pickPreferredPhone(this);
-            if (mPhoneInfo != null) {
-                mIsShortcutViewEnabled = true;
-            }
-        }
+        mShortcutViewConfig = new ShortcutViewUtils.Config(this, carrierConfig, mEntryType);
         Log.d(LOG_TAG, "Enable emergency dialer shortcut: "
-                + mIsShortcutViewEnabled);
+                + mShortcutViewConfig.isEnabled());
 
         mColorExtractor = new ColorExtractor(this);
 
-        if (mIsShortcutViewEnabled) {
+        if (mShortcutViewConfig.isEnabled()) {
             // Shortcut view doesn't support dark text theme.
             updateTheme(false);
         } else {
@@ -397,7 +390,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         ((WindowManager) getSystemService(Context.WINDOW_SERVICE))
                 .getDefaultDisplay().getSize(displaySize);
         mBackgroundGradient.setScreenSize(displaySize.x, displaySize.y);
-        mBackgroundGradient.setAlpha(mIsShortcutViewEnabled
+        mBackgroundGradient.setAlpha(mShortcutViewConfig.isEnabled()
                 ? BLACK_BACKGROUND_GRADIENT_ALPHA : BACKGROUND_GRADIENT_ALPHA);
         getWindow().setBackgroundDrawable(mBackgroundGradient);
 
@@ -461,7 +454,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
         mEmergencyInfoGroup = (EmergencyInfoGroup) findViewById(R.id.emergency_info_button);
 
-        if (mIsShortcutViewEnabled) {
+        if (mShortcutViewConfig.isEnabled()) {
             setupEmergencyShortcutsView();
         }
     }
@@ -527,7 +520,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     public void onBackPressed() {
         // If shortcut view is enabled and Dialpad view is visible, pressing the back key will
         // back to display EmergencyShortcutView view. Otherwise, it would finish the activity.
-        if (mIsShortcutViewEnabled && mDialpadView != null
+        if (mShortcutViewConfig.isEnabled() && mDialpadView != null
                 && mDialpadView.getVisibility() == View.VISIBLE) {
             switchView(mEmergencyShortcutView, mDialpadView, true);
             return;
@@ -604,7 +597,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         if (!TextUtils.isEmpty(phoneNumber)) {
             if (DBG) Log.d(LOG_TAG, "dial emergency number: " + Rlog.pii(LOG_TAG, phoneNumber));
             placeCall(phoneNumber, ParcelableCallAnalytics.CALL_SOURCE_EMERGENCY_SHORTCUT,
-                    mPhoneInfo);
+                    mShortcutViewConfig.getPhoneInfo());
         } else {
             Log.d(LOG_TAG, "emergency number is empty");
         }
@@ -745,7 +738,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         mUserActions = MetricsWriter.USER_ACTION_NONE;
         mMetricsWriter.writeMetricsForEnter();
 
-        if (mIsShortcutViewEnabled) {
+        if (mShortcutViewConfig.isEnabled()) {
             // Shortcut view doesn't support dark text theme.
             mBackgroundGradient.setColors(Color.BLACK, Color.BLACK, false);
             updateTheme(false);
@@ -758,8 +751,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
             updateTheme(lockScreenColors.supportsDarkText());
         }
 
-        if (mIsShortcutViewEnabled) {
-            mPhoneInfo = ShortcutViewUtils.pickPreferredPhone(this);
+        if (mShortcutViewConfig.isEnabled()) {
             updateLocationAndEccInfo();
         }
     }
@@ -809,15 +801,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         mColorExtractor.removeOnColorsChangedListener(this);
     }
 
-    private boolean canEnableShortcutView(PersistableBundle carrierConfig) {
-        if (!carrierConfig.getBoolean(
-                CarrierConfigManager.KEY_SUPPORT_EMERGENCY_DIALER_SHORTCUT_BOOL)) {
-            Log.d(LOG_TAG, "Disables shortcut view by carrier requirement");
-            return false;
-        }
-        return true;
-    }
-
     /**
      * Sets theme based on gradient colors
      *
@@ -861,17 +844,14 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         // nothing and just returns input number.
         mLastNumber = PhoneNumberUtils.convertToEmergencyNumber(this, mLastNumber);
 
-        boolean isEmergencyNumber = false;
+        boolean isEmergencyNumber;
         ShortcutViewUtils.PhoneInfo phoneToMakeCall = null;
-        if (mPhoneInfo != null) {
-            isEmergencyNumber = mPhoneInfo.hasPromotedEmergencyNumber(mLastNumber);
-            if (isEmergencyNumber) {
-                phoneToMakeCall = mPhoneInfo;
-            }
-        }
-        if (!isEmergencyNumber) {
+        if (mShortcutViewConfig.hasPromotedEmergencyNumber(mLastNumber)) {
+            isEmergencyNumber = true;
+            phoneToMakeCall = mShortcutViewConfig.getPhoneInfo();
+        } else {
             TelephonyManager tm = getSystemService(TelephonyManager.class);
-            isEmergencyNumber = tm.isCurrentEmergencyNumber(mLastNumber);
+            isEmergencyNumber = tm.isEmergencyNumber(mLastNumber);
         }
 
         if (isEmergencyNumber) {
@@ -903,8 +883,18 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     }
 
     private void placeCall(String number, int callSource, ShortcutViewUtils.PhoneInfo phone) {
+        Log.d(LOG_TAG, "Place emergency call from " + callSourceToString(callSource)
+                + ", entry = " + entryTypeToString(mEntryType));
+
         Bundle extras = new Bundle();
         extras.putInt(TelecomManager.EXTRA_CALL_SOURCE, callSource);
+        /**
+         * This is used for Telecom and Telephony to tell modem user's intent is emergency call,
+         * when the dialed number is ambiguous and identified as both emergency number and any
+         * other non-emergency number; e.g. in some situation, 611 could be both an emergency
+         * number in a country and a non-emergency number of a carrier's customer service hotline.
+         */
+        extras.putBoolean(TelecomManager.EXTRA_IS_USER_INTENT_EMERGENCY_CALL, true);
 
         if (phone != null && phone.getPhoneAccountHandle() != null) {
             // Requests to dial through the specified phone.
@@ -1121,13 +1111,6 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
 
         mEmergencyInfoGroup.setOnConfirmClickListener(this);
 
-        // EmergencyActionGroup is replaced by EmergencyInfoGroup.
-        mEmergencyActionGroup.setVisibility(View.GONE);
-
-        // Setup dialpad title.
-        final View emergencyDialpadTitle = findViewById(R.id.emergency_dialpad_title_container);
-        emergencyDialpadTitle.setVisibility(View.VISIBLE);
-
         mEmergencyShortcutButtonList = new ArrayList<>();
         setupEmergencyCallShortcutButton();
 
@@ -1139,7 +1122,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
     private void setLocationInfo() {
         final View locationInfo = findViewById(R.id.location_info);
 
-        String countryIso = mPhoneInfo != null ? mPhoneInfo.getCountryIso() : null;
+        String countryIso = mShortcutViewConfig.getCountryIso();
         String countryName = null;
         if (!TextUtils.isEmpty(countryIso)) {
             Locale locale = Locale.getDefault();
@@ -1220,7 +1203,7 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
         if (!isFinishing() && !isDestroyed()) {
             setLocationInfo();
             if (mShortcutAdapter != null) {
-                mShortcutAdapter.updateCountryEccInfo(this, mPhoneInfo);
+                mShortcutAdapter.updateCountryEccInfo(this, mShortcutViewConfig.getPhoneInfo());
             }
         }
     }
@@ -1330,5 +1313,27 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
             }
         }
         return isShortcut;
+    }
+
+    private String entryTypeToString(int entryType) {
+        switch (entryType) {
+            case ENTRY_TYPE_LOCKSCREEN_BUTTON:
+                return "LockScreen";
+            case ENTRY_TYPE_POWER_MENU:
+                return "PowerMenu";
+            default:
+                return "Unknown-" + entryType;
+        }
+    }
+
+    private String callSourceToString(int callSource) {
+        switch (callSource) {
+            case ParcelableCallAnalytics.CALL_SOURCE_EMERGENCY_DIALPAD:
+                return "DialPad";
+            case ParcelableCallAnalytics.CALL_SOURCE_EMERGENCY_SHORTCUT:
+                return "Shortcut";
+            default:
+                return "Unknown-" + callSource;
+        }
     }
 }
