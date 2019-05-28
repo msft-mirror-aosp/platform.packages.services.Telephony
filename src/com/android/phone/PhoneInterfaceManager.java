@@ -2802,27 +2802,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    /**
-     * Returns the data network type.
-     * Legacy call, permission-free.
-     *
-     * @Deprecated to be removed Q3 2013 use {@link #getDataNetworkType}.
-     */
-    @Override
-    public int getNetworkType() {
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(getDefaultSubscription());
-            if (phone != null) {
-                return phone.getServiceState().getDataNetworkType();
-            } else {
-                return TelephonyManager.NETWORK_TYPE_UNKNOWN;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
     @Override
     public int getNetworkSelectionMode(int subId) {
         if (!isActiveSubscription(subId)) {
@@ -3524,12 +3503,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Returns the network type for a subId
+     * Returns the data network type for a subId; does not throw SecurityException.
      */
     @Override
     public int getNetworkTypeForSubscriber(int subId, String callingPackage) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, "getNetworkTypeForSubscriber")) {
+        final int targetSdk = getTargetSdk(callingPackage);
+        if (targetSdk > android.os.Build.VERSION_CODES.Q) {
+            return getDataNetworkTypeForSubscriber(subId, callingPackage);
+        } else if (targetSdk == android.os.Build.VERSION_CODES.Q
+                && !TelephonyPermissions.checkCallingOrSelfReadPhoneStateNoThrow(
+                        mApp, subId, callingPackage, "getNetworkTypeForSubscriber")) {
             return TelephonyManager.NETWORK_TYPE_UNKNOWN;
         }
 
@@ -3838,7 +3821,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int command, int p1, int p2, int p3, String data) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            if (channel < 0) {
+            if (channel <= 0) {
                 return "";
             }
 
