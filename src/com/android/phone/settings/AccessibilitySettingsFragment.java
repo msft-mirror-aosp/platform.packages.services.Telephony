@@ -28,11 +28,13 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
+import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.ims.ImsManager;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
+import com.android.internal.telephony.SubscriptionController;
 import com.android.phone.PhoneGlobals;
 import com.android.phone.R;
 
@@ -109,10 +111,14 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             mButtonHac = null;
         }
 
-        if (PhoneGlobals.getInstance().phoneMgr
-                .isRttSupported(SubscriptionManager.getDefaultVoiceSubscriptionId())) {
+        if (shouldShowRttSetting()) {
             // TODO: this is going to be a on/off switch for now. Ask UX about how to integrate
             // this settings with TTY
+            if (TelephonyManager.getDefault().isNetworkRoaming(
+                    SubscriptionManager.getDefaultVoiceSubscriptionId())) {
+                mButtonRtt.setSummary(TextUtils.concat(getText(R.string.rtt_mode_summary), "\n",
+                        getText(R.string.no_rtt_when_roaming)));
+            }
             boolean rttOn = Settings.Secure.getInt(
                     mContext.getContentResolver(), Settings.Secure.RTT_CALLING_MODE, 0) != 0;
             mButtonRtt.setChecked(rttOn);
@@ -190,6 +196,21 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             }
         }
         return false;
+    }
+
+    private boolean shouldShowRttSetting() {
+        int subscriptionId = SubscriptionManager.getDefaultVoiceSubscriptionId();
+        if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                || subscriptionId == SubscriptionManager.DEFAULT_SUBSCRIPTION_ID) {
+            for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
+                if (PhoneGlobals.getInstance().phoneMgr.isRttSupported(subId)) {
+                    return true;
+                }
+            }
+            return false;
+        } else {
+            return PhoneGlobals.getInstance().phoneMgr.isRttSupported(subscriptionId);
+        }
     }
 
     /**

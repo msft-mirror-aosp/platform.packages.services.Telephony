@@ -121,6 +121,7 @@ import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.HalVersion;
+import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.IccCard;
@@ -140,6 +141,7 @@ import com.android.internal.telephony.ServiceStateTracker;
 import com.android.internal.telephony.SmsApplication;
 import com.android.internal.telephony.SmsApplication.SmsApplicationData;
 import com.android.internal.telephony.SmsController;
+import com.android.internal.telephony.SmsPermissions;
 import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.TelephonyPermissions;
 import com.android.internal.telephony.dataconnection.ApnSettingUtils;
@@ -157,6 +159,7 @@ import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.telephony.uicc.UiccSlot;
 import com.android.internal.telephony.util.VoicemailNotificationSettingsUtil;
 import com.android.internal.util.HexDump;
+import com.android.phone.settings.PickSmsSubscriptionActivity;
 import com.android.phone.vvm.PhoneAccountHandleConverter;
 import com.android.phone.vvm.RemoteVvmTaskManager;
 import com.android.phone.vvm.VisualVoicemailSettingsUtil;
@@ -1407,7 +1410,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         // from the context of the phone app.
         enforceCallPermission();
 
-        if (mAppOps.noteOp(AppOpsManager.OP_CALL_PHONE, Binder.getCallingUid(), callingPackage)
+        if (mAppOps.noteOp(AppOpsManager.OPSTR_CALL_PHONE, Binder.getCallingUid(), callingPackage)
                 != AppOpsManager.MODE_ALLOWED) {
             return;
         }
@@ -1869,9 +1872,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int getDataState() {
+        return getDataStateForSubId(mSubscriptionController.getDefaultDataSubId());
+    }
+
+    @Override
+    public int getDataStateForSubId(int subId) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            Phone phone = getPhone(mSubscriptionController.getDefaultDataSubId());
+            final Phone phone = getPhone(subId);
             if (phone != null) {
                 return PhoneConstantConversions.convertDataState(phone.getDataConnectionState());
             } else {
@@ -1885,9 +1893,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int getDataActivity() {
+        return getDataActivityForSubId(mSubscriptionController.getDefaultDataSubId());
+    }
+
+    @Override
+    public int getDataActivityForSubId(int subId) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            Phone phone = getPhone(mSubscriptionController.getDefaultDataSubId());
+            final Phone phone = getPhone(subId);
             if (phone != null) {
                 return DefaultPhoneNotifier.convertDataActivityState(phone.getDataActivityState());
             } else {
@@ -2011,14 +2024,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     /**
      * Returns the target SDK version number for a given package name.
      *
+     * This call MUST be invoked before clearing the calling UID.
+     *
      * @return target SDK if the package is found or INT_MAX.
      */
     private int getTargetSdk(String packageName) {
         try {
-            final ApplicationInfo ai = mApp.getPackageManager().getApplicationInfo(
-                            packageName, 0);
+            final ApplicationInfo ai = mApp.getPackageManager().getApplicationInfoAsUser(
+                    packageName, 0, UserHandle.getUserId(Binder.getCallingUid()));
             if (ai != null) return ai.targetSdkVersion;
         } catch (PackageManager.NameNotFoundException unexpected) {
+            loge("Failed to get package info for pkg="
+                    + packageName + ", uid=" + Binder.getCallingUid());
         }
         return Integer.MAX_VALUE;
     }
@@ -2032,7 +2049,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     "getNeighboringCellInfo() is unavailable to callers targeting Q+ SDK levels.");
         }
 
-        if (mAppOps.noteOp(AppOpsManager.OP_NEIGHBORING_CELLS, Binder.getCallingUid(),
+        if (mAppOps.noteOp(AppOpsManager.OPSTR_NEIGHBORING_CELLS, Binder.getCallingUid(),
                 callingPackage) != AppOpsManager.MODE_ALLOWED) {
             return null;
         }
@@ -7031,6 +7048,79 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone == null) return true; // By default return true.
 
             return ApnSettingUtils.isMeteredApnType(apnType, phone);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void enqueueSmsPickResult(String callingPackage, IIntegerConsumer pendingSubIdResult) {
+        SmsPermissions permissions = new SmsPermissions(getDefaultPhone(), mApp,
+                (AppOpsManager) mApp.getSystemService(Context.APP_OPS_SERVICE));
+        if (!permissions.checkCallingCanSendSms(callingPackage, "Sending message")) {
+            throw new SecurityException("Requires SEND_SMS permission to perform this operation");
+        }
+        PickSmsSubscriptionActivity.addPendingResult(pendingSubIdResult);
+        Intent intent = new Intent();
+        intent.setClass(mApp, PickSmsSubscriptionActivity.class);
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        // Bring up choose default SMS subscription dialog right now
+        intent.putExtra(PickSmsSubscriptionActivity.DIALOG_TYPE_KEY,
+                PickSmsSubscriptionActivity.SMS_PICK_FOR_MESSAGE);
+        mApp.startActivity(intent);
+    }
+
+    @Override
+    public String getMmsUAProfUrl(int subId) {
+        //TODO investigate if this API should require proper permission check in R b/133791609
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return SubscriptionManager.getResourcesForSubId(getDefaultPhone().getContext(), subId)
+                    .getString(com.android.internal.R.string.config_mms_user_agent_profile_url);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public String getMmsUserAgent(int subId) {
+        //TODO investigate if this API should require proper permission check in R b/133791609
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return SubscriptionManager.getResourcesForSubId(getDefaultPhone().getContext(), subId)
+                    .getString(com.android.internal.R.string.config_mms_user_agent);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public boolean setDataAllowedDuringVoiceCall(int subId, boolean allow) {
+        enforceModifyPermission();
+
+        // Now that all security checks passes, perform the operation as ourselves.
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) return false;
+
+            return phone.getDataEnabledSettings().setAllowDataDuringVoiceCall(allow);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public boolean isDataAllowedInVoiceCall(int subId) {
+        enforceReadPrivilegedPermission("isDataAllowedInVoiceCall");
+
+        // Now that all security checks passes, perform the operation as ourselves.
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) return false;
+
+            return phone.getDataEnabledSettings().isDataAllowedInVoiceCall();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
