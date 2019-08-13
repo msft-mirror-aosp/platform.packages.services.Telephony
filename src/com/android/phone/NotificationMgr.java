@@ -26,6 +26,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.pm.UserInfo;
 import android.content.res.Resources;
@@ -90,7 +91,7 @@ public class NotificationMgr {
     static final int NETWORK_SELECTION_NOTIFICATION = 2;
     static final int VOICEMAIL_NOTIFICATION = 3;
     static final int CALL_FORWARD_NOTIFICATION = 4;
-    static final int DATA_DISCONNECTED_ROAMING_NOTIFICATION = 5;
+    static final int DATA_ROAMING_NOTIFICATION = 5;
     static final int SELECTED_OPERATOR_FAIL_NOTIFICATION = 6;
 
     // Event for network selection notification.
@@ -107,7 +108,6 @@ public class NotificationMgr {
     private PhoneGlobals mApp;
 
     private Context mContext;
-    private NotificationManager mNotificationManager;
     private StatusBarManager mStatusBarManager;
     private UserManager mUserManager;
     private Toast mToast;
@@ -152,8 +152,6 @@ public class NotificationMgr {
     private NotificationMgr(PhoneGlobals app) {
         mApp = app;
         mContext = app;
-        mNotificationManager =
-                (NotificationManager) app.getSystemService(Context.NOTIFICATION_SERVICE);
         mStatusBarManager =
                 (StatusBarManager) app.getSystemService(Context.STATUS_BAR_SERVICE);
         mUserManager = (UserManager) app.getSystemService(Context.USER_SERVICE);
@@ -378,7 +376,7 @@ public class NotificationMgr {
                         && !user.isManagedProfile()) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, vmCount, vmNumber,
                             pendingIntent, isSettingsIntent, userHandle, isRefresh)) {
-                        mNotificationManager.notifyAsUser(
+                        notifyAsUser(
                                 Integer.toString(subId) /* tag */,
                                 VOICEMAIL_NOTIFICATION,
                                 notification,
@@ -396,7 +394,7 @@ public class NotificationMgr {
                         && !user.isManagedProfile()) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, 0, null, null,
                             false, userHandle, isRefresh)) {
-                        mNotificationManager.cancelAsUser(
+                        cancelAsUser(
                                 Integer.toString(subId) /* tag */,
                                 VOICEMAIL_NOTIFICATION,
                                 userHandle);
@@ -540,7 +538,7 @@ public class NotificationMgr {
                     intent, mSubscriptionManager.getActiveSubscriptionInfo(subId));
             builder.setContentIntent(PendingIntent.getActivity(mContext, subId /* requestCode */,
                     intent, 0));
-            mNotificationManager.notifyAsUser(
+            notifyAsUser(
                     Integer.toString(subId) /* tag */,
                     CALL_FORWARD_NOTIFICATION,
                     builder.build(),
@@ -552,7 +550,7 @@ public class NotificationMgr {
                     continue;
                 }
                 UserHandle userHandle = user.getUserHandle();
-                mNotificationManager.cancelAsUser(
+                cancelAsUser(
                         Integer.toString(subId) /* tag */,
                         CALL_FORWARD_NOTIFICATION,
                         userHandle);
@@ -561,39 +559,82 @@ public class NotificationMgr {
     }
 
     /**
-     * Shows the "data disconnected due to roaming" notification, which
+     * Shows either:
+     * 1) the "Data roaming is on" notification, which
+     * appears when you're roaming and you have the "data roaming" feature turned on for the
+     * given {@code subId}.
+     * or
+     * 2) the "data disconnected due to roaming" notification, which
      * appears when you lose data connectivity because you're roaming and
      * you have the "data roaming" feature turned off for the given {@code subId}.
+     * @param subId which subscription it's notifying about.
+     * @param roamingOn whether currently roaming is on or off. If true, we show notification
+     *                  1) above; else we show notification 2).
      */
-    /* package */ void showDataDisconnectedRoaming(int subId) {
-        if (DBG) log("showDataDisconnectedRoaming()...");
+    /* package */ void showDataRoamingNotification(int subId, boolean roamingOn) {
+        if (DBG) {
+            log("showDataRoamingNotification() roaming " + (roamingOn ? "on" : "off")
+                    + " on subId " + subId);
+        }
 
         // "Mobile network settings" screen / dialog
         Intent intent = new Intent(Settings.ACTION_DATA_ROAMING_SETTINGS);
         intent.putExtra(Settings.EXTRA_SUB_ID, subId);
         PendingIntent contentIntent = PendingIntent.getActivity(mContext, subId, intent, 0);
 
-        final CharSequence contentText = mContext.getText(R.string.roaming_reenable_message);
+        CharSequence contentTitle = mContext.getText(roamingOn
+                ? R.string.roaming_on_notification_title
+                : R.string.roaming_notification_title);
+        CharSequence contentText = mContext.getText(roamingOn
+                ? R.string.roaming_enabled_message
+                : R.string.roaming_reenable_message);
 
         final Notification.Builder builder = new Notification.Builder(mContext)
                 .setSmallIcon(android.R.drawable.stat_sys_warning)
-                .setContentTitle(mContext.getText(R.string.roaming_notification_title))
+                .setContentTitle(contentTitle)
                 .setColor(mContext.getResources().getColor(R.color.dialer_theme_color))
                 .setContentText(contentText)
                 .setChannelId(NotificationChannelController.CHANNEL_ID_MOBILE_DATA_STATUS)
                 .setContentIntent(contentIntent);
         final Notification notif =
                 new Notification.BigTextStyle(builder).bigText(contentText).build();
-        mNotificationManager.notifyAsUser(
-                null /* tag */, DATA_DISCONNECTED_ROAMING_NOTIFICATION, notif, UserHandle.ALL);
+        notifyAsUser(null /* tag */, DATA_ROAMING_NOTIFICATION, notif, UserHandle.ALL);
+    }
+
+    private void notifyAsUser(String tag, int id, Notification notification, UserHandle user) {
+        try {
+            Context contextForUser =
+                    mContext.createPackageContextAsUser(mContext.getPackageName(), 0, user);
+            NotificationManager notificationManager =
+                    (NotificationManager) contextForUser.getSystemService(
+                            Context.NOTIFICATION_SERVICE);
+            notificationManager.notify(tag, id, notification);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(LOG_TAG, "unable to notify for user " + user);
+            e.printStackTrace();
+        }
+    }
+
+    private void cancelAsUser(String tag, int id, UserHandle user) {
+        try {
+            Context contextForUser =
+                    mContext.createPackageContextAsUser(mContext.getPackageName(), 0, user);
+            NotificationManager notificationManager =
+                    (NotificationManager) contextForUser.getSystemService(
+                            Context.NOTIFICATION_SERVICE);
+            notificationManager.cancel(tag, id);
+        } catch (PackageManager.NameNotFoundException e) {
+            Log.e(LOG_TAG, "unable to cancel for user " + user);
+            e.printStackTrace();
+        }
     }
 
     /**
-     * Turns off the "data disconnected due to roaming" notification.
+     * Turns off the "data disconnected due to roaming" or "Data roaming is on" notification.
      */
-    /* package */ void hideDataDisconnectedRoaming() {
-        if (DBG) log("hideDataDisconnectedRoaming()...");
-        mNotificationManager.cancel(DATA_DISCONNECTED_ROAMING_NOTIFICATION);
+    /* package */ void hideDataRoamingNotification() {
+        if (DBG) log("hideDataRoamingNotification()...");
+        cancelAsUser(null, DATA_ROAMING_NOTIFICATION, UserHandle.ALL);
     }
 
     /**
@@ -626,7 +667,7 @@ public class NotificationMgr {
                 mContext.getString(R.string.mobile_network_settings_class)));
         intent.putExtra(GsmUmtsOptions.EXTRA_SUB_ID, subId);
         builder.setContentIntent(PendingIntent.getActivity(mContext, 0, intent, 0));
-        mNotificationManager.notifyAsUser(
+        notifyAsUser(
                 Integer.toString(subId) /* tag */,
                 SELECTED_OPERATOR_FAIL_NOTIFICATION,
                 builder.build(),
@@ -639,7 +680,7 @@ public class NotificationMgr {
      */
     private void cancelNetworkSelection(int subId) {
         if (DBG) log("cancelNetworkSelection()...");
-        mNotificationManager.cancelAsUser(
+        cancelAsUser(
                 Integer.toString(subId) /* tag */, SELECTED_OPERATOR_FAIL_NOTIFICATION,
                 UserHandle.ALL);
     }
