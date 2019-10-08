@@ -52,8 +52,6 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
     /** Intent to trigger the Emergency Callback Mode exit dialog */
     static final String ACTION_SHOW_ECM_EXIT_DIALOG =
             "com.android.phone.action.ACTION_SHOW_ECM_EXIT_DIALOG";
-    /** Used to get the users choice from the return Intent's extra */
-    public static final String EXTRA_EXIT_ECM_RESULT = "exit_ecm_result";
 
     public static final int EXIT_ECM_BLOCK_OTHERS = 1;
     public static final int EXIT_ECM_DIALOG = 2;
@@ -70,6 +68,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
     private boolean mInEmergencyCall = false;
     private static final int ECM_TIMER_RESET = 1;
     private Phone mPhone = null;
+    private boolean mIsResumed = false;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -99,6 +98,18 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
         IntentFilter filter = new IntentFilter();
         filter.addAction(TelephonyIntents.ACTION_EMERGENCY_CALLBACK_MODE_CHANGED);
         registerReceiver(mEcmExitReceiver, filter);
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        mIsResumed = true;
+    }
+
+    @Override
+    public void onPause() {
+        super.onPause();
+        mIsResumed = false;
     }
 
     @Override
@@ -178,7 +189,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
      * Shows Emergency Callback Mode dialog and starts countdown timer
      */
     private void showEmergencyCallbackModeExitDialog() {
-        if (!this.isResumed()) {
+        if (!mIsResumed) {
             Log.w(TAG, "Tried to show dialog, but activity was already finished");
             return;
         }
@@ -239,8 +250,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int whichButton) {
                                     // User clicked No
-                                    setResult(RESULT_OK, (new Intent()).putExtra(
-                                            EXTRA_EXIT_ECM_RESULT, false));
+                                    setResult(RESULT_CANCELED);
                                     finish();
                                 }
                             }).create();
@@ -257,8 +267,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
                             new DialogInterface.OnClickListener() {
                                 public void onClick(DialogInterface dialog, int whichButton) {
                                     // User clicked Dismiss
-                                    setResult(RESULT_OK, (new Intent()).putExtra(
-                                            EXTRA_EXIT_ECM_RESULT, false));
+                                    setResult(RESULT_CANCELED);
                                     finish();
                                 }
                             }).create();
@@ -302,8 +311,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
      */
     @Override
     public void onCancel(DialogInterface dialog) {
-        EmergencyCallbackModeExitDialog.this.setResult(RESULT_OK, (new Intent())
-                .putExtra(EXTRA_EXIT_ECM_RESULT, false));
+        EmergencyCallbackModeExitDialog.this.setResult(RESULT_CANCELED);
         finish();
     }
 
@@ -321,8 +329,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
                         mAlertDialog.dismiss();
                     if (mProgressDialog != null)
                         mProgressDialog.dismiss();
-                    EmergencyCallbackModeExitDialog.this.setResult(RESULT_OK, (new Intent())
-                            .putExtra(EXTRA_EXIT_ECM_RESULT, true));
+                    EmergencyCallbackModeExitDialog.this.setResult(RESULT_OK);
                     finish();
                 }
             }
@@ -354,8 +361,7 @@ public class EmergencyCallbackModeExitDialog extends Activity implements OnCance
             switch (msg.what) {
                 case ECM_TIMER_RESET:
                     if(!((Boolean)((AsyncResult) msg.obj).result).booleanValue()) {
-                        EmergencyCallbackModeExitDialog.this.setResult(RESULT_OK, (new Intent())
-                                .putExtra(EXTRA_EXIT_ECM_RESULT, false));
+                        EmergencyCallbackModeExitDialog.this.setResult(RESULT_CANCELED);
                         finish();
                     }
                     break;

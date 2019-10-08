@@ -198,6 +198,7 @@
     <uses-permission android:name="android.permission.BIND_TELEPHONY_DATA_SERVICE" />
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.READ_PRECISE_PHONE_STATE" />
+    <uses-permission android:name="android.permission.MANAGE_ROLE_HOLDERS" />
 
     <application android:name="PhoneApp"
             android:persistent="true"
@@ -262,39 +263,6 @@
                   android:theme="@android:style/Theme.Translucent.NoTitleBar"
                   android:exported="false"/>
 
-        <!-- "Mobile network settings" screen, used on both
-             non-voice-capable tablets and regular phone devices. -->
-        <activity android:name="MobileNetworkSettings"
-            android:label="@string/network_settings_title"
-            android:theme="@style/NetworkOperatorsSettingsTheme">
-            <intent-filter>
-                <action android:name="android.intent.action.VIEW" />
-                <action android:name="android.intent.action.MAIN" />
-                <action android:name="android.settings.NETWORK_OPERATOR_SETTINGS" />
-                <action android:name="android.settings.DATA_ROAMING_SETTINGS" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <activity-alias android:name="Settings"
-            android:targetActivity="MobileNetworkSettings" />
-
-        <!-- networks setting -->
-        <!-- "Choose network" screen. Used only when the Automatically
-             select network turned off-->
-        <activity android:name="NetworkSelectSettingActivity"
-            android:label="@string/choose_network_title"
-            android:theme="@style/NetworkOperatorsSettingsTheme"
-            android:configChanges="orientation|screenSize">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.DEFAULT" />
-            </intent-filter>
-        </activity>
-
-        <!-- service to handle network query requests sent to RIL -->
-        <service android:name="NetworkQueryService" />
-
         <activity android:name="GsmUmtsCallOptions"
                 android:label="@string/gsm_umts_options"
                 android:theme="@style/DialerSettingsLight">
@@ -314,7 +282,7 @@
         <activity android:name="GsmUmtsCallForwardOptions"
                 android:label="@string/labelCF"
                 android:configChanges="orientation|screenSize|keyboardHidden"
-                android:theme="@style/SettingsLight">
+                android:theme="@style/DialerSettingsLight">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
@@ -332,7 +300,7 @@
         <activity android:name="GsmUmtsAdditionalCallOptions"
                 android:label="@string/labelGSMMore"
                 android:configChanges="orientation|screenSize|keyboardHidden"
-                android:theme="@style/SettingsLight">
+                android:theme="@style/DialerSettingsLight">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>
@@ -350,7 +318,7 @@
         <!-- SIM PIN setting -->
         <activity android:name="EnableIccPinScreen"
                 android:label="@string/enable_pin"
-                android:theme="@style/SettingsLight">
+                android:theme="@style/DialerSettingsLight">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.DEVELOPMENT_PREFERENCE" />
@@ -359,7 +327,7 @@
 
         <activity android:name="ChangeIccPinScreen"
                 android:label="@string/change_pin"
-                android:theme="@style/SettingsLight">
+                android:theme="@style/DialerSettingsLight">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.DEVELOPMENT_PREFERENCE" />
@@ -397,7 +365,8 @@
 
         <!-- Activation service that trigger OTASP sim provisioning -->
         <service android:name=".otasp.OtaspActivationService" android:launchMode="singleInstance"
-                 androidprv:systemUserOnly="true">
+            androidprv:systemUserOnly="true"
+            android:permission="android.permission.MODIFY_PHONE_STATE">
             <intent-filter>
                 <action android:name="android.service.simActivation.SimActivationService" />
             </intent-filter>
@@ -467,6 +436,7 @@
             privileged processes can start them.
         -->
         <activity android:name=".euicc.EuiccPrivilegedActionUiDispatcherActivity"
+                  android:theme="@android:style/Theme.NoDisplay"
                   android:permission="android.permission.CALL_PRIVILEGED">
             <!-- Max out priority to ensure nobody else will handle these intents. -->
             <intent-filter android:priority="1000">
@@ -579,18 +549,6 @@
                 <action android:name="android.telecom.ConnectionService" />
             </intent-filter>
         </service>
-
-        <provider
-                android:name="PhoneSearchIndexablesProvider"
-                android:authorities="com.android.phone"
-                android:multiprocess="false"
-                android:grantUriPermissions="true"
-                android:permission="android.permission.READ_SEARCH_INDEXABLES"
-                android:exported="true">
-            <intent-filter>
-                <action android:name="android.content.action.SEARCH_INDEXABLES_PROVIDER" />
-            </intent-filter>
-        </provider>
 
         <receiver
           android:name="com.android.phone.vvm.VvmSmsReceiver"
