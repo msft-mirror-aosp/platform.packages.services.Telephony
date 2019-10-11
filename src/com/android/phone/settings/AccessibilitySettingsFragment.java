@@ -157,19 +157,26 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             Settings.System.putInt(mContext.getContentResolver(), Settings.System.HEARING_AID, hac);
 
             // Update HAC Value in AudioManager.
-            mAudioManager.setParameter(SettingsConstants.HAC_KEY,
-                    hac == SettingsConstants.HAC_ENABLED
-                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF);
+            mAudioManager.setParameters(
+                    SettingsConstants.HAC_KEY + "=" + (hac == SettingsConstants.HAC_ENABLED
+                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF));
             return true;
         } else if (preference == mButtonRtt) {
             Log.i(LOG_TAG, "RTT setting changed -- now " + mButtonRtt.isChecked());
             int rttMode = mButtonRtt.isChecked() ? 1 : 0;
             Settings.Secure.putInt(mContext.getContentResolver(), Settings.Secure.RTT_CALLING_MODE,
                     rttMode);
-            // Update RTT config with IMS Manager
-            ImsManager imsManager = ImsManager.getInstance(getContext(),
-                    SubscriptionManager.getDefaultVoicePhoneId());
-            imsManager.setRttEnabled(mButtonRtt.isChecked());
+            // Update RTT config with IMS Manager if the always-on carrier config isn't set to true.
+            CarrierConfigManager configManager = (CarrierConfigManager) mContext.getSystemService(
+                            Context.CARRIER_CONFIG_SERVICE);
+            for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
+                if (!configManager.getConfigForSubId(subId).getBoolean(
+                        CarrierConfigManager.KEY_IGNORE_RTT_MODE_SETTING_BOOL, false)) {
+                    int phoneId = SubscriptionController.getInstance().getPhoneId(subId);
+                    ImsManager imsManager = ImsManager.getInstance(getContext(), phoneId);
+                    imsManager.setRttEnabled(mButtonRtt.isChecked());
+                }
+            }
             return true;
         }
 
@@ -199,18 +206,23 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
     }
 
     private boolean shouldShowRttSetting() {
-        int subscriptionId = SubscriptionManager.getDefaultVoiceSubscriptionId();
-        if (subscriptionId == SubscriptionManager.INVALID_SUBSCRIPTION_ID
-                || subscriptionId == SubscriptionManager.DEFAULT_SUBSCRIPTION_ID) {
-            for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
-                if (PhoneGlobals.getInstance().phoneMgr.isRttSupported(subId)) {
+        CarrierConfigManager configManager =
+                (CarrierConfigManager) mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        // Go through all the subs -- if we want to display the RTT setting for any of them, do
+        // display it.
+        for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
+            // In order to display the setting, we want:
+            // 1. The subscription supports RTT
+            // 2. The subscription isn't configured by the carrier to have the setting always-on
+            //    (see the documentation for the carrier config key)
+            if (PhoneGlobals.getInstance().phoneMgr.isRttSupported(subId)) {
+                if (!configManager.getConfigForSubId(subId).getBoolean(
+                        CarrierConfigManager.KEY_IGNORE_RTT_MODE_SETTING_BOOL, false)) {
                     return true;
                 }
             }
-            return false;
-        } else {
-            return PhoneGlobals.getInstance().phoneMgr.isRttSupported(subscriptionId);
         }
+        return false;
     }
 
     /**

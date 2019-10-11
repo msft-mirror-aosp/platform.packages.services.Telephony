@@ -43,6 +43,7 @@ import android.text.TextUtils;
 import android.util.Pair;
 
 import com.android.ims.ImsCall;
+import com.android.internal.os.SomeArgs;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallFailCause;
 import com.android.internal.telephony.CallStateException;
@@ -98,6 +99,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     private static final int MSG_CDMA_VOICE_PRIVACY_OFF = 16;
     private static final int MSG_HANGUP = 17;
     private static final int MSG_SET_CALL_RADIO_TECH = 18;
+    private static final int MSG_ON_CONNECTION_EVENT = 19;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
@@ -265,6 +267,15 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                         updateConnectionProperties();
                         updateStatusHints();
                         refreshDisableAddCall();
+                    }
+                    break;
+                case MSG_ON_CONNECTION_EVENT:
+                    SomeArgs args = (SomeArgs) msg.obj;
+                    try {
+                        sendConnectionEvent((String) args.arg1, (Bundle) args.arg2);
+
+                    } finally {
+                        args.recycle();
                     }
                     break;
             }
@@ -554,7 +565,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
          */
         @Override
         public void onConnectionEvent(String event, Bundle extras) {
-            sendConnectionEvent(event, extras);
+            SomeArgs args = SomeArgs.obtain();
+            args.arg1 = event;
+            args.arg2 = extras;
+            mHandler.obtainMessage(MSG_ON_CONNECTION_EVENT, args).sendToTarget();
         }
 
         @Override
@@ -2205,6 +2219,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         if (isIms) {
             isVoWifiEnabled = ImsUtil.isWfcEnabled(phone.getContext(), phone.getPhoneId());
         }
+        boolean isRttMergeSupported = getCarrierConfig()
+                .getBoolean(CarrierConfigManager.KEY_ALLOW_MERGING_RTT_CALLS_BOOL);
         PhoneAccountHandle phoneAccountHandle = isIms ? PhoneUtils
                 .makePstnPhoneAccountHandle(phone.getDefaultPhone())
                 : PhoneUtils.makePstnPhoneAccountHandle(phone);
@@ -2229,7 +2245,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         if (mTreatAsEmergencyCall) {
             isConferenceSupported = false;
             Log.d(this, "refreshConferenceSupported = false; emergency call");
-        } else if (isRtt()) {
+        } else if (isRtt() && !isRttMergeSupported) {
             isConferenceSupported = false;
             Log.d(this, "refreshConferenceSupported = false; rtt call");
         } else if (!isConferencingSupported || isIms && !isImsConferencingSupported) {
