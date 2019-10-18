@@ -18,6 +18,7 @@ package com.android.phone;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
+import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_IMS;
 import static com.android.internal.telephony.PhoneConstants.SUBSCRIPTION_KEY;
 
 import android.Manifest.permission;
@@ -149,7 +150,10 @@ import com.android.internal.telephony.dataconnection.ApnSettingUtils;
 import com.android.internal.telephony.emergency.EmergencyNumberTracker;
 import com.android.internal.telephony.euicc.EuiccConnector;
 import com.android.internal.telephony.ims.ImsResolver;
+import com.android.internal.telephony.imsphone.ImsPhone;
+import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
+import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
 import com.android.internal.telephony.uicc.IccUtils;
 import com.android.internal.telephony.uicc.SIMRecords;
@@ -158,7 +162,6 @@ import com.android.internal.telephony.uicc.UiccCardApplication;
 import com.android.internal.telephony.uicc.UiccController;
 import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.telephony.uicc.UiccSlot;
-import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.util.VoicemailNotificationSettingsUtil;
 import com.android.internal.util.HexDump;
 import com.android.phone.settings.PickSmsSubscriptionActivity;
@@ -2718,7 +2721,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 phone.setDataActivationState(activationState);
             } else {
-                loge("setVoiceActivationState fails with invalid subId: " + subId);
+                loge("setDataActivationState fails with invalid subId: " + subId);
             }
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -4809,13 +4812,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public int getCarrierPrivilegeStatusForUid(int subId, int uid) {
         final Phone phone = getPhone(subId);
         if (phone == null) {
-            loge("getCarrierPrivilegeStatus: Invalid subId");
+            loge("getCarrierPrivilegeStatusForUid: Invalid subId");
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS;
         }
         UiccProfile profile =
                 UiccController.getInstance().getUiccProfileForPhone(phone.getPhoneId());
         if (profile == null) {
-            loge("getCarrierPrivilegeStatus: No UICC");
+            loge("getCarrierPrivilegeStatusForUid: No UICC");
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED;
         }
         return profile.getCarrierPrivilegeStatusForUid(phone.getContext().getPackageManager(), uid);
@@ -4866,7 +4869,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
         UiccCard card = UiccController.getInstance().getUiccCard(phoneId);
         if (card == null) {
-            loge("getCarrierPackageNamesForIntent: No UICC");
+            loge("getCarrierPackageNamesForIntentAndPhone: No UICC");
             return null ;
         }
         return card.getCarrierPackageNamesForIntent(mApp.getPackageManager(), intent);
@@ -6456,7 +6459,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 if (card != null) {
                     cardId = card.getCardId();
                 } else {
-                    cardId = slot.getIccId();
+                    cardId = slot.getEid();
+                    if (TextUtils.isEmpty(cardId)) {
+                        cardId = slot.getIccId();
+                    }
                 }
 
                 if (cardId != null) {
@@ -7212,6 +7218,34 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone == null) return false;
 
             return phone.getDataEnabledSettings().isDataAllowedInVoiceCall();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Updates whether conference event pacakge handling is enabled.
+     * @param isCepEnabled {@code true} if CEP handling is enabled (default), or {@code false}
+     *                                 otherwise.
+     */
+    @Override
+    public void setCepEnabled(boolean isCepEnabled) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setCepEnabled");
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Rlog.i(LOG_TAG, "setCepEnabled isCepEnabled=" + isCepEnabled);
+            for (Phone phone : PhoneFactory.getPhones()) {
+                Phone defaultPhone = phone.getImsPhone();
+                if (defaultPhone != null && defaultPhone.getPhoneType() == PHONE_TYPE_IMS) {
+                    ImsPhone imsPhone = (ImsPhone) defaultPhone;
+                    ImsPhoneCallTracker imsPhoneCallTracker =
+                            (ImsPhoneCallTracker) imsPhone.getCallTracker();
+                    imsPhoneCallTracker.setConferenceEventPackageEnabled(isCepEnabled);
+                    Rlog.i(LOG_TAG, "setCepEnabled isCepEnabled=" + isCepEnabled + ", for imsPhone "
+                            + imsPhone.getMsisdn());
+                }
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
