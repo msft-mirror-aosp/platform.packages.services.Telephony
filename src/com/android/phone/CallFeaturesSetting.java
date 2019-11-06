@@ -202,7 +202,8 @@ public class CallFeaturesSetting extends PreferenceActivity
         if (DBG) log("onCreate: Intent is " + getIntent());
 
         // Make sure we are running as an admin user.
-        if (!UserManager.get(this).isAdminUser()) {
+        UserManager userManager = (UserManager) getSystemService(Context.USER_SERVICE);
+        if (!userManager.isAdminUser()) {
             Toast.makeText(this, R.string.call_settings_admin_user_only,
                     Toast.LENGTH_SHORT).show();
             finish();
@@ -228,8 +229,8 @@ public class CallFeaturesSetting extends PreferenceActivity
     }
 
     private void listenPhoneState(boolean listen) {
-        TelephonyManager telephonyManager =
-                (TelephonyManager) getSystemService(Context.TELEPHONY_SERVICE);
+        TelephonyManager telephonyManager = getSystemService(TelephonyManager.class)
+                .createForSubscriptionId(mPhone.getSubId());
         telephonyManager.listen(mPhoneStateListener, listen
                 ? PhoneStateListener.LISTEN_CALL_STATE : PhoneStateListener.LISTEN_NONE);
     }
@@ -238,10 +239,7 @@ public class CallFeaturesSetting extends PreferenceActivity
         @Override
         public void onCallStateChanged(int state, String incomingNumber) {
             if (DBG) log("PhoneStateListener onCallStateChanged: state is " + state);
-            // Use TelecomManager#getCallStete instead of 'state' parameter because it needs
-            // to check the current state of all phone calls.
-            boolean isCallStateIdle =
-                    mTelecomManager.getCallState() == TelephonyManager.CALL_STATE_IDLE;
+            boolean isCallStateIdle = state == TelephonyManager.CALL_STATE_IDLE;
             if (mEnableVideoCalling != null) {
                 mEnableVideoCalling.setEnabled(isCallStateIdle);
             }

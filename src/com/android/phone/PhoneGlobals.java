@@ -37,16 +37,16 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
-import android.os.SystemClock;
 import android.os.SystemProperties;
-import android.os.UpdateLock;
 import android.os.UserManager;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
+import android.sysprop.TelephonyProperties;
 import android.telecom.TelecomManager;
 import android.telephony.AnomalyReporter;
 import android.telephony.CarrierConfigManager;
 import android.telephony.ServiceState;
+import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
@@ -76,6 +76,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 
 /**
  * Global state for the telephony subsystem when running in the primary
@@ -185,8 +186,6 @@ public class PhoneGlobals extends ContextWrapper {
     private PowerManager.WakeLock mPartialWakeLock;
     private KeyguardManager mKeyguardManager;
 
-    private UpdateLock mUpdateLock;
-
     private int mDefaultDataSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private final LocalLog mDataRoamingNotifLog = new LocalLog(50);
 
@@ -272,7 +271,8 @@ public class PhoneGlobals extends ContextWrapper {
                     // not want this running if the device is still in the FBE encrypted state.
                     // This is the same procedure that is triggered in the SipIncomingCallReceiver
                     // upon BOOT_COMPLETED.
-                    UserManager userManager = UserManager.get(sMe);
+                    UserManager userManager =
+                            (UserManager) sMe.getSystemService(Context.USER_SERVICE);
                     if (userManager != null && userManager.isUserUnlocked()) {
                         SipUtil.startSipService();
                     }
@@ -344,12 +344,6 @@ public class PhoneGlobals extends ContextWrapper {
                     | PowerManager.ON_AFTER_RELEASE, LOG_TAG);
 
             mKeyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
-
-            // Get UpdateLock to suppress system-update related events (e.g. dialog show-up)
-            // during phone calls.
-            mUpdateLock = new UpdateLock("phone");
-
-            if (DBG) Log.d(LOG_TAG, "onCreate: mUpdateLock: " + mUpdateLock);
 
             // Create the CallerInfoCache singleton, which remembers custom ring tone and
             // send-to-voicemail settings.
@@ -503,19 +497,6 @@ public class PhoneGlobals extends ContextWrapper {
         mPUKEntryProgressDialog = dialog;
     }
 
-    /**
-     * If we are not currently keeping the screen on, then poke the power
-     * manager to wake up the screen for the user activity timeout duration.
-     */
-    /* package */ void wakeUpScreen() {
-        synchronized (this) {
-            if (mWakeState == WakeState.SLEEP) {
-                if (DBG) Log.d(LOG_TAG, "pulse screen lock");
-                mPowerManager.wakeUp(SystemClock.uptimeMillis(), "android.phone:WAKE");
-            }
-        }
-    }
-
     KeyguardManager getKeyguardManager() {
         return mKeyguardManager;
     }
@@ -566,7 +547,7 @@ public class PhoneGlobals extends ContextWrapper {
         Log.i(LOG_TAG, "Turning radio off - airplane");
         Settings.Global.putInt(context.getContentResolver(), Settings.Global.CELL_ON,
                  PhoneConstants.CELL_OFF_DUE_TO_AIRPLANE_MODE_FLAG);
-        SystemProperties.set("persist.radio.airplane_mode_on", "1");
+        TelephonyProperties.airplane_mode_on(true); // true means int value 1
         Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT, 0);
         PhoneUtils.setRadioPower(false);
     }
@@ -577,7 +558,7 @@ public class PhoneGlobals extends ContextWrapper {
                 PhoneConstants.CELL_ON_FLAG);
         Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT,
                 1);
-        SystemProperties.set("persist.radio.airplane_mode_on", "0");
+        TelephonyProperties.airplane_mode_on(false); // false means int value 0
         PhoneUtils.setRadioPower(true);
     }
 
@@ -672,6 +653,7 @@ public class PhoneGlobals extends ContextWrapper {
                 // Roaming status could be overridden by carrier config, so we need to update it.
                 if (VDBG) Log.v(LOG_TAG, "carrier config changed.");
                 updateDataRoamingStatus();
+                updateLimitedSimFunctionForDualSim();
             } else if (action.equals(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED)) {
                 // We also need to pay attention when default data subscription changes.
                 if (VDBG) Log.v(LOG_TAG, "default data sub changed.");
@@ -807,6 +789,38 @@ public class PhoneGlobals extends ContextWrapper {
      */
     private boolean dataIsNowRoaming(int subId) {
         return getPhone(subId).getServiceState().getDataRoaming();
+    }
+
+    private void updateLimitedSimFunctionForDualSim() {
+        if (DBG) Log.d(LOG_TAG, "updateLimitedSimFunctionForDualSim");
+        // check conditions to display limited SIM function notification under dual SIM
+        SubscriptionManager subMgr = (SubscriptionManager) getSystemService(
+                Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        List<SubscriptionInfo> subList = subMgr.getActiveSubscriptionInfoList(false);
+        if (subList != null && subList.size() > 1) {
+            CarrierConfigManager configMgr = (CarrierConfigManager)
+                    getSystemService(Context.CARRIER_CONFIG_SERVICE);
+            for (SubscriptionInfo info : subList) {
+                PersistableBundle b = configMgr.getConfigForSubId(info.getSubscriptionId());
+                if (b != null) {
+                    if (b.getBoolean(CarrierConfigManager
+                            .KEY_LIMITED_SIM_FUNCTION_NOTIFICATION_FOR_DSDS_BOOL)) {
+                        notificationMgr.showLimitedSimFunctionWarningNotification(
+                                info.getSubscriptionId(),
+                                info.getDisplayName().toString());
+                    } else {
+                        notificationMgr.dismissLimitedSimFunctionWarningNotification(
+                                info.getSubscriptionId());
+                    }
+                }
+            }
+        } else {
+            // cancel notifications for all subs
+            notificationMgr.dismissLimitedSimFunctionWarningNotification(
+                    SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+        }
+        notificationMgr.dismissLimitedSimFunctionWarningNotificationForInactiveSubs();
+
     }
 
     public Phone getPhoneInEcm() {
