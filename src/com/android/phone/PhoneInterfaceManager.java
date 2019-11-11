@@ -62,6 +62,7 @@ import android.provider.Telephony;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
+import android.telephony.Annotation.ApnType;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CarrierRestrictionRules;
 import android.telephony.CellIdentity;
@@ -94,11 +95,11 @@ import android.telephony.UssdResponse;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.cdma.CdmaCellLocation;
 import android.telephony.data.ApnSetting;
-import android.telephony.data.ApnSetting.ApnType;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.gsm.GsmCellLocation;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ProvisioningManager;
+import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsConfig;
 import android.telephony.ims.aidl.IImsConfigCallback;
@@ -106,6 +107,7 @@ import android.telephony.ims.aidl.IImsMmTelFeature;
 import android.telephony.ims.aidl.IImsRcsFeature;
 import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.aidl.IImsRegistrationCallback;
+import android.telephony.ims.feature.ImsFeature;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsConfigImplBase;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
@@ -142,8 +144,6 @@ import com.android.internal.telephony.ProxyController;
 import com.android.internal.telephony.RIL;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.ServiceStateTracker;
-import com.android.internal.telephony.SmsApplication;
-import com.android.internal.telephony.SmsApplication.SmsApplicationData;
 import com.android.internal.telephony.SmsController;
 import com.android.internal.telephony.SmsPermissions;
 import com.android.internal.telephony.SubscriptionController;
@@ -176,7 +176,6 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -1078,11 +1077,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     try {
                         if (ar.exception != null) {
                             Log.e(LOG_TAG, "Exception retrieving CellInfo=" + ar.exception);
-                            cb.onError(TelephonyManager.CellInfoCallback.ERROR_MODEM_ERROR,
-                                    new android.os.ParcelableException(ar.exception));
+                            cb.onError(
+                                    TelephonyManager.CellInfoCallback.ERROR_MODEM_ERROR,
+                                    ar.exception.getClass().getName(),
+                                    ar.exception.toString());
                         } else if (ar.result == null) {
                             Log.w(LOG_TAG, "Timeout Waiting for CellInfo!");
-                            cb.onError(TelephonyManager.CellInfoCallback.ERROR_TIMEOUT, null);
+                            cb.onError(TelephonyManager.CellInfoCallback.ERROR_TIMEOUT, null, null);
                         } else {
                             // use the result as returned
                             cb.onCellInfo((List<CellInfo>) ar.result);
@@ -2906,6 +2907,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void registerImsRegistrationCallback(int subId, IImsRegistrationCallback c)
             throws RemoteException {
         enforceReadPrivilegedPermission("registerImsRegistrationCallback");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
         final long token = Binder.clearCallingIdentity();
         try {
             // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
@@ -2924,24 +2929,97 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             throw new IllegalArgumentException("Invalid Subscription ID: " + subId);
         }
-        Binder.withCleanCallingIdentity(() -> {
-            try {
-                // TODO: Refactor to remove ImsManager dependence and query through ImsPhone.
-                ImsManager.getInstance(mApp, getSlotIndexOrException(subId))
-                        .removeRegistrationCallbackForSubscription(c, subId);
-            } catch (ImsException e) {
-                Log.i(LOG_TAG, "unregisterImsRegistrationCallback: " + subId
-                        + "is inactive, ignoring unregister.");
-                // If the subscription is no longer active, just return, since the callback
-                // will already have been removed internally.
+        final long token = Binder.clearCallingIdentity();
+        try {
+            // TODO: Refactor to remove ImsManager dependence and query through ImsPhone.
+            ImsManager.getInstance(mApp, getSlotIndexOrException(subId))
+                    .removeRegistrationCallbackForSubscription(c, subId);
+        } catch (ImsException e) {
+            Log.i(LOG_TAG, "unregisterImsRegistrationCallback: " + subId
+                    + "is inactive, ignoring unregister.");
+            // If the subscription is no longer active, just return, since the callback
+            // will already have been removed internally.
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Get the IMS service registration state for the MmTelFeature associated with this sub id.
+     */
+    @Override
+    public void getImsMmTelRegistrationState(int subId, IIntegerConsumer consumer) {
+        enforceReadPrivilegedPermission("getImsMmTelRegistrationState");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) {
+                Log.w(LOG_TAG, "getImsMmTelRegistrationState: called with an invalid subscription '"
+                        + subId + "'");
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION);
             }
-        });
+            phone.getImsRegistrationState(regState -> {
+                try {
+                    consumer.accept((regState == null)
+                            ? RegistrationManager.REGISTRATION_STATE_NOT_REGISTERED : regState);
+                } catch (RemoteException e) {
+                    // Ignore if the remote process is no longer available to call back.
+                    Log.w(LOG_TAG, "getImsMmTelRegistrationState: callback not available.");
+                }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Get the transport type for the IMS service registration state.
+     */
+    @Override
+    public void getImsMmTelRegistrationTransportType(int subId, IIntegerConsumer consumer) {
+        enforceReadPrivilegedPermission("getImsMmTelRegistrationTransportType");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) {
+                Log.w(LOG_TAG, "getImsMmTelRegistrationState: called with an invalid subscription '"
+                        + subId + "'");
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION);
+            }
+            phone.getImsRegistrationTech(regTech -> {
+                // Convert registration tech from ImsRegistrationImplBase -> RegistrationManager
+                int regTechConverted = (regTech == null)
+                        ? ImsRegistrationImplBase.REGISTRATION_TECH_NONE : regTech;
+                regTechConverted = RegistrationManager.IMS_REG_TO_ACCESS_TYPE_MAP.get(
+                        regTechConverted);
+                try {
+                    consumer.accept(regTechConverted);
+                } catch (RemoteException e) {
+                    // Ignore if the remote process is no longer available to call back.
+                    Log.w(LOG_TAG, "getImsMmTelRegistrationState: callback not available.");
+                }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override
     public void registerMmTelCapabilityCallback(int subId, IImsCapabilityCallback c)
             throws RemoteException {
         enforceReadPrivilegedPermission("registerMmTelCapabilityCallback");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
         // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
         final long token = Binder.clearCallingIdentity();
         try {
@@ -2957,22 +3035,23 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void unregisterMmTelCapabilityCallback(int subId, IImsCapabilityCallback c) {
         enforceReadPrivilegedPermission("unregisterMmTelCapabilityCallback");
-
         if (!SubscriptionManager.isValidSubscriptionId(subId)) {
             throw new IllegalArgumentException("Invalid Subscription ID: " + subId);
         }
-        Binder.withCleanCallingIdentity(() -> {
-            try {
-                // TODO: Refactor to remove ImsManager dependence and query through ImsPhone.
-                ImsManager.getInstance(mApp, getSlotIndexOrException(subId))
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            // TODO: Refactor to remove ImsManager dependence and query through ImsPhone.
+            ImsManager.getInstance(mApp, getSlotIndexOrException(subId))
                         .removeCapabilitiesCallbackForSubscription(c, subId);
-            } catch (ImsException e) {
-                Log.i(LOG_TAG, "unregisterMmTelCapabilityCallback: " + subId
-                        + "is inactive, ignoring unregister.");
-                // If the subscription is no longer active, just return, since the callback
-                // will already have been removed internally.
-            }
-        });
+        } catch (ImsException e) {
+            Log.i(LOG_TAG, "unregisterMmTelCapabilityCallback: " + subId
+                     + "is inactive, ignoring unregister.");
+             // If the subscription is no longer active, just return, since the callback
+             // will already have been removed internally.
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override
@@ -3002,6 +3081,44 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = getPhone(subId);
             if (phone == null) return false;
             return phone.isImsCapabilityAvailable(capability, regTech);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Determines if the MmTel feature capability is supported by the carrier configuration for this
+     * subscription.
+     * @param subId The subscription to use to check the configuration.
+     * @param callback The callback that will be used to send the result.
+     * @param capability The MmTelFeature capability that will be used to send the result.
+     * @param transportType The transport type of the MmTelFeature capability.
+     */
+    @Override
+    public void isMmTelCapabilitySupported(int subId, IIntegerConsumer callback, int capability,
+            int transportType) {
+        enforceReadPrivilegedPermission("isMmTelCapabilitySupported");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            int slotId = getSlotIndex(subId);
+            if (slotId <= SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+                Log.w(LOG_TAG, "isMmTelCapabilitySupported: called with an inactive subscription '"
+                        + subId + "'");
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION);
+            }
+            ImsManager.getInstance(mApp, slotId).isSupported(capability,
+                    transportType, aBoolean -> {
+                        try {
+                            callback.accept((aBoolean == null) ? 0 : (aBoolean ? 1 : 0));
+                        } catch (RemoteException e) {
+                            Log.w(LOG_TAG, "isMmTelCapabilitySupported: remote caller is not "
+                                    + "running. Ignore");
+                        }
+                    });
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -4473,6 +4590,40 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
+    /**
+     * Get the MmTelFeature state associated with the requested subscription id.
+     * @param subId The subscription that the MmTelFeature is associated with.
+     * @param callback A callback with an integer containing the
+     * {@link android.telephony.ims.feature.ImsFeature.ImsState} associated with the MmTelFeature.
+     */
+    @Override
+    public void getImsMmTelFeatureState(int subId, IIntegerConsumer callback) {
+        enforceReadPrivilegedPermission("getImsMmTelFeatureState");
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+        final long token = Binder.clearCallingIdentity();
+        try {
+            int slotId = getSlotIndex(subId);
+            if (slotId <= SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+                Log.w(LOG_TAG, "getImsMmTelFeatureState: called with an inactive subscription '"
+                        + subId + "'");
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION);
+            }
+            ImsManager.getInstance(mApp, slotId).getImsServiceState(anInteger -> {
+                try {
+                    callback.accept(anInteger == null ? ImsFeature.STATE_UNAVAILABLE : anInteger);
+                } catch (RemoteException e) {
+                    Log.w(LOG_TAG, "getImsMmTelFeatureState: remote caller is no longer running. "
+                            + "Ignore");
+                }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     public void setImsRegistrationState(boolean registered) {
         enforceModifyPermission();
 
@@ -5577,6 +5728,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
+    public int getSubIdForPhoneAccountHandle(
+            PhoneAccountHandle phoneAccountHandle, String callingPackage) {
+        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(mApp, getDefaultSubscription(),
+                callingPackage, "getSubIdForPhoneAccountHandle")) {
+            throw new SecurityException("Requires READ_PHONE_STATE permission.");
+        }
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return PhoneUtils.getSubIdForPhoneAccountHandle(phoneAccountHandle);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
     public @Nullable PhoneAccountHandle getPhoneAccountHandleForSubscriptionId(int subscriptionId) {
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5665,6 +5831,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             // in and combined with those stale ones. In case this happens again,
             // user can reset all network settings which will clean up this table.
             cleanUpSmsRawTable(getDefaultPhone().getContext());
+            // Clean up IMS settings as well here.
+            int slotId = getSlotIndex(subId);
+            if (slotId > SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
+                ImsManager.getInstance(mApp, slotId).factoryReset();
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -6306,7 +6477,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void onShellCommand(FileDescriptor in, FileDescriptor out, FileDescriptor err,
             String[] args, ShellCallback callback, ResultReceiver resultReceiver)
             throws RemoteException {
-        (new TelephonyShellCommand(this)).exec(this, in, out, err, args, callback, resultReceiver);
+        (new TelephonyShellCommand(this, getDefaultPhone().getContext()))
+                .exec(this, in, out, err, args, callback, resultReceiver);
     }
 
     /**
@@ -6886,75 +7058,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    private void ensureUserRunning(int userId) {
-        if (!mUserManager.isUserRunning(userId)) {
-            throw new IllegalStateException("User " + userId + " does not exist or not running");
-        }
-    }
-
-    /**
-     * Returns a list of SMS apps on a given user.
-     *
-     * Only the shell user (UID 2000 or 0) can call it.
-     * Target user must be running.
-     */
-    @Override
-    public String[] getSmsApps(int userId) {
-        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "getSmsApps");
-        ensureUserRunning(userId);
-
-        final Collection<SmsApplicationData> apps =
-                SmsApplication.getApplicationCollectionAsUser(mApp, userId);
-
-        String[] ret = new String[apps.size()];
-        int i = 0;
-        for (SmsApplicationData app : apps) {
-            ret[i++] = app.mPackageName;
-        }
-        return ret;
-    }
-
-    /**
-     * Returns the default SMS app package name on a given user.
-     *
-     * Only the shell user (UID 2000 or 0) can call it.
-     * Target user must be running.
-     */
-    @Override
-    public String getDefaultSmsApp(int userId) {
-        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "getDefaultSmsApp");
-        ensureUserRunning(userId);
-
-        final ComponentName cn = SmsApplication.getDefaultSmsApplicationAsUser(mApp,
-                /* updateIfNeeded= */ true, userId);
-        return cn == null ? null : cn.getPackageName();
-    }
-
-    /**
-     * Set a package as the default SMS app on a given user.
-     *
-     * Only the shell user (UID 2000 or 0) can call it.
-     * Target user must be running.
-     */
-    @Override
-    public void setDefaultSmsApp(int userId, String packageName) {
-        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setDefaultSmsApp");
-        ensureUserRunning(userId);
-
-        boolean found = false;
-        for (String pkg : getSmsApps(userId)) {
-            if (TextUtils.equals(packageName, pkg)) {
-                found = true;
-                break;
-            }
-        }
-        if (!found) {
-            throw new IllegalArgumentException("Package " + packageName + " is not an SMS app");
-        }
-
-        SmsApplication.setDefaultApplicationAsUser(packageName, mApp, userId);
-    }
-
     @Override
     public Map<Integer, List<EmergencyNumber>> getEmergencyNumberList(
             String callingPackage) {
@@ -7302,10 +7405,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean isDataEnabledForApn(int apnType, int subId, String callingPackage) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, "isDataEnabledForApn")) {
-            throw new SecurityException("Needs READ_PHONE_STATE for isDataEnabledForApn");
-        }
+        enforceReadPrivilegedPermission("Needs READ_PRIVILEGED_PHONE_STATE for "
+                + "isDataEnabledForApn");
 
         // Now that all security checks passes, perform the operation as ourselves.
         final long identity = Binder.clearCallingIdentity();

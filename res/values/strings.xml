@@ -977,7 +977,7 @@
     <!-- FDN settings: error message displayed in a popup (toast) -->
     <string name="pin2_invalid">FDN wasn\'t updated because you typed an incorrect PIN.</string>
     <!-- FDN settings: error message displayed in a popup (toast) -->
-    <string name="fdn_invalid_number">FDN wasn\'t updated because the number exceeds 20 digits.</string>
+    <string name="fdn_invalid_number">FDN wasn\'t updated because the number exceeds <xliff:g id="FDN_NUMBER_LIMIT_LENGTH">%d</xliff:g> digits.</string>
     <!-- FDN settings: error message displayed in a popup (toast), when the entered
          FDN number was inappropriate, OR, PIN2 the user entered was incorrect.
          Because of API restriction, there's no way to determine which is the exact
@@ -1195,6 +1195,9 @@
     <!-- Message displayed over top of the emergency dialer dialpad indicating to the user that
          emergency calling is not currently available. -->
     <string name="dial_emergency_calling_not_available">Emergency calling not available</string>
+
+    <!-- Only handle pin entry when phone user is system-->
+    <string name="pin_puk_system_user_only">Only the owner of the device can enter PIN/PUK codes.</string>
 
     <!-- Text for description of police calling type -->
     <string name="police_type_description">Police</string>

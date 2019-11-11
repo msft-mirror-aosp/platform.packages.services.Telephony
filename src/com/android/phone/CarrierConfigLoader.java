@@ -141,6 +141,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     private static final int EVENT_FETCH_CARRIER_TIMEOUT = 15;
     // SubscriptionInfoUpdater has finished updating the sub for the carrier config.
     private static final int EVENT_SUBSCRIPTION_INFO_UPDATED = 16;
+    // Multi-SIM config changed.
+    private static final int EVENT_MULTI_SIM_CONFIG_CHANGED = 17;
 
     private static final int BIND_TIMEOUT_MILLIS = 30000;
 
@@ -174,27 +176,21 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         public void handleMessage(Message msg) {
             final int phoneId = msg.arg1;
             logWithLocalLog("mHandler: " + msg.what + " phoneId: " + phoneId);
+            if (!SubscriptionManager.isValidPhoneId(phoneId)
+                    && msg.what != EVENT_MULTI_SIM_CONFIG_CHANGED) {
+                return;
+            }
             switch (msg.what) {
                 case EVENT_CLEAR_CONFIG:
                 {
-                    /* Ignore clear configuration request if device is being shutdown. */
-                    Phone phone = PhoneFactory.getPhone(phoneId);
-                    if (phone != null) {
-                        if (phone.isShuttingDown()) {
-                            break;
-                        }
-                    }
-
-                    mConfigFromDefaultApp[phoneId] = null;
-                    mConfigFromCarrierApp[phoneId] = null;
-                    mServiceConnection[phoneId] = null;
-                    broadcastConfigChangedIntent(phoneId, false);
+                    clearConfigForPhone(phoneId, true);
                     break;
                 }
 
                 case EVENT_SYSTEM_UNLOCKED:
                 {
-                    for (int i = 0; i < TelephonyManager.from(mContext).getMaxPhoneCount(); ++i) {
+                    for (int i = 0; i < TelephonyManager.from(mContext).getActiveModemCount();
+                            ++i) {
                         // When user unlock device, we should only try to send broadcast again if we
                         // have sent it before unlock. This will avoid we try to load carrier config
                         // when SIM is still loading when unlock happens.
@@ -211,7 +207,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     // Only update if there are cached config removed to avoid updating config for
                     // unrelated packages.
                     if (clearCachedConfigForPackage(carrierPackageName)) {
-                        int numPhones = TelephonyManager.from(mContext).getMaxPhoneCount();
+                        int numPhones = TelephonyManager.from(mContext).getActiveModemCount();
                         for (int i = 0; i < numPhones; ++i) {
                             updateConfigForPhoneId(i);
                         }
@@ -494,6 +490,9 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                 case EVENT_SUBSCRIPTION_INFO_UPDATED:
                     broadcastConfigChangedIntent(phoneId);
                     break;
+                case EVENT_MULTI_SIM_CONFIG_CHANGED:
+                    onMultiSimConfigChanged();
+                    break;
             }
         }
     }
@@ -523,7 +522,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         pkgFilter.addDataScheme("package");
         context.registerReceiver(mPackageReceiver, pkgFilter);
 
-        int numPhones = TelephonyManager.from(context).getMaxPhoneCount();
+        int numPhones = TelephonyManager.from(context).getSupportedModemCount();
         mConfigFromDefaultApp = new PersistableBundle[numPhones];
         mConfigFromCarrierApp = new PersistableBundle[numPhones];
         mOverrideConfigs = new PersistableBundle[numPhones];
@@ -553,6 +552,23 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         }
     }
 
+    private void clearConfigForPhone(int phoneId, boolean sendBroadcast) {
+        /* Ignore clear configuration request if device is being shutdown. */
+        Phone phone = PhoneFactory.getPhone(phoneId);
+        if (phone != null) {
+            if (phone.isShuttingDown()) {
+                return;
+            }
+        }
+
+        mConfigFromDefaultApp[phoneId] = null;
+        mConfigFromCarrierApp[phoneId] = null;
+        mServiceConnection[phoneId] = null;
+        mHasSentConfigChange[phoneId] = false;
+
+        if (sendBroadcast) broadcastConfigChangedIntent(phoneId, false);
+    }
+
     private void notifySubscriptionInfoUpdater(int phoneId) {
         String configPackagename;
         PersistableBundle configToSend;
@@ -566,6 +582,14 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             configPackagename = mPlatformCarrierConfigPackage;
             configToSend = mConfigFromDefaultApp[phoneId];
         }
+
+        // mOverrideConfigs is for testing. And it will override current configs.
+        PersistableBundle config = mOverrideConfigs[phoneId];
+        if (config != null) {
+            configToSend = new PersistableBundle(configToSend);
+            configToSend.putAll(config);
+        }
+
         mSubscriptionInfoUpdater.updateSubscriptionByCarrierConfigAndNotifyComplete(
                 phoneId, configPackagename, configToSend,
                 mHandler.obtainMessage(EVENT_SUBSCRIPTION_INFO_UPDATED, phoneId, -1));
@@ -908,6 +932,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             mConfigFromCarrierApp[phoneId] = null;
         }
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_DO_FETCH_DEFAULT, phoneId, -1));
+    }
+
+    private void onMultiSimConfigChanged() {
+        for (int i = TelephonyManager.from(mContext).getActiveModemCount();
+                i < mConfigFromDefaultApp.length; i++) {
+            clearConfigForPhone(i, false);
+        }
     }
 
     @Override
