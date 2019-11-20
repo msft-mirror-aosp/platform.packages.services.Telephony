@@ -147,6 +147,7 @@ public class PhoneGlobals extends ContextWrapper {
     CallerInfoCache callerInfoCache;
     NotificationMgr notificationMgr;
     public PhoneInterfaceManager phoneMgr;
+    public ImsRcsController imsRcsController;
     CarrierConfigLoader configLoader;
 
     private Phone phoneInEcm;
@@ -353,6 +354,8 @@ public class PhoneGlobals extends ContextWrapper {
 
             phoneMgr = PhoneInterfaceManager.init(this);
 
+            imsRcsController = ImsRcsController.init(this);
+
             configLoader = CarrierConfigLoader.init(this);
 
             // Create the CallNotifier singleton, which handles
@@ -365,6 +368,10 @@ public class PhoneGlobals extends ContextWrapper {
 
             // register for MMI/USSD
             mCM.registerForMmiComplete(mHandler, MMI_COMPLETE, null);
+
+            // Initialize cell status using current airplane mode.
+            handleAirplaneModeChange(this, Settings.Global.getInt(getContentResolver(),
+                    Settings.Global.AIRPLANE_MODE_ON, AIRPLANE_OFF));
 
             // Register for misc other intent broadcasts.
             IntentFilter intentFilter =

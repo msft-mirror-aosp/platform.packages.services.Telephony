@@ -110,10 +110,6 @@ public class TelephonyConnectionService extends ConnectionService {
             TelephonyConnectionService.this.addTelephonyConference(mImsConference);
         }
         @Override
-        public void removeConnection(Connection connection) {
-            TelephonyConnectionService.this.removeConnection(connection);
-        }
-        @Override
         public void addExistingConnection(PhoneAccountHandle phoneAccountHandle,
                                           Connection connection) {
             TelephonyConnectionService.this
@@ -128,11 +124,6 @@ public class TelephonyConnectionService extends ConnectionService {
         @Override
         public void addConnectionToConferenceController(TelephonyConnection connection) {
             TelephonyConnectionService.this.addConnectionToConferenceController(connection);
-        }
-
-        @Override
-        public void onConferenceMembershipChanged(Connection connection) {
-            mHoldTracker.updateHoldCapability(connection.getPhoneAccountHandle());
         }
     };
 
@@ -329,7 +320,6 @@ public class TelephonyConnectionService extends ConnectionService {
     @Override
     public void onCreate() {
         super.onCreate();
-        Log.initLogging(this);
         setTelephonyManagerProxy(new TelephonyManagerProxyImpl(getApplicationContext()));
         mExpectedComponentName = new ComponentName(this, this.getClass());
         mEmergencyTonePlayer = new EmergencyTonePlayer(this);
@@ -824,7 +814,7 @@ public class TelephonyConnectionService extends ConnectionService {
 
         final TelephonyConnection connection =
                 createConnectionFor(phone, null, true /* isOutgoing */, request.getAccountHandle(),
-                        request.getTelecomCallId(), request.getAddress(), request.getVideoState());
+                        request.getTelecomCallId());
         if (connection == null) {
             return Connection.createFailedConnection(
                     DisconnectCauseUtil.toTelecomDisconnectCause(
@@ -883,15 +873,9 @@ public class TelephonyConnectionService extends ConnectionService {
             return Connection.createCanceledConnection();
         }
 
-        // We should rely on the originalConnection to get the video state.  The request coming
-        // from Telecom does not know the video state of the incoming call.
-        int videoState = originalConnection != null ? originalConnection.getVideoState() :
-                VideoProfile.STATE_AUDIO_ONLY;
-
         TelephonyConnection connection =
                 createConnectionFor(phone, originalConnection, false /* isOutgoing */,
-                        request.getAccountHandle(), request.getTelecomCallId(),
-                        request.getAddress(), videoState);
+                        request.getAccountHandle(), request.getTelecomCallId());
         handleIncomingRtt(request, originalConnection);
         if (connection == null) {
             return Connection.createCanceledConnection();
@@ -945,6 +929,61 @@ public class TelephonyConnectionService extends ConnectionService {
             TelephonyConnection telephonyConnection = (TelephonyConnection) connection;
             maybeSendInternationalCallEvent(telephonyConnection);
         }
+    }
+
+    @Override
+    public void onCreateIncomingConnectionFailed(PhoneAccountHandle connectionManagerPhoneAccount,
+            ConnectionRequest request) {
+        Log.i(this, "onCreateIncomingConnectionFailed, request: " + request);
+        // If there is an incoming emergency CDMA Call (while the phone is in ECBM w/ No SIM),
+        // make sure the PhoneAccount lookup retrieves the default Emergency Phone.
+        PhoneAccountHandle accountHandle = request.getAccountHandle();
+        boolean isEmergency = false;
+        if (accountHandle != null && PhoneUtils.EMERGENCY_ACCOUNT_HANDLE_ID.equals(
+                accountHandle.getId())) {
+            Log.w(this, "onCreateIncomingConnectionFailed:Emergency call failed... ");
+            isEmergency = true;
+        }
+        Phone phone = getPhoneForAccount(accountHandle, isEmergency,
+                /* Note: when not an emergency, handle can be null for unknown callers */
+                request.getAddress() == null ? null : request.getAddress().getSchemeSpecificPart());
+        if (phone == null) {
+            Log.w(this, "onCreateIncomingConnectionFailed: can not find corresponding phone.");
+            return;
+        }
+
+        Call call = phone.getRingingCall();
+        if (!call.getState().isRinging()) {
+            Log.w(this, "onCreateIncomingConnectionFailed, no ringing call found for failed call");
+            return;
+        }
+
+        com.android.internal.telephony.Connection originalConnection =
+                call.getState() == Call.State.WAITING
+                        ? call.getLatestConnection() : call.getEarliestConnection();
+        TelephonyConnection knownConnection =
+                getConnectionForOriginalConnection(originalConnection);
+        if (knownConnection != null) {
+            Log.w(this, "onCreateIncomingConnectionFailed, original connection already registered."
+                    + " Hanging it up.");
+            knownConnection.onAbort();
+            return;
+        }
+
+        TelephonyConnection connection =
+                createConnectionFor(phone, originalConnection, false /* isOutgoing */,
+                        request.getAccountHandle(), request.getTelecomCallId());
+        if (connection == null) {
+            Log.w(this, "onCreateIncomingConnectionFailed, TelephonyConnection created as null, "
+                    + "ignoring.");
+            return;
+        }
+
+        // We have to do all of this work because in some cases, hanging up the call maps to
+        // different underlying signaling (CDMA), which is already encapsulated in
+        // TelephonyConnection.
+        connection.onReject();
+        connection.close();
     }
 
     @Override
@@ -1046,8 +1085,8 @@ public class TelephonyConnectionService extends ConnectionService {
         TelephonyConnection connection =
                 createConnectionFor(phone, unknownConnection,
                         !unknownConnection.isIncoming() /* isOutgoing */,
-                        request.getAccountHandle(), request.getTelecomCallId(),
-                        request.getAddress(), videoState);
+                        request.getAccountHandle(), request.getTelecomCallId()
+                );
 
         if (connection == null) {
             return Connection.createCanceledConnection();
@@ -1250,6 +1289,19 @@ public class TelephonyConnectionService extends ConnectionService {
                         phone.getEmergencyNumberTracker().getEmergencyNumber(number);
                 if (emergencyNumber != null) {
                     phone.notifyOutgoingEmergencyCall(emergencyNumber);
+                    // If we do not support holding ongoing calls for an outgoing emergency call,
+                    // disconnect the ongoing calls.
+                    if (!shouldHoldForEmergencyCall(phone) && !getAllConnections().isEmpty()) {
+                        for (Connection c : getAllConnections()) {
+                            if (!c.equals(connection)
+                                    && c.getState() != Connection.STATE_DISCONNECTED
+                                    && c instanceof TelephonyConnection) {
+                                ((TelephonyConnection) c).hangup(
+                                        android.telephony.DisconnectCause
+                                                .OUTGOING_EMERGENCY_CALL_PLACED);
+                            }
+                        }
+                    }
                 }
                 originalConnection = phone.dial(number, new ImsPhone.ImsDialArgs.Builder()
                         .setVideoState(videoState)
@@ -1316,14 +1368,24 @@ public class TelephonyConnectionService extends ConnectionService {
         }
     }
 
+    private boolean shouldHoldForEmergencyCall(Phone phone) {
+        CarrierConfigManager cfgManager = (CarrierConfigManager)
+                phone.getContext().getSystemService(Context.CARRIER_CONFIG_SERVICE);
+        if (cfgManager == null) {
+            // For some reason CarrierConfigManager is unavailable, return default
+            Log.w(this, "shouldHoldForEmergencyCall: couldn't get CarrierConfigManager");
+            return true;
+        }
+        return cfgManager.getConfigForSubId(phone.getSubId()).getBoolean(
+                CarrierConfigManager.KEY_ALLOW_HOLD_CALL_DURING_EMERGENCY_BOOL, true);
+    }
+
     private TelephonyConnection createConnectionFor(
             Phone phone,
             com.android.internal.telephony.Connection originalConnection,
             boolean isOutgoing,
             PhoneAccountHandle phoneAccountHandle,
-            String telecomCallId,
-            Uri address,
-            int videoState) {
+            String telecomCallId) {
         TelephonyConnection returnConnection = null;
         int phoneType = phone.getPhoneType();
         if (phoneType == TelephonyManager.PHONE_TYPE_GSM) {
@@ -1352,15 +1414,20 @@ public class TelephonyConnectionService extends ConnectionService {
 
     private boolean isOriginalConnectionKnown(
             com.android.internal.telephony.Connection originalConnection) {
+        return (getConnectionForOriginalConnection(originalConnection) != null);
+    }
+
+    private TelephonyConnection getConnectionForOriginalConnection(
+            com.android.internal.telephony.Connection originalConnection) {
         for (Connection connection : getAllConnections()) {
             if (connection instanceof TelephonyConnection) {
                 TelephonyConnection telephonyConnection = (TelephonyConnection) connection;
                 if (telephonyConnection.getOriginalConnection() == originalConnection) {
-                    return true;
+                    return telephonyConnection;
                 }
             }
         }
-        return false;
+        return null;
     }
 
     /**
@@ -1784,7 +1851,8 @@ public class TelephonyConnectionService extends ConnectionService {
 
                     // If the CDMA conference has not been merged, add-call will not work, so fail
                     // this request to add a call.
-                    if (cdmaConf.can(Connection.CAPABILITY_MERGE_CONFERENCE)) {
+                    if ((cdmaConf.getConnectionCapabilities()
+                            & Connection.CAPABILITY_MERGE_CONFERENCE) != 0) {
                         return Connection.createFailedConnection(new DisconnectCause(
                                     DisconnectCause.RESTRICTED,
                                     null,
@@ -1861,6 +1929,6 @@ public class TelephonyConnectionService extends ConnectionService {
      */
     public void addTelephonyConference(@NonNull TelephonyConferenceBase conference) {
         addConference(conference);
-        conference.addListener(mTelephonyConferenceListener);
+        conference.addTelephonyConferenceListener(mTelephonyConferenceListener);
     }
 }
