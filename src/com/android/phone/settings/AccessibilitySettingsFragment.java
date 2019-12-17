@@ -166,17 +166,6 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             int rttMode = mButtonRtt.isChecked() ? 1 : 0;
             Settings.Secure.putInt(mContext.getContentResolver(), Settings.Secure.RTT_CALLING_MODE,
                     rttMode);
-            // Update RTT config with IMS Manager if the always-on carrier config isn't set to true.
-            CarrierConfigManager configManager = (CarrierConfigManager) mContext.getSystemService(
-                            Context.CARRIER_CONFIG_SERVICE);
-            for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
-                if (!configManager.getConfigForSubId(subId).getBoolean(
-                        CarrierConfigManager.KEY_IGNORE_RTT_MODE_SETTING_BOOL, false)) {
-                    int phoneId = SubscriptionController.getInstance().getPhoneId(subId);
-                    ImsManager imsManager = ImsManager.getInstance(getContext(), phoneId);
-                    imsManager.setRttEnabled(mButtonRtt.isChecked());
-                }
-            }
             return true;
         }
 
@@ -206,20 +195,11 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
     }
 
     private boolean shouldShowRttSetting() {
-        CarrierConfigManager configManager =
-                (CarrierConfigManager) mContext.getSystemService(Context.CARRIER_CONFIG_SERVICE);
         // Go through all the subs -- if we want to display the RTT setting for any of them, do
         // display it.
         for (int subId : SubscriptionController.getInstance().getActiveSubIdList(true)) {
-            // In order to display the setting, we want:
-            // 1. The subscription supports RTT
-            // 2. The subscription isn't configured by the carrier to have the setting always-on
-            //    (see the documentation for the carrier config key)
             if (PhoneGlobals.getInstance().phoneMgr.isRttSupported(subId)) {
-                if (!configManager.getConfigForSubId(subId).getBoolean(
-                        CarrierConfigManager.KEY_IGNORE_RTT_MODE_SETTING_BOOL, false)) {
-                    return true;
-                }
+                return true;
             }
         }
         return false;

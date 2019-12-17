@@ -18,7 +18,6 @@ package com.android.phone;
 
 import android.content.Context;
 import android.os.Binder;
-import android.os.Build;
 import android.os.PersistableBundle;
 import android.os.Process;
 import android.os.RemoteException;
@@ -31,6 +30,7 @@ import android.util.Log;
 
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.emergency.EmergencyNumberTracker;
+import com.android.internal.telephony.util.TelephonyUtils;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -55,6 +55,9 @@ public class TelephonyShellCommand extends ShellCommand {
     private static final String NUMBER_VERIFICATION_SUBCOMMAND = "numverify";
     private static final String EMERGENCY_NUMBER_TEST_MODE = "emergency-number-test-mode";
     private static final String CARRIER_CONFIG_SUBCOMMAND = "cc";
+    private static final String DATA_TEST_MODE = "data";
+    private static final String DATA_ENABLE = "enable";
+    private static final String DATA_DISABLE = "disable";
 
     private static final String IMS_SET_CARRIER_SERVICE = "set-ims-service";
     private static final String IMS_GET_CARRIER_SERVICE = "get-ims-service";
@@ -81,6 +84,11 @@ public class TelephonyShellCommand extends ShellCommand {
     private enum CcType {
         BOOLEAN, DOUBLE, DOUBLE_ARRAY, INT, INT_ARRAY, LONG, LONG_ARRAY, STRING,
                 STRING_ARRAY, UNKNOWN
+    }
+
+    private class CcOptionParseResult {
+        public int mSubId;
+        public boolean mPersistent;
     }
 
     // Maps carrier config keys to type. It is possible to infer the type for most carrier config
@@ -141,6 +149,8 @@ public class TelephonyShellCommand extends ShellCommand {
             case CARRIER_CONFIG_SUBCOMMAND: {
                 return handleCcCommand();
             }
+            case DATA_TEST_MODE:
+                return handleDataTestModeCommand();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -157,10 +167,13 @@ public class TelephonyShellCommand extends ShellCommand {
         pw.println("    IMS Commands.");
         pw.println("  emergency-number-test-mode");
         pw.println("    Emergency Number Test Mode Commands.");
+        pw.println("  data");
+        pw.println("    Data Test Mode Commands.");
         pw.println("  cc");
         pw.println("    Carrier Config Commands.");
         onHelpIms();
         onHelpEmergencyNumber();
+        onHelpDataTestMode();
         onHelpCc();
     }
 
@@ -202,6 +215,13 @@ public class TelephonyShellCommand extends ShellCommand {
         pw.println("    1 if the call would have been intercepted, 0 otherwise.");
     }
 
+    private void onHelpDataTestMode() {
+        PrintWriter pw = getOutPrintWriter();
+        pw.println("Mobile Data Test Mode Commands:");
+        pw.println("  data enable: enable mobile data connectivity");
+        pw.println("  data disable: disable mobile data connectivity");
+    }
+
     private void onHelpEmergencyNumber() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("Emergency Number Test Mode Commands:");
@@ -226,11 +246,12 @@ public class TelephonyShellCommand extends ShellCommand {
         pw.println("          is specified, it will choose the default voice SIM slot.");
         pw.println("    KEY: The key to the carrier config value to print. All values are printed");
         pw.println("         if KEY is not specified.");
-        pw.println("  cc set-value [-s SLOT_ID] KEY [NEW_VALUE]");
+        pw.println("  cc set-value [-s SLOT_ID] [-p] KEY [NEW_VALUE]");
         pw.println("    Set carrier config KEY to NEW_VALUE.");
         pw.println("    Options are:");
         pw.println("      -s: The SIM slot ID to set carrier config value for. If no option");
         pw.println("          is specified, it will choose the default voice SIM slot.");
+        pw.println("      -p: Value will be stored persistent");
         pw.println("    NEW_VALUE specifies the new value for carrier config KEY. Null will be");
         pw.println("      used if NEW_VALUE is not set. Strings should be encapsulated with");
         pw.println("      quotation marks. Spaces needs to be escaped. Example: \"Hello\\ World\"");
@@ -269,6 +290,41 @@ public class TelephonyShellCommand extends ShellCommand {
         }
 
         return -1;
+    }
+
+    private int handleDataTestModeCommand() {
+        PrintWriter errPw = getErrPrintWriter();
+        String arg = getNextArgRequired();
+        if (arg == null) {
+            onHelpDataTestMode();
+            return 0;
+        }
+        switch (arg) {
+            case DATA_ENABLE: {
+                try {
+                    mInterface.enableDataConnectivity();
+                } catch (RemoteException ex) {
+                    Log.w(LOG_TAG, "data enable, error " + ex.getMessage());
+                    errPw.println("Exception: " + ex.getMessage());
+                    return -1;
+                }
+                break;
+            }
+            case DATA_DISABLE: {
+                try {
+                    mInterface.disableDataConnectivity();
+                } catch (RemoteException ex) {
+                    Log.w(LOG_TAG, "data disable, error " + ex.getMessage());
+                    errPw.println("Exception: " + ex.getMessage());
+                    return -1;
+                }
+                break;
+            }
+            default:
+                onHelpDataTestMode();
+                break;
+        }
+        return 0;
     }
 
     private int handleEmergencyNumberTestModeCommand() {
@@ -568,32 +624,47 @@ public class TelephonyShellCommand extends ShellCommand {
         return slotId;
     }
 
-    // Get the subId from argument SLOT_ID if it was provided. Otherwise use the default
-    // subscription.
-    private int getSubIdFromArgumentSlotId(String tag) {
+    // Parse options related to Carrier Config Commands.
+    private CcOptionParseResult parseCcOptions(String tag, boolean allowOptionPersistent) {
         PrintWriter errPw = getErrPrintWriter();
-        int subId = SubscriptionManager.getDefaultSubscriptionId();
-        String opt;
+        CcOptionParseResult result = new CcOptionParseResult();
+        result.mSubId = SubscriptionManager.getDefaultSubscriptionId();
+        result.mPersistent = false;
 
+        String opt;
         while ((opt = getNextOption()) != null) {
             switch (opt) {
                 case "-s": {
                     try {
-                        subId = slotStringToSubId(tag, getNextArgRequired());
+                        result.mSubId = slotStringToSubId(tag, getNextArgRequired());
+                        if (!SubscriptionManager.isValidSubscriptionId(result.mSubId)) {
+                            errPw.println(tag + "No valid subscription found.");
+                            return null;
+                        }
+
                     } catch (IllegalArgumentException e) {
                         // Missing slot id
                         errPw.println(tag + "SLOT_ID expected after -s.");
-                        return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+                        return null;
+                    }
+                    break;
+                }
+                case "-p": {
+                    if (allowOptionPersistent) {
+                        result.mPersistent = true;
+                    } else {
+                        errPw.println(tag + "Unexpected option " + opt);
+                        return null;
                     }
                     break;
                 }
                 default: {
                     errPw.println(tag + "Unknown option " + opt);
-                    return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+                    return null;
                 }
             }
         }
-        return subId;
+        return result;
     }
 
     private int slotStringToSubId(String tag, String slotString) {
@@ -623,7 +694,7 @@ public class TelephonyShellCommand extends ShellCommand {
     private int handleCcCommand() {
         // Verify that the user is allowed to run the command. Only allowed in rooted device in a
         // non user build.
-        if (Binder.getCallingUid() != Process.ROOT_UID || Build.IS_USER) {
+        if (Binder.getCallingUid() != Process.ROOT_UID || TelephonyUtils.IS_USER) {
             getErrPrintWriter().println("cc: Permission denied.");
             return -1;
         }
@@ -657,17 +728,16 @@ public class TelephonyShellCommand extends ShellCommand {
         String tag = CARRIER_CONFIG_SUBCOMMAND + " " + CC_GET_VALUE + ": ";
         String key = null;
 
-        // Get the subId from the SLOT_ID-argument.
-        int subId = getSubIdFromArgumentSlotId(tag);
-        if (!SubscriptionManager.isValidSubscriptionId(subId)) {
-            errPw.println(tag + "No valid subscription found.");
+        // Parse all options
+        CcOptionParseResult options =  parseCcOptions(tag, false);
+        if (options == null) {
             return -1;
         }
 
         // Get bundle containing all carrier configuration values.
-        PersistableBundle bundle = mCarrierConfigManager.getConfigForSubId(subId);
+        PersistableBundle bundle = mCarrierConfigManager.getConfigForSubId(options.mSubId);
         if (bundle == null) {
-            errPw.println(tag + "No carrier config values found for subId " + subId + ".");
+            errPw.println(tag + "No carrier config values found for subId " + options.mSubId + ".");
             return -1;
         }
 
@@ -698,17 +768,16 @@ public class TelephonyShellCommand extends ShellCommand {
         PrintWriter errPw = getErrPrintWriter();
         String tag = CARRIER_CONFIG_SUBCOMMAND + " " + CC_SET_VALUE + ": ";
 
-        // Get the subId from the SLOT_ID-argument.
-        int subId = getSubIdFromArgumentSlotId(tag);
-        if (!SubscriptionManager.isValidSubscriptionId(subId)) {
-            errPw.println(tag + "No valid subscription found.");
+        // Parse all options
+        CcOptionParseResult options =  parseCcOptions(tag, true);
+        if (options == null) {
             return -1;
         }
 
         // Get bundle containing all current carrier configuration values.
-        PersistableBundle originalValues = mCarrierConfigManager.getConfigForSubId(subId);
+        PersistableBundle originalValues = mCarrierConfigManager.getConfigForSubId(options.mSubId);
         if (originalValues == null) {
-            errPw.println(tag + "No carrier config values found for subId " + subId + ".");
+            errPw.println(tag + "No carrier config values found for subId " + options.mSubId + ".");
             return -1;
         }
 
@@ -745,12 +814,12 @@ public class TelephonyShellCommand extends ShellCommand {
         }
 
         // Override the value
-        mCarrierConfigManager.overrideConfig(subId, overrideBundle);
+        mCarrierConfigManager.overrideConfig(options.mSubId, overrideBundle, options.mPersistent);
 
         // Find bundle containing all new carrier configuration values after the override.
-        PersistableBundle newValues = mCarrierConfigManager.getConfigForSubId(subId);
+        PersistableBundle newValues = mCarrierConfigManager.getConfigForSubId(options.mSubId);
         if (newValues == null) {
-            errPw.println(tag + "No carrier config values found for subId " + subId + ".");
+            errPw.println(tag + "No carrier config values found for subId " + options.mSubId + ".");
             return -1;
         }
 
@@ -768,15 +837,14 @@ public class TelephonyShellCommand extends ShellCommand {
         PrintWriter errPw = getErrPrintWriter();
         String tag = CARRIER_CONFIG_SUBCOMMAND + " " + CC_CLEAR_VALUES + ": ";
 
-        // Get the subId from the SLOT_ID-argument.
-        int subId = getSubIdFromArgumentSlotId(tag);
-        if (!SubscriptionManager.isValidSubscriptionId(subId)) {
-            errPw.println(tag + "No valid subscription found.");
+        // Parse all options
+        CcOptionParseResult options =  parseCcOptions(tag, false);
+        if (options == null) {
             return -1;
         }
 
         // Clear all values that has previously been set.
-        mCarrierConfigManager.overrideConfig(subId, null);
+        mCarrierConfigManager.overrideConfig(options.mSubId, null, true);
         getOutPrintWriter()
                 .println("All previously set carrier config override values has been cleared");
         return 0;

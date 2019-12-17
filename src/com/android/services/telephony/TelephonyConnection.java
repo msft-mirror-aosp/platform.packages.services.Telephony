@@ -19,6 +19,7 @@ package com.android.services.telephony;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.AsyncResult;
@@ -36,18 +37,22 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
+import android.telephony.Annotation.RilRadioTechnology;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
 import android.telephony.Rlog;
 import android.telephony.ServiceState;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsCallProfile;
+import android.telephony.ims.ImsStreamMediaProfile;
 import android.text.TextUtils;
 import android.util.Pair;
 
 import com.android.ims.ImsCall;
 import com.android.ims.internal.ConferenceParticipant;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallFailCause;
@@ -136,7 +141,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                         if (connection != null &&
                             ((connection.getAddress() != null &&
                             mOriginalConnection.getAddress() != null &&
-                            mOriginalConnection.getAddress().contains(connection.getAddress())) ||
+                            mOriginalConnection.getAddress().equals(connection.getAddress())) ||
                             connection.getState() == mOriginalConnection.getStateBeforeHandover())) {
                             Log.d(TelephonyConnection.this,
                                     "SettingOriginalConnection " + mOriginalConnection.toString()
@@ -404,10 +409,24 @@ abstract class TelephonyConnection extends Connection implements Holdable {
             }
         }
         if (messageId != -1 && getPhone() != null && getPhone().getContext() != null) {
-            return getPhone().getContext().getText(messageId);
+            return getResourceText(messageId);
         } else {
             return null;
         }
+    }
+
+    @VisibleForTesting
+    public CharSequence getResourceText(int id) {
+        Resources resources = SubscriptionManager.getResourcesForSubId(getPhone().getContext(),
+                getPhone().getSubId());
+        return resources.getText(id);
+    }
+
+    @VisibleForTesting
+    public String getResourceString(int id) {
+        Resources resources = SubscriptionManager.getResourcesForSubId(getPhone().getContext(),
+                getPhone().getSubId());
+        return resources.getString(id);
     }
 
     /**
@@ -502,7 +521,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
          * @param vrat the RIL Voice Radio Technology used for current connection.
          */
         @Override
-        public void onCallRadioTechChanged(@ServiceState.RilRadioTechnology int vrat) {
+        public void onCallRadioTechChanged(@RilRadioTechnology int vrat) {
             mHandler.obtainMessage(MSG_SET_CALL_RADIO_TECH, vrat).sendToTarget();
         }
 
@@ -645,6 +664,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         @Override
         public void onRttTerminated() {
             updateConnectionProperties();
+            refreshConferenceSupported();
             sendRttSessionRemotelyTerminated();
         }
 
@@ -1338,6 +1358,75 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
     }
 
+    private void refreshCodecType() {
+        Bundle newExtras = getExtras();
+        if (newExtras == null) {
+            newExtras = new Bundle();
+        }
+        int newCodecType;
+        if (isImsConnection()) {
+            newCodecType = transformCodec(getOriginalConnection().getAudioCodec());
+        } else {
+            // For SRVCC, report AUDIO_CODEC_NONE.
+            newCodecType = Connection.AUDIO_CODEC_NONE;
+        }
+        int oldCodecType = newExtras.getInt(Connection.EXTRA_AUDIO_CODEC,
+                Connection.AUDIO_CODEC_NONE);
+        if (newCodecType != oldCodecType) {
+            newExtras.putInt(Connection.EXTRA_AUDIO_CODEC, newCodecType);
+            putTelephonyExtras(newExtras);
+        }
+    }
+
+    private int transformCodec(int codec) {
+        switch (codec) {
+            case ImsStreamMediaProfile.AUDIO_QUALITY_NONE:
+                return Connection.AUDIO_CODEC_NONE;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_AMR:
+                return Connection.AUDIO_CODEC_AMR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_AMR_WB:
+                return Connection.AUDIO_CODEC_AMR_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_QCELP13K:
+                return Connection.AUDIO_CODEC_QCELP13K;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC:
+                return Connection.AUDIO_CODEC_EVRC;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_B:
+                return Connection.AUDIO_CODEC_EVRC_B;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_WB:
+                return Connection.AUDIO_CODEC_EVRC_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_NW:
+                return Connection.AUDIO_CODEC_EVRC_NW;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_EFR:
+                return Connection.AUDIO_CODEC_GSM_EFR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_FR:
+                return Connection.AUDIO_CODEC_GSM_FR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_HR:
+                return Connection.AUDIO_CODEC_GSM_HR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711U:
+                return Connection.AUDIO_CODEC_G711U;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G723:
+                return Connection.AUDIO_CODEC_G723;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711A:
+                return Connection.AUDIO_CODEC_G711A;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G722:
+                return Connection.AUDIO_CODEC_G722;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711AB:
+                return Connection.AUDIO_CODEC_G711AB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G729:
+                return Connection.AUDIO_CODEC_G729;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_NB:
+                return Connection.AUDIO_CODEC_EVS_NB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_WB:
+                return Connection.AUDIO_CODEC_EVS_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_SWB:
+                return Connection.AUDIO_CODEC_EVS_SWB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_FB:
+                return Connection.AUDIO_CODEC_EVS_FB;
+            default:
+                return Connection.AUDIO_CODEC_NONE;
+        }
+    }
+
     private boolean shouldSetDisableAddCallExtra() {
         if (mOriginalConnection == null) {
             return false;
@@ -1416,7 +1505,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 b.getBoolean(CarrierConfigManager.KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL);
     }
 
-    private PersistableBundle getCarrierConfig() {
+    @VisibleForTesting
+    public PersistableBundle getCarrierConfig() {
         Phone phone = getPhone();
         if (phone == null) {
             return null;
@@ -1772,6 +1862,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         updateAddress();
         updateMultiparty();
         refreshDisableAddCall();
+        refreshCodecType();
     }
 
     /**
@@ -1847,6 +1938,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         Log.v(this, "close");
         clearOriginalConnection();
         destroy();
+        if (mTelephonyConnectionService != null) {
+            removeTelephonyConnectionListener(
+                    mTelephonyConnectionService.getTelephonyConnectionListener());
+        }
         notifyDestroyed();
     }
 
@@ -2199,7 +2294,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
             Context context = getPhone().getContext();
             setTelephonyStatusHints(new StatusHints(
-                    context.getString(labelId),
+                    getResourceString(labelId),
                     Icon.createWithResource(
                             context, R.drawable.ic_signal_wifi_4_bar_24dp),
                     null /* extras */));
@@ -2282,7 +2377,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * 3. If call is a video call, carrier supports video conference calls.
      * 4. If call is a wifi call and VoWIFI is disabled and carrier supports merging these calls.
      */
-    private void refreshConferenceSupported() {
+    @VisibleForTesting
+    void refreshConferenceSupported() {
         boolean isVideoCall = VideoProfile.isVideo(getVideoState());
         Phone phone = getPhone();
         if (phone == null) {
@@ -2579,7 +2675,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * @param vrat the RIL Voice Radio Technology used for current connection,
      *             see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
      */
-    public final void setCallRadioTech(@ServiceState.RilRadioTechnology int vrat) {
+    public final void setCallRadioTech(@RilRadioTechnology int vrat) {
         Bundle extras = getExtras();
         if (extras == null) {
             extras = new Bundle();
@@ -2592,8 +2688,11 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         // For IMS PS call conference call, it can be updated via its host connection
         // {@link #Listener.onExtrasChanged} event.
         if (getConference() != null) {
-            getConference().putExtra(TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+            Bundle newExtras = new Bundle();
+            newExtras.putInt(
+                    TelecomManager.EXTRA_CALL_NETWORK_TYPE,
                     ServiceState.rilRadioTechnologyToNetworkType(vrat));
+            getConference().putExtras(newExtras);
         }
     }
 
@@ -2605,7 +2704,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * @return the RIL voice radio technology used for current connection,
      *         see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
      */
-    public final @ServiceState.RilRadioTechnology int getCallRadioTech() {
+    public final @RilRadioTechnology int getCallRadioTech() {
         int voiceNetworkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
         Bundle extras = getExtras();
         if (extras != null) {

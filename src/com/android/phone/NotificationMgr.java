@@ -375,12 +375,11 @@ public class NotificationMgr {
 
             final Notification notification = builder.build();
             List<UserInfo> users = mUserManager.getUsers(true);
-            for (int i = 0; i < users.size(); i++) {
-                final UserInfo user = users.get(i);
+            for (UserInfo user : users) {
                 final UserHandle userHandle = user.getUserHandle();
                 if (!hasUserRestriction(
                         UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !user.isManagedProfile()) {
+                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, vmCount, vmNumber,
                             pendingIntent, isSettingsIntent, userHandle, isRefresh)) {
                         notifyAsUser(
@@ -393,12 +392,11 @@ public class NotificationMgr {
             }
         } else {
             List<UserInfo> users = mUserManager.getUsers(true /* excludeDying */);
-            for (int i = 0; i < users.size(); i++) {
-                final UserInfo user = users.get(i);
+            for (UserInfo user : users) {
                 final UserHandle userHandle = user.getUserHandle();
                 if (!hasUserRestriction(
                         UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !user.isManagedProfile()) {
+                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, 0, null, null,
                             false, userHandle, isRefresh)) {
                         cancelAsUser(
@@ -559,7 +557,7 @@ public class NotificationMgr {
         } else {
             List<UserInfo> users = mUserManager.getUsers(true);
             for (UserInfo user : users) {
-                if (user.isManagedProfile()) {
+                if (mUserManager.isManagedProfile(user.getUserHandle().getIdentifier())) {
                     continue;
                 }
                 UserHandle userHandle = user.getUserHandle();
@@ -668,15 +666,22 @@ public class NotificationMgr {
         // Navigate to "Network Selection Settings" which list all subscriptions.
         PendingIntent contentIntent = PendingIntent.getActivity(mContext, 0,
                 new Intent(ACTION_MOBILE_NETWORK_LIST), 0);
-        String line1Num = mTelephonyManager.getLine1Number(subId);
-
+        // Display phone number from the other sub
+        String line1Num = null;
+        SubscriptionManager subMgr = (SubscriptionManager) mContext.getSystemService(
+            Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        List<SubscriptionInfo> subList = subMgr.getActiveSubscriptionInfoList(false);
+        for (SubscriptionInfo sub : subList) {
+            if (sub.getSubscriptionId() != subId) {
+                line1Num = mTelephonyManager.getLine1Number(sub.getSubscriptionId());
+            }
+        }
         final CharSequence contentText = TextUtils.isEmpty(line1Num) ?
             String.format(mContext.getText(
-                R.string.limited_sim_function_notification_message).toString(),
-                carrierName, line1Num) :
+                R.string.limited_sim_function_notification_message).toString(), carrierName) :
             String.format(mContext.getText(
                 R.string.limited_sim_function_with_phone_num_notification_message).toString(),
-                carrierName);
+                carrierName, line1Num);
         final Notification.Builder builder = new Notification.Builder(mContext)
                 .setSmallIcon(R.drawable.ic_sim_card)
                 .setContentTitle(mContext.getText(
@@ -684,7 +689,7 @@ public class NotificationMgr {
                 .setContentText(contentText)
                 .setOnlyAlertOnce(true)
                 .setOngoing(true)
-                .setChannel(NotificationChannelController.CHANNEL_ID_SIM_HIGH_PRIORITY)
+                .setChannelId(NotificationChannelController.CHANNEL_ID_SIM_HIGH_PRIORITY)
                 .setContentIntent(contentIntent);
         final Notification notification = new Notification.BigTextStyle(builder).bigText(
                 contentText).build();
