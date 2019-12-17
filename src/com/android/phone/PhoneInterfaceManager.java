@@ -57,6 +57,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
 import android.preference.PreferenceManager;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Telephony;
 import android.telecom.PhoneAccount;
@@ -262,6 +263,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int EVENT_GET_MODEM_STATUS_DONE = 71;
     private static final int CMD_SET_FORBIDDEN_PLMNS = 72;
     private static final int EVENT_SET_FORBIDDEN_PLMNS_DONE = 73;
+    private static final int CMD_ERASE_MODEM_CONFIG = 74;
+    private static final int EVENT_ERASE_MODEM_CONFIG_DONE = 75;
 
     // Parameters of select command.
     private static final int SELECT_COMMAND = 0xA4;
@@ -300,6 +303,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private static final int TYPE_ALLOCATION_CODE_LENGTH = 8;
     private static final int MANUFACTURER_CODE_LENGTH = 8;
+
+    /**
+     * Experiment flag to enable erase modem config on reset network, default value is false
+     */
+    public static final String RESET_NETWORK_ERASE_MODEM_CONFIG_ENABLED =
+            "reset_network_erase_modem_config_enabled";
 
     /**
      * A request object to use for transmitting data to an ICC.
@@ -1215,6 +1224,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setForbiddenPlmns(onCompleted, fplmns);
                     }
                     break;
+                case CMD_ERASE_MODEM_CONFIG:
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_ERASE_MODEM_CONFIG_DONE, request);
+                    defaultPhone.eraseModemConfig(onCompleted);
+                    break;
+                case EVENT_ERASE_MODEM_CONFIG_DONE:
+                    handleNullReturnEvent(msg, "eraseModemConfig");
+                    break;
                 default:
                     Log.w(LOG_TAG, "MainThreadHandler: unexpected message code: " + msg.what);
                     break;
@@ -1421,6 +1438,20 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     // returns phone associated with the subId.
     private Phone getPhone(int subId) {
         return PhoneFactory.getPhone(mSubscriptionController.getPhoneId(subId));
+    }
+
+    private void sendEraseModemConfig(Phone phone) {
+        if (phone != null) {
+            TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
+                  mApp, phone.getSubId(), "eraseModemConfig");
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                Boolean success = (Boolean) sendRequest(CMD_ERASE_MODEM_CONFIG, null);
+                if (DBG) log("eraseModemConfig:" + ' ' + (success ? "ok" : "fail"));
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
     }
 
     public void dial(String number) {
@@ -2001,7 +2032,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public String getNetworkCountryIsoForPhone(int phoneId) {
+    public String getNetworkCountryIsoForPhone(int phoneId, String callingPackage) {
+        if (!TextUtils.isEmpty(callingPackage)) {
+            final int subId = mSubscriptionController.getSubIdUsingPhoneId(phoneId);
+            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
+                    mApp, subId, callingPackage, "getNetworkCountryIsoForPhone")) {
+                return "";
+            }
+        }
+
         // Reporting the correct network country is ambiguous when IWLAN could conflict with
         // registered cell info, so return a NULL country instead.
         final long identity = Binder.clearCallingIdentity();
@@ -2398,6 +2437,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mApp.enforceCallingOrSelfPermission(android.Manifest.permission.MODIFY_PHONE_STATE, null);
     }
 
+    private void enforceActiveEmergencySessionPermission() {
+        mApp.enforceCallingOrSelfPermission(
+                android.Manifest.permission.READ_ACTIVE_EMERGENCY_SESSION, null);
+    }
+
     /**
      * Make sure the caller has the CALL_PHONE permission.
      *
@@ -2407,9 +2451,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mApp.enforceCallingOrSelfPermission(android.Manifest.permission.CALL_PHONE, null);
     }
 
-    private void enforceConnectivityInternalPermission() {
-        mApp.enforceCallingOrSelfPermission(android.Manifest.permission.CONNECTIVITY_INTERNAL,
-                "ConnectivityService");
+    private void enforceSettingsPermission() {
+        mApp.enforceCallingOrSelfPermission(android.Manifest.permission.NETWORK_SETTINGS, null);
     }
 
     private String createTelUrl(String number) {
@@ -4585,7 +4628,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 // may happen if the device does not support IMS.
                 return "";
             }
-            return resolver.getImsServiceConfiguration(slotId, isCarrierImsService);
+            // TODO: change API to query RCS separately.
+            return resolver.getImsServiceConfiguration(slotId, isCarrierImsService,
+                    ImsFeature.FEATURE_MMTEL);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -5183,7 +5228,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     packages = pm.getInstalledPackagesAsUser(
                         PackageManager.MATCH_DISABLED_COMPONENTS
                             | PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
-                            | PackageManager.GET_SIGNATURES, UserHandle.USER_SYSTEM);
+                            | PackageManager.GET_SIGNING_CERTIFICATES,
+                            UserHandle.USER_SYSTEM);
                 }
                 for (int p = packages.size() - 1; p >= 0; p--) {
                     PackageInfo pkgInfo = packages.get(p);
@@ -5200,9 +5246,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public List<String> getPackagesWithCarrierPrivilegesForAllPhones() {
+        enforceReadPrivilegedPermission("getPackagesWithCarrierPrivilegesForAllPhones");
+
+        final long identity = Binder.clearCallingIdentity();
+
         List<String> privilegedPackages = new ArrayList<>();
-        for (int i = 0; i < TelephonyManager.getDefault().getPhoneCount(); i++) {
-           privilegedPackages.addAll(getPackagesWithCarrierPrivileges(i));
+        try {
+            for (int i = 0; i < TelephonyManager.getDefault().getPhoneCount(); i++) {
+                privilegedPackages.addAll(getPackagesWithCarrierPrivileges(i));
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
         return privilegedPackages;
     }
@@ -5664,12 +5718,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public boolean isRttEnabled(int subscriptionId) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            boolean isRttSupported = isRttSupported(subscriptionId);
-            boolean isUserRttSettingOn = Settings.Secure.getInt(
-                    mApp.getContentResolver(), Settings.Secure.RTT_CALLING_MODE, 0) != 0;
-            boolean shouldIgnoreUserRttSetting = mApp.getCarrierConfigForSubId(subscriptionId)
-                    .getBoolean(CarrierConfigManager.KEY_IGNORE_RTT_MODE_SETTING_BOOL);
-            return isRttSupported && (isUserRttSettingOn || shouldIgnoreUserRttSetting);
+            return isRttSupported(subscriptionId);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -5810,7 +5859,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public void factoryReset(int subId) {
-        enforceConnectivityInternalPermission();
+        enforceSettingsPermission();
         if (mUserManager.hasUserRestriction(UserManager.DISALLOW_NETWORK_RESET)) {
             return;
         }
@@ -5835,6 +5884,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int slotId = getSlotIndex(subId);
             if (slotId > SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
                 ImsManager.getInstance(mApp, slotId).factoryReset();
+            }
+
+            // Erase modem config if erase modem on network setting is enabled.
+            String configValue = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_TELEPHONY,
+                    RESET_NETWORK_ERASE_MODEM_CONFIG_ENABLED);
+            if (configValue != null && Boolean.parseBoolean(configValue)) {
+              sendEraseModemConfig(getDefaultPhone());
             }
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -7148,6 +7204,57 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 }
             }
             return new ArrayList<>(emergencyNumbers);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public int getEmergencyNumberDbVersion(int subId) {
+        enforceReadPrivilegedPermission("getEmergencyNumberDbVersion");
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            final Phone phone = getPhone(subId);
+            if (phone == null) {
+                loge("getEmergencyNumberDbVersion fails with invalid subId: " + subId);
+                return TelephonyManager.INVALID_EMERGENCY_NUMBER_DB_VERSION;
+            }
+            return phone.getEmergencyNumberDbVersion();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void notifyOtaEmergencyNumberDbInstalled() {
+        enforceModifyPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            for (Phone phone: PhoneFactory.getPhones()) {
+                EmergencyNumberTracker tracker = phone.getEmergencyNumberTracker();
+                if (tracker != null) {
+                    tracker.updateOtaEmergencyNumberDatabase();
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void updateTestOtaEmergencyNumberDbFilePath(String otaFilePath) {
+        enforceActiveEmergencySessionPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            for (Phone phone: PhoneFactory.getPhones()) {
+                EmergencyNumberTracker tracker = phone.getEmergencyNumberTracker();
+                if (tracker != null) {
+                    tracker.updateTestOtaEmergencyNumberDbFilePath(otaFilePath);
+                }
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

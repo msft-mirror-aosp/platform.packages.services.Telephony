@@ -19,13 +19,16 @@ package com.android.phone;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.app.Dialog;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
+import android.content.res.Resources;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.os.UserManager;
@@ -109,6 +112,50 @@ public class CallFeaturesSetting extends PreferenceActivity
      * Click Listeners, handle click based on objects attached to UI.
      */
 
+    private final BroadcastReceiver mReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            log("onReceive: " + intent.getAction());
+
+            if (Intent.ACTION_AIRPLANE_MODE_CHANGED.equals(intent.getAction())) {
+                log("ACTION_AIRPLANE_MODE_CHANGED");
+
+                boolean isAirplaneModeOn = intent.getBooleanExtra("state", false);
+                handleAirplaneModeChange(isAirplaneModeOn);
+            }
+        }
+    };
+
+    private void handleAirplaneModeChange(boolean isAirplaneModeOn) {
+        PersistableBundle b = null;
+        if (mSubscriptionInfoHelper.hasSubId()) {
+            b = PhoneGlobals.getInstance().getCarrierConfigForSubId(
+                    mSubscriptionInfoHelper.getSubId());
+        } else {
+            b = PhoneGlobals.getInstance().getCarrierConfig();
+        }
+
+        if (b != null && b.getBoolean(
+                CarrierConfigManager.KEY_DISABLE_SUPPLEMENTARY_SERVICES_IN_AIRPLANE_MODE_BOOL)) {
+            PreferenceScreen preferenceScreen = getPreferenceScreen();
+            Preference callForwarding = preferenceScreen.findPreference(
+                    GsmUmtsCallOptions.CALL_FORWARDING_KEY);
+            Preference callBarring = preferenceScreen.findPreference(
+                    GsmUmtsCallOptions.CALL_BARRING_KEY);
+            Preference additional = preferenceScreen.findPreference(
+                    GsmUmtsCallOptions.ADDITIONAL_GSM_SETTINGS_KEY);
+            if (callForwarding != null) {
+                callForwarding.setEnabled(!isAirplaneModeOn);
+            }
+            if (callBarring != null) {
+                callBarring.setEnabled(!isAirplaneModeOn);
+            }
+            if (additional != null) {
+                additional.setEnabled(!isAirplaneModeOn);
+            }
+        }
+    }
+
     // Click listener for all toggle events
     @Override
     public boolean onPreferenceTreeClick(PreferenceScreen preferenceScreen, Preference preference) {
@@ -181,9 +228,9 @@ public class CallFeaturesSetting extends PreferenceActivity
                                 startActivity(intent);
                             }
                         };
-                builder.setMessage(getResources().getString(
+                builder.setMessage(getResourcesForSubId().getString(
                                 R.string.enable_video_calling_dialog_msg))
-                        .setNeutralButton(getResources().getString(
+                        .setNeutralButton(getResourcesForSubId().getString(
                                 R.string.enable_video_calling_dialog_settings),
                                 networkSettingsClickListener)
                         .setPositiveButton(android.R.string.ok, null)
@@ -211,9 +258,9 @@ public class CallFeaturesSetting extends PreferenceActivity
         }
 
         mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, getIntent());
-        mSubscriptionInfoHelper.setActionBarTitle(
-                getActionBar(), getResources(), R.string.call_settings_with_label);
         mPhone = mSubscriptionInfoHelper.getPhone();
+        mSubscriptionInfoHelper.setActionBarTitle(
+                getActionBar(), getResourcesForSubId(), R.string.call_settings_with_label);
         mTelecomManager = getSystemService(TelecomManager.class);
     }
 
@@ -265,6 +312,7 @@ public class CallFeaturesSetting extends PreferenceActivity
     protected void onPause() {
         super.onPause();
         listenPhoneState(false);
+        unregisterReceiver(mReceiver);
 
         // Remove callback for provisioning changes.
         try {
@@ -315,7 +363,7 @@ public class CallFeaturesSetting extends PreferenceActivity
         mButtonAutoRetry = (SwitchPreference) findPreference(BUTTON_RETRY_KEY);
 
         mEnableVideoCalling = (SwitchPreference) findPreference(ENABLE_VIDEO_CALLING_KEY);
-        mButtonWifiCalling = findPreference(getResources().getString(
+        mButtonWifiCalling = findPreference(getResourcesForSubId().getString(
                 R.string.wifi_calling_settings_key));
 
         PersistableBundle carrierConfig =
@@ -377,6 +425,10 @@ public class CallFeaturesSetting extends PreferenceActivity
         } catch (ImsException e) {
             Log.w(LOG_TAG, "onResume: Unable to register callback for provisioning changes.");
         }
+
+        IntentFilter intentFilter =
+                new IntentFilter(Intent.ACTION_AIRPLANE_MODE_CHANGED);
+        registerReceiver(mReceiver, intentFilter);
     }
 
     private void updateVtWfc() {
@@ -424,8 +476,7 @@ public class CallFeaturesSetting extends PreferenceActivity
         } else if (!mImsMgr.isWfcEnabledByPlatform() || !mImsMgr.isWfcProvisionedOnDevice()) {
             prefSet.removePreference(mButtonWifiCalling);
         } else {
-            String title = SubscriptionManager.getResourcesForSubId(mPhone.getContext(),
-                    mPhone.getSubId()).getString(R.string.wifi_calling);
+            String title = getResourcesForSubId().getString(R.string.wifi_calling);
             mButtonWifiCalling.setTitle(title);
 
             int resId = com.android.internal.R.string.wifi_calling_off_summary;
@@ -447,7 +498,7 @@ public class CallFeaturesSetting extends PreferenceActivity
                         if (DBG) log("Unexpected WFC mode value: " + wfcMode);
                 }
             }
-            mButtonWifiCalling.setSummary(resId);
+            mButtonWifiCalling.setSummary(getResourcesForSubId().getString(resId));
             Intent intent = mButtonWifiCalling.getIntent();
             if (intent != null) {
                 intent.putExtra(Settings.EXTRA_SUB_ID, mPhone.getSubId());
@@ -509,9 +560,9 @@ public class CallFeaturesSetting extends PreferenceActivity
         setIntent(newIntent);
 
         mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, getIntent());
-        mSubscriptionInfoHelper.setActionBarTitle(
-                getActionBar(), getResources(), R.string.call_settings_with_label);
         mPhone = mSubscriptionInfoHelper.getPhone();
+        mSubscriptionInfoHelper.setActionBarTitle(
+                getActionBar(), getResourcesForSubId(), R.string.call_settings_with_label);
     }
 
     private static void log(String msg) {
@@ -539,5 +590,13 @@ public class CallFeaturesSetting extends PreferenceActivity
         intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
         activity.startActivity(intent);
         activity.finish();
+    }
+
+    private Resources getResourcesForSubId() {
+        if (mPhone != null) {
+            return SubscriptionManager.getResourcesForSubId(mPhone.getContext(), mPhone.getSubId());
+        } else {
+            return getResources();
+        }
     }
 }
