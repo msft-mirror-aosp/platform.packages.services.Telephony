@@ -18,7 +18,6 @@ package com.android.services.telephony;
 
 import android.content.Context;
 import android.os.PersistableBundle;
-import android.telecom.Conference;
 import android.telecom.Connection;
 import android.telecom.PhoneAccountHandle;
 import android.telephony.CarrierConfigManager;
@@ -32,7 +31,7 @@ import java.util.List;
 /**
  * CDMA-based conference call.
  */
-public class CdmaConference extends Conference implements Holdable {
+public class CdmaConference extends TelephonyConferenceBase implements Holdable {
     private int mCapabilities;
     private int mProperties;
     private boolean mIsHoldable;
@@ -71,6 +70,16 @@ public class CdmaConference extends Conference implements Holdable {
     @Override
     public void onSeparate(Connection connection) {
         Log.e(this, new Exception(), "Separate not supported for CDMA conference call.");
+    }
+
+    @Override
+    public void onAnswer(int videoState) {
+        Log.e(this, new Exception(), "Answer not supported for CDMA conference call.");
+    }
+
+    @Override
+    public void onReject() {
+        Log.e(this, new Exception(), "Reject not supported for CDMA conference call.");
     }
 
     @Override

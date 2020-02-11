@@ -22,6 +22,7 @@ import android.telecom.Connection;
 import android.telecom.ConnectionService;
 import android.telecom.DisconnectCause;
 import android.telecom.PhoneAccountHandle;
+import com.android.telephony.Rlog;
 
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
@@ -38,43 +39,36 @@ import java.util.stream.Collectors;
  * Manages conferences for IMS connections.
  */
 public class ImsConferenceController {
+    private static final String LOG_TAG = "ImsConferenceController";
 
     /**
      * Conference listener; used to receive notification when a conference has been disconnected.
      */
-    private final Conference.Listener mConferenceListener = new Conference.Listener() {
+    private final TelephonyConferenceBase.TelephonyConferenceListener mConferenceListener =
+            new TelephonyConferenceBase.TelephonyConferenceListener() {
         @Override
         public void onDestroyed(Conference conference) {
             if (Log.VERBOSE) {
                 Log.v(ImsConferenceController.class, "onDestroyed: %s", conference);
             }
 
+            if (conference instanceof ImsConference) {
+                // Ims Conference call ended, so UE may now have the ability to initiate
+                // an Adhoc Conference call. Hence, try enabling adhoc conference capability
+                mTelecomAccountRegistry.refreshAdhocConference(true);
+            }
             mImsConferences.remove(conference);
+        }
+
+        @Override
+        public void onStateChanged(Conference conference, int oldState, int newState) {
+            Log.v(this, "onStateChanged: Conference = " + conference);
+            recalculateConferenceable();
         }
     };
 
-    /**
-     * Ims conference controller connection listener.  Used to respond to changes in state of the
-     * Telephony connections the controller is aware of.
-     */
-    private final Connection.Listener mConnectionListener = new Connection.Listener() {
-        @Override
-        public void onStateChanged(Connection c, int state) {
-            Log.v(this, "onStateChanged: %s", Log.pii(c.getAddress()));
-            recalculate();
-        }
-
-        @Override
-        public void onDisconnected(Connection c, DisconnectCause disconnectCause) {
-            Log.v(this, "onDisconnected: %s", Log.pii(c.getAddress()));
-            recalculate();
-        }
-
-        @Override
-        public void onDestroyed(Connection connection) {
-            remove(connection);
-        }
-
+    private final TelephonyConnection.TelephonyConnectionListener mTelephonyConnectionListener =
+            new TelephonyConnection.TelephonyConnectionListener() {
         @Override
         public void onConferenceStarted() {
             Log.v(this, "onConferenceStarted");
@@ -85,6 +79,23 @@ public class ImsConferenceController {
         public void onConferenceSupportedChanged(Connection c, boolean isConferenceSupported) {
             Log.v(this, "onConferenceSupportedChanged");
             recalculate();
+        }
+
+        @Override
+        public void onStateChanged(Connection c, int state) {
+            Log.v(this, "onStateChanged: %s", Rlog.pii(LOG_TAG, c.getAddress()));
+            recalculate();
+        }
+
+        @Override
+        public void onDisconnected(Connection c, DisconnectCause disconnectCause) {
+            Log.v(this, "onDisconnected: %s", Rlog.pii(LOG_TAG, c.getAddress()));
+            recalculate();
+        }
+
+        @Override
+        public void onDestroyed(Connection connection) {
+            remove(connection);
         }
     };
 
@@ -101,10 +112,11 @@ public class ImsConferenceController {
     private final ArrayList<TelephonyConnection> mTelephonyConnections = new ArrayList<>();
 
     /**
-     * List of known {@link ImsConference}s.  Realistically there will only ever be a single
-     * concurrent IMS conference.
+     * List of known {@link ImsConference}s. There can be upto maximum two Ims conference calls.
+     * One conference call can be a host conference call and another conference call formed as a
+     * result of accepting incoming conference call.
      */
-    private final ArrayList<ImsConference> mImsConferences = new ArrayList<>(1);
+    private final ArrayList<ImsConference> mImsConferences = new ArrayList<>(2);
 
     private TelecomAccountRegistry mTelecomAccountRegistry;
 
@@ -120,6 +132,17 @@ public class ImsConferenceController {
         mConnectionService = connectionService;
         mTelecomAccountRegistry = telecomAccountRegistry;
         mFeatureFlagProxy = featureFlagProxy;
+    }
+
+    void addConference(ImsConference conference) {
+        if (mImsConferences.contains(conference)) {
+            // Adding a duplicate realistically shouldn't happen.
+            Log.w(this, "addConference - conference already tracked; conference=%s", conference);
+            return;
+        }
+        mImsConferences.add(conference);
+        conference.addTelephonyConferenceListener(mConferenceListener);
+        recalculateConferenceable();
     }
 
     /**
@@ -148,8 +171,9 @@ public class ImsConferenceController {
         }
 
         mTelephonyConnections.add(connection);
-        connection.addConnectionListener(mConnectionListener);
+        connection.addTelephonyConnectionListener(mTelephonyConnectionListener);
         recalculateConference();
+        recalculateConferenceable();
     }
 
     /**
@@ -175,7 +199,10 @@ public class ImsConferenceController {
             Log.v(this, "remove connection: %s", connection);
         }
 
-        connection.removeConnectionListener(mConnectionListener);
+        if (connection instanceof TelephonyConnection) {
+            TelephonyConnection telephonyConnection = (TelephonyConnection) connection;
+            telephonyConnection.removeTelephonyConnectionListener(mTelephonyConnectionListener);
+        }
         mTelephonyConnections.remove(connection);
         recalculateConferenceable();
     }
@@ -245,6 +272,11 @@ public class ImsConferenceController {
                 }
                 continue;
             }
+
+            // Since UE cannot host two conference calls, remove the ability to initiate
+            // another conference call as there already exists a conference call, which
+            // is hosted on this device.
+            mTelecomAccountRegistry.refreshAdhocConference(false);
 
             switch (conference.getState()) {
                 case Connection.STATE_ACTIVE:
@@ -356,6 +388,10 @@ public class ImsConferenceController {
             Log.v(this, "Start new ImsConference - connection: %s", connection);
         }
 
+        if (connection.isAdhocConferenceCall()) {
+            Log.w(this, "start new ImsConference - control should never come here");
+            return;
+        }
         // Make a clone of the connection which will become the Ims conference host connection.
         // This is necessary since the Connection Service does not support removing a connection
         // from Telecom.  Instead we create a new instance and remove the old one from telecom.
@@ -379,7 +415,7 @@ public class ImsConferenceController {
         ImsConference conference = new ImsConference(mTelecomAccountRegistry, mConnectionService,
                 conferenceHostConnection, phoneAccountHandle, mFeatureFlagProxy);
         conference.setState(conferenceHostConnection.getState());
-        conference.addListener(mConferenceListener);
+        conference.addTelephonyConferenceListener(mConferenceListener);
         conference.updateConferenceParticipantsAfterCreation();
         mConnectionService.addConference(conference);
         conferenceHostConnection.setTelecomCallId(conference.getTelecomCallId());
@@ -387,12 +423,11 @@ public class ImsConferenceController {
         // Cleanup TelephonyConnection which backed the original connection and remove from telecom.
         // Use the "Other" disconnect cause to ensure the call is logged to the call log but the
         // disconnect tone is not played.
-        connection.removeConnectionListener(mConnectionListener);
-        connection.clearOriginalConnection();
-        connection.setDisconnected(new DisconnectCause(DisconnectCause.OTHER,
+        connection.removeTelephonyConnectionListener(mTelephonyConnectionListener);
+        connection.setTelephonyConnectionDisconnected(new DisconnectCause(DisconnectCause.OTHER,
                 android.telephony.DisconnectCause.toString(
                         android.telephony.DisconnectCause.IMS_MERGED_SUCCESSFULLY)));
-        connection.destroy();
+        connection.close();
         mImsConferences.add(conference);
         // If one of the participants failed to join the conference, recalculate will set the
         // conferenceable connections for the conference to show merge calls option.

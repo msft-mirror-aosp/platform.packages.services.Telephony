@@ -25,6 +25,7 @@ import android.os.SystemClock;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
+import com.android.telephony.Rlog;
 import android.text.TextUtils;
 
 import com.android.internal.telephony.Call;
@@ -40,8 +41,6 @@ import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.NumberVerificationManager;
 import com.android.phone.PhoneUtils;
 
-import com.google.common.base.Preconditions;
-
 import java.util.Objects;
 
 /**
@@ -49,10 +48,20 @@ import java.util.Objects;
  * occurence. One instance of these exists for each of the telephony-based call services.
  */
 final class PstnIncomingCallNotifier {
+    private static final String LOG_TAG = "PstnIncomingCallNotifier";
+
     /** New ringing connection event code. */
     private static final int EVENT_NEW_RINGING_CONNECTION = 100;
     private static final int EVENT_CDMA_CALL_WAITING = 101;
     private static final int EVENT_UNKNOWN_CONNECTION = 102;
+
+    /**
+     * The max amount of time to wait before hanging up a call that was for number verification.
+     *
+     * The delay is so that the remote end has time to hang up the call after receiving the
+     * verification signal so that the call doesn't go to voicemail.
+     */
+    private static final int MAX_NUMBER_VERIFICATION_HANGUP_DELAY_MILLIS = 10000;
 
     /** The phone object to listen to. */
     private final Phone mPhone;
@@ -85,7 +94,9 @@ final class PstnIncomingCallNotifier {
      * @param phone The phone object for listening to incoming calls.
      */
     PstnIncomingCallNotifier(Phone phone) {
-        Preconditions.checkNotNull(phone);
+        if (phone == null) {
+            throw new NullPointerException();
+        }
 
         mPhone = phone;
 
@@ -131,12 +142,16 @@ final class PstnIncomingCallNotifier {
             if (connection.getAddress() != null) {
                 if (NumberVerificationManager.getInstance()
                         .checkIncomingCall(connection.getAddress())) {
-                    // Disconnect the call if it matches
-                    try {
-                        connection.hangup();
-                    } catch (CallStateException e) {
-                        Log.e(this, e, "Error hanging up potential number verification call");
-                    }
+                    // Disconnect the call if it matches, after a delay
+                    mHandler.postDelayed(() -> {
+                        try {
+                            connection.hangup();
+                        } catch (CallStateException e) {
+                            Log.i(this, "Remote end hung up call verification call");
+                        }
+                        // TODO: use an app-supplied delay (needs new API), not to exceed the
+                        // existing max.
+                    }, MAX_NUMBER_VERIFICATION_HANGUP_DELAY_MILLIS);
                     return;
                 }
             }
@@ -169,7 +184,7 @@ final class PstnIncomingCallNotifier {
                     // Presentation of the number is allowed, so we ensure the number matches the
                     // one in the call waiting information.
                     Log.i(this, "handleCdmaCallWaiting: inform telecom of waiting call; "
-                            + "number = %s", Log.pii(number));
+                            + "number = %s", Rlog.pii(LOG_TAG, number));
                     sendIncomingCallIntent(connection);
                 } else {
                     Log.w(this, "handleCdmaCallWaiting: presentation or number do not match, not"
@@ -236,7 +251,8 @@ final class PstnIncomingCallNotifier {
                     // connection already disconnected. Do nothing
                 }
             } else {
-                TelecomManager.from(mPhone.getContext()).addNewUnknownCall(handle, extras);
+                TelecomManager tm = mPhone.getContext().getSystemService(TelecomManager.class);
+                tm.addNewUnknownCall(handle, extras);
             }
         } else {
             Log.i(this, "swapped an old connection, new one is: %s", connection);
@@ -271,7 +287,12 @@ final class PstnIncomingCallNotifier {
                 // connection already disconnected. Do nothing
             }
         } else {
-            TelecomManager.from(mPhone.getContext()).addNewIncomingCall(handle, extras);
+            TelecomManager tm = mPhone.getContext().getSystemService(TelecomManager.class);
+            if (connection.isMultiparty()) {
+                tm.addNewIncomingConference(handle, extras);
+            } else {
+                tm.addNewIncomingCall(handle, extras);
+            }
         }
     }
 
