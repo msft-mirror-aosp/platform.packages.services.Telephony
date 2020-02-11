@@ -558,7 +558,8 @@ public class CallNotifier extends Handler {
 
     public void updatePhoneStateListeners(boolean isRefresh, int updateType, int subIdToUpdate) {
         List<SubscriptionInfo> subInfos = SubscriptionController.getInstance()
-                .getActiveSubscriptionInfoList(mApplication.getOpPackageName());
+                .getActiveSubscriptionInfoList(mApplication.getOpPackageName(),
+                        null);
 
         // Sort sub id list based on slot id, so that CFI/MWI notifications will be updated for
         // slot 0 first then slot 1. This is needed to ensure that when CFI or MWI is enabled for
@@ -615,7 +616,7 @@ public class CallNotifier extends Handler {
         for (int i = 0; i < subInfos.size(); i++) {
             int subId = subInfos.get(i).getSubscriptionId();
             if (!mPhoneStateListeners.containsKey(subId)) {
-                CallNotifierPhoneStateListener listener = new CallNotifierPhoneStateListener();
+                CallNotifierPhoneStateListener listener = new CallNotifierPhoneStateListener(subId);
                 mTelephonyManager.createForSubscriptionId(subId).listen(listener,
                         PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
                         | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
@@ -767,8 +768,11 @@ public class CallNotifier extends Handler {
             };
 
     private class CallNotifierPhoneStateListener extends PhoneStateListener {
-        public CallNotifierPhoneStateListener() {
+        private final int mSubId;
+
+        CallNotifierPhoneStateListener(int subId) {
             super();
+            this.mSubId = subId;
         }
 
         @Override

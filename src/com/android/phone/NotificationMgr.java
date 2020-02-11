@@ -18,6 +18,7 @@ package com.android.phone;
 
 import static android.Manifest.permission.READ_PHONE_STATE;
 
+import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
@@ -41,7 +42,6 @@ import android.os.UserManager;
 import android.preference.PreferenceManager;
 import android.provider.ContactsContract.PhoneLookup;
 import android.provider.Settings;
-import android.telecom.DefaultDialerManager;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
@@ -63,6 +63,7 @@ import com.android.internal.telephony.TelephonyCapabilities;
 import com.android.internal.telephony.util.NotificationChannelController;
 import com.android.phone.settings.VoicemailSettingsActivity;
 
+import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
@@ -93,6 +94,7 @@ public class NotificationMgr {
     static final int CALL_FORWARD_NOTIFICATION = 4;
     static final int DATA_ROAMING_NOTIFICATION = 5;
     static final int SELECTED_OPERATOR_FAIL_NOTIFICATION = 6;
+    static final int LIMITED_SIM_FUNCTION_NOTIFICATION = 7;
 
     // Event for network selection notification.
     private static final int EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION = 1;
@@ -101,6 +103,8 @@ public class NotificationMgr {
     private static final int NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIMES = 10;
 
     private static final int STATE_UNKNOWN_SERVICE = -1;
+
+    private static final String ACTION_MOBILE_NETWORK_LIST = "android.settings.MOBILE_NETWORK_LIST";
 
     /** The singleton NotificationMgr instance. */
     private static NotificationMgr sInstance;
@@ -117,6 +121,9 @@ public class NotificationMgr {
 
     // used to track the notification of selected network unavailable, per subscription id.
     private SparseArray<Boolean> mSelectedUnavailableNotify = new SparseArray<>();
+
+    // used to track the notification of limited sim function under dual sim, per subscription id.
+    private Set<Integer> mLimitedSimFunctionNotify = new HashSet<>();
 
     // used to track whether the message waiting indicator is visible, per subscription id.
     private ArrayMap<Integer, Boolean> mMwiVisible = new ArrayMap<Integer, Boolean>();
@@ -156,7 +163,7 @@ public class NotificationMgr {
                 (StatusBarManager) app.getSystemService(Context.STATUS_BAR_SERVICE);
         mUserManager = (UserManager) app.getSystemService(Context.USER_SERVICE);
         mSubscriptionManager = SubscriptionManager.from(mContext);
-        mTelecomManager = TelecomManager.from(mContext);
+        mTelecomManager = app.getSystemService(TelecomManager.class);
         mTelephonyManager = (TelephonyManager) app.getSystemService(Context.TELEPHONY_SERVICE);
     }
 
@@ -368,12 +375,11 @@ public class NotificationMgr {
 
             final Notification notification = builder.build();
             List<UserInfo> users = mUserManager.getUsers(true);
-            for (int i = 0; i < users.size(); i++) {
-                final UserInfo user = users.get(i);
+            for (UserInfo user : users) {
                 final UserHandle userHandle = user.getUserHandle();
-                if (!mUserManager.hasUserRestriction(
+                if (!hasUserRestriction(
                         UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !user.isManagedProfile()) {
+                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, vmCount, vmNumber,
                             pendingIntent, isSettingsIntent, userHandle, isRefresh)) {
                         notifyAsUser(
@@ -386,12 +392,11 @@ public class NotificationMgr {
             }
         } else {
             List<UserInfo> users = mUserManager.getUsers(true /* excludeDying */);
-            for (int i = 0; i < users.size(); i++) {
-                final UserInfo user = users.get(i);
+            for (UserInfo user : users) {
                 final UserHandle userHandle = user.getUserHandle();
-                if (!mUserManager.hasUserRestriction(
+                if (!hasUserRestriction(
                         UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !user.isManagedProfile()) {
+                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
                     if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, 0, null, null,
                             false, userHandle, isRefresh)) {
                         cancelAsUser(
@@ -402,6 +407,12 @@ public class NotificationMgr {
                 }
             }
         }
+    }
+
+    private boolean hasUserRestriction(String restrictionKey, UserHandle userHandle) {
+        final List<UserManager.EnforcingUser> sources = mUserManager
+                .getUserRestrictionSources(restrictionKey, userHandle);
+        return (sources != null && !sources.isEmpty());
     }
 
     /**
@@ -458,8 +469,8 @@ public class NotificationMgr {
     }
 
     private Intent getShowVoicemailIntentForDefaultDialer(UserHandle userHandle) {
-        String dialerPackage = DefaultDialerManager
-                .getDefaultDialerApplication(mContext, userHandle.getIdentifier());
+        String dialerPackage = mContext.getSystemService(TelecomManager.class)
+                .getDefaultDialerPackage(userHandle.getIdentifier());
         return new Intent(TelephonyManager.ACTION_SHOW_VOICEMAIL_NOTIFICATION)
                 .setPackage(dialerPackage);
     }
@@ -546,7 +557,7 @@ public class NotificationMgr {
         } else {
             List<UserInfo> users = mUserManager.getUsers(true);
             for (UserInfo user : users) {
-                if (user.isManagedProfile()) {
+                if (mUserManager.isManagedProfile(user.getUserHandle().getIdentifier())) {
                     continue;
                 }
                 UserHandle userHandle = user.getUserHandle();
@@ -635,6 +646,95 @@ public class NotificationMgr {
     /* package */ void hideDataRoamingNotification() {
         if (DBG) log("hideDataRoamingNotification()...");
         cancelAsUser(null, DATA_ROAMING_NOTIFICATION, UserHandle.ALL);
+    }
+
+    /**
+     * Shows the "Limited SIM functionality" warning notification, which appears when using a
+     * special carrier under dual sim. limited function applies for DSDS in general when two SIM
+     * cards share a single radio, thus the voice & data maybe impaired under certain scenarios.
+     */
+    public void showLimitedSimFunctionWarningNotification(int subId, @Nullable String carrierName) {
+        if (DBG) log("showLimitedSimFunctionWarningNotification carrier: " + carrierName
+                + " subId: " + subId);
+        if (mLimitedSimFunctionNotify.contains(subId)) {
+            // handle the case that user swipe the notification but condition triggers
+            // frequently which cause the same notification consistently displayed.
+            if (DBG) log("showLimitedSimFunctionWarningNotification, "
+                    + "not display again if already displayed");
+            return;
+        }
+        // Navigate to "Network Selection Settings" which list all subscriptions.
+        PendingIntent contentIntent = PendingIntent.getActivity(mContext, 0,
+                new Intent(ACTION_MOBILE_NETWORK_LIST), 0);
+        // Display phone number from the other sub
+        String line1Num = null;
+        SubscriptionManager subMgr = (SubscriptionManager) mContext.getSystemService(
+            Context.TELEPHONY_SUBSCRIPTION_SERVICE);
+        List<SubscriptionInfo> subList = subMgr.getActiveSubscriptionInfoList(false);
+        for (SubscriptionInfo sub : subList) {
+            if (sub.getSubscriptionId() != subId) {
+                line1Num = mTelephonyManager.getLine1Number(sub.getSubscriptionId());
+            }
+        }
+        final CharSequence contentText = TextUtils.isEmpty(line1Num) ?
+            String.format(mContext.getText(
+                R.string.limited_sim_function_notification_message).toString(), carrierName) :
+            String.format(mContext.getText(
+                R.string.limited_sim_function_with_phone_num_notification_message).toString(),
+                carrierName, line1Num);
+        final Notification.Builder builder = new Notification.Builder(mContext)
+                .setSmallIcon(R.drawable.ic_sim_card)
+                .setContentTitle(mContext.getText(
+                        R.string.limited_sim_function_notification_title))
+                .setContentText(contentText)
+                .setOnlyAlertOnce(true)
+                .setOngoing(true)
+                .setChannelId(NotificationChannelController.CHANNEL_ID_SIM_HIGH_PRIORITY)
+                .setContentIntent(contentIntent);
+        final Notification notification = new Notification.BigTextStyle(builder).bigText(
+                contentText).build();
+
+        notifyAsUser(Integer.toString(subId),
+                LIMITED_SIM_FUNCTION_NOTIFICATION,
+                notification, UserHandle.ALL);
+        mLimitedSimFunctionNotify.add(subId);
+    }
+
+    /**
+     * Dismiss the "Limited SIM functionality" warning notification for the given subId.
+     */
+    public void dismissLimitedSimFunctionWarningNotification(int subId) {
+        if (DBG) log("dismissLimitedSimFunctionWarningNotification subId: " + subId);
+        if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
+            // dismiss all notifications
+            for (int id : mLimitedSimFunctionNotify) {
+                cancelAsUser(Integer.toString(id),
+                        LIMITED_SIM_FUNCTION_NOTIFICATION, UserHandle.ALL);
+            }
+            mLimitedSimFunctionNotify.clear();
+        } else if (mLimitedSimFunctionNotify.contains(subId)) {
+            cancelAsUser(Integer.toString(subId),
+                    LIMITED_SIM_FUNCTION_NOTIFICATION, UserHandle.ALL);
+            mLimitedSimFunctionNotify.remove(subId);
+        }
+    }
+
+    /**
+     * Dismiss the "Limited SIM functionality" warning notification for all inactive subscriptions.
+     */
+    public void dismissLimitedSimFunctionWarningNotificationForInactiveSubs() {
+        if (DBG) log("dismissLimitedSimFunctionWarningNotificationForInactiveSubs");
+        // dismiss notification for inactive subscriptions.
+        // handle the corner case that SIM change by SIM refresh doesn't clear the notification
+        // from the old SIM if both old & new SIM configured to display the notification.
+        mLimitedSimFunctionNotify.removeIf(id -> {
+            if (!mSubscriptionManager.isActiveSubId(id)) {
+                cancelAsUser(Integer.toString(id),
+                        LIMITED_SIM_FUNCTION_NOTIFICATION, UserHandle.ALL);
+                return true;
+            }
+            return false;
+        });
     }
 
     /**

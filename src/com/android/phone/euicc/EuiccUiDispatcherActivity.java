@@ -18,6 +18,7 @@ package com.android.phone.euicc;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
@@ -27,6 +28,7 @@ import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.UserHandle;
 import android.service.euicc.EuiccService;
 import android.telephony.euicc.EuiccManager;
 import android.util.Log;
@@ -94,7 +96,7 @@ public class EuiccUiDispatcherActivity extends Activity {
 
         grantDefaultPermissionsToActiveLuiApp(activityInfo);
 
-        euiccUiIntent.setComponent(activityInfo.getComponentName());
+        euiccUiIntent.setComponent(new ComponentName(activityInfo.packageName, activityInfo.name));
         return euiccUiIntent;
     }
 
@@ -138,7 +140,7 @@ public class EuiccUiDispatcherActivity extends Activity {
     protected void grantDefaultPermissionsToActiveLuiApp(ActivityInfo activityInfo) {
         try {
             mPackageManager.grantDefaultPermissionsToActiveLuiApp(
-                    activityInfo.packageName, getUserId());
+                    activityInfo.packageName, UserHandle.myUserId());
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to grant permissions to active LUI app.", e);
         }
@@ -150,10 +152,11 @@ public class EuiccUiDispatcherActivity extends Activity {
         try {
             Set<String> luiApps = getAllLuiAppPackageNames(intent);
             String[] luiAppsArray = luiApps.toArray(new String[luiApps.size()]);
-            mPackageManager.revokeDefaultPermissionsFromLuiApps(luiAppsArray, getUserId());
+            mPackageManager.revokeDefaultPermissionsFromLuiApps(luiAppsArray,
+                    UserHandle.myUserId());
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to revoke LUI app permissions.");
-            throw e.rethrowAsRuntimeException();
+            throw new RuntimeException(e);
         }
     }
 

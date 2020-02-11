@@ -16,7 +16,10 @@
 
 package com.android.services.telephony;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.Context;
+import android.content.res.Resources;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.AsyncResult;
@@ -26,8 +29,9 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.telecom.CallAudioState;
-import android.telecom.ConferenceParticipant;
+import android.telecom.Conference;
 import android.telecom.Connection;
+import android.telecom.ConnectionService;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
@@ -36,13 +40,19 @@ import android.telecom.VideoProfile;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
+import com.android.telephony.Rlog;
 import android.telephony.ServiceState;
+import android.telephony.ServiceState.RilRadioTechnology;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsCallProfile;
+import android.telephony.ims.ImsStreamMediaProfile;
 import android.text.TextUtils;
 import android.util.Pair;
 
 import com.android.ims.ImsCall;
+import com.android.ims.internal.ConferenceParticipant;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallFailCause;
@@ -74,6 +84,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * Base class for CDMA and GSM connections.
  */
 abstract class TelephonyConnection extends Connection implements Holdable {
+    private static final String LOG_TAG = "TelephonyConnection";
+
     private static final int MSG_PRECISE_CALL_STATE_CHANGED = 1;
     private static final int MSG_RINGBACK_TONE = 2;
     private static final int MSG_HANDOVER_STATE_CHANGED = 3;
@@ -100,6 +112,11 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     private static final int MSG_HANGUP = 17;
     private static final int MSG_SET_CALL_RADIO_TECH = 18;
     private static final int MSG_ON_CONNECTION_EVENT = 19;
+    private static final int MSG_REDIAL_CONNECTION_CHANGED = 20;
+    private static final int MSG_REJECT = 21;
+
+    private List<Uri> mParticipants;
+    private boolean mIsAdhocConferenceCall;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
@@ -110,15 +127,25 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     updateState();
                     break;
                 case MSG_HANDOVER_STATE_CHANGED:
-                    Log.v(TelephonyConnection.this, "MSG_HANDOVER_STATE_CHANGED");
+                case MSG_REDIAL_CONNECTION_CHANGED:
+                    String what = (msg.what == MSG_HANDOVER_STATE_CHANGED)
+                            ? "MSG_HANDOVER_STATE_CHANGED" : "MSG_REDIAL_CONNECTION_CHANGED";
+                    Log.v(TelephonyConnection.this, what);
                     AsyncResult ar = (AsyncResult) msg.obj;
                     com.android.internal.telephony.Connection connection =
                          (com.android.internal.telephony.Connection) ar.result;
+                    if (connection == null) {
+                        setDisconnected(DisconnectCauseUtil
+                                .toTelecomDisconnectCause(DisconnectCause.OUT_OF_NETWORK,
+                                        "handover failure, no connection"));
+                        close();
+                        break;
+                    }
                     if (mOriginalConnection != null) {
                         if (connection != null &&
                             ((connection.getAddress() != null &&
                             mOriginalConnection.getAddress() != null &&
-                            mOriginalConnection.getAddress().contains(connection.getAddress())) ||
+                            mOriginalConnection.getAddress().equals(connection.getAddress())) ||
                             connection.getState() == mOriginalConnection.getStateBeforeHandover())) {
                             Log.d(TelephonyConnection.this,
                                     "SettingOriginalConnection " + mOriginalConnection.toString()
@@ -128,7 +155,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                         }
                     } else {
                         Log.w(TelephonyConnection.this,
-                                "MSG_HANDOVER_STATE_CHANGED: mOriginalConnection==null - invalid state (not cleaned up)");
+                                what + ": mOriginalConnection==null - invalid state (not cleaned up)");
                     }
                     break;
                 case MSG_RINGBACK_TONE:
@@ -140,7 +167,9 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                                 "not foreground connection, skipping");
                         return;
                     }
-                    setRingbackRequested((Boolean) ((AsyncResult) msg.obj).result);
+                    boolean ringback = (Boolean) ((AsyncResult) msg.obj).result;
+                    setRingbackRequested(ringback);
+                    notifyRingbackRequested(ringback);
                     break;
                 case MSG_DISCONNECT:
                     updateState();
@@ -173,19 +202,20 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
                 case MSG_SET_VIDEO_STATE:
                     int videoState = (int) msg.obj;
-                    setVideoState(videoState);
+                    setTelephonyVideoState(videoState);
 
                     // A change to the video state of the call can influence whether or not it
                     // can be part of a conference, whether another call can be added, and
                     // whether the call should have the HD audio property set.
                     refreshConferenceSupported();
                     refreshDisableAddCall();
+                    refreshHoldSupported();
                     updateConnectionProperties();
                     break;
 
                 case MSG_SET_VIDEO_PROVIDER:
                     VideoProvider videoProvider = (VideoProvider) msg.obj;
-                    setVideoProvider(videoProvider);
+                    setTelephonyVideoProvider(videoProvider);
                     break;
 
                 case MSG_SET_AUDIO_QUALITY:
@@ -225,9 +255,9 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                         // If starting the hold tone, send a connection event to Telecom which will
                         // cause it to play the on hold tone.
                         if (playTone) {
-                            sendConnectionEvent(EVENT_ON_HOLD_TONE_START, null);
+                            sendTelephonyConnectionEvent(EVENT_ON_HOLD_TONE_START, null);
                         } else {
-                            sendConnectionEvent(EVENT_ON_HOLD_TONE_END, null);
+                            sendTelephonyConnectionEvent(EVENT_ON_HOLD_TONE_END, null);
                         }
                     }
                     break;
@@ -243,6 +273,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 case MSG_HANGUP:
                     int cause = (int) msg.obj;
                     hangup(cause);
+                    break;
+                case MSG_REJECT:
+                    int rejectReason = (int) msg.obj;
+                    reject(rejectReason);
                     break;
 
                 case MSG_SET_CALL_RADIO_TECH:
@@ -272,7 +306,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 case MSG_ON_CONNECTION_EVENT:
                     SomeArgs args = (SomeArgs) msg.obj;
                     try {
-                        sendConnectionEvent((String) args.arg1, (Bundle) args.arg2);
+                        sendTelephonyConnectionEvent((String) args.arg1, (Bundle) args.arg2);
 
                     } finally {
                         args.recycle();
@@ -291,7 +325,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 ssn.code);
         if (ssn.notificationType == SuppServiceNotification.NOTIFICATION_TYPE_CODE_1
                 && ssn.code == SuppServiceNotification.CODE_1_CALL_FORWARDED) {
-            sendConnectionEvent(TelephonyManager.EVENT_CALL_FORWARDED, null);
+            sendTelephonyConnectionEvent(TelephonyManager.EVENT_CALL_FORWARDED, null);
         }
         sendSuppServiceNotificationEvent(ssn.notificationType, ssn.code);
     }
@@ -309,7 +343,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         extras.putInt(TelephonyManager.EXTRA_NOTIFICATION_CODE, code);
         extras.putCharSequence(TelephonyManager.EXTRA_NOTIFICATION_MESSAGE,
                 getSuppServiceMessage(type, code));
-        sendConnectionEvent(TelephonyManager.EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION, extras);
+        sendTelephonyConnectionEvent(TelephonyManager.EVENT_SUPPLEMENTARY_SERVICE_NOTIFICATION,
+                extras);
     }
 
     /**
@@ -385,10 +420,24 @@ abstract class TelephonyConnection extends Connection implements Holdable {
             }
         }
         if (messageId != -1 && getPhone() != null && getPhone().getContext() != null) {
-            return getPhone().getContext().getText(messageId);
+            return getResourceText(messageId);
         } else {
             return null;
         }
+    }
+
+    @VisibleForTesting
+    public CharSequence getResourceText(int id) {
+        Resources resources = SubscriptionManager.getResourcesForSubId(getPhone().getContext(),
+                getPhone().getSubId());
+        return resources.getText(id);
+    }
+
+    @VisibleForTesting
+    public String getResourceString(int id) {
+        Resources resources = SubscriptionManager.getResourcesForSubId(getPhone().getContext(),
+                getPhone().getSubId());
+        return resources.getString(id);
     }
 
     /**
@@ -406,6 +455,25 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     public abstract static class TelephonyConnectionListener {
         public void onOriginalConnectionConfigured(TelephonyConnection c) {}
         public void onOriginalConnectionRetry(TelephonyConnection c, boolean isPermanentFailure) {}
+        public void onConferenceParticipantsChanged(Connection c,
+                List<ConferenceParticipant> participants) {}
+        public void onConferenceStarted() {}
+        public void onConferenceSupportedChanged(Connection c, boolean isConferenceSupported) {}
+
+        public void onConnectionCapabilitiesChanged(Connection c, int connectionCapabilities) {}
+        public void onConnectionEvent(Connection c, String event, Bundle extras) {}
+        public void onConnectionPropertiesChanged(Connection c, int connectionProperties) {}
+        public void onExtrasChanged(Connection c, Bundle extras) {}
+        public void onExtrasRemoved(Connection c, List<String> keys) {}
+        public void onStateChanged(android.telecom.Connection c, int state) {}
+        public void onStatusHintsChanged(Connection c, StatusHints statusHints) {}
+        public void onDestroyed(Connection c) {}
+        public void onDisconnected(android.telecom.Connection c,
+                android.telecom.DisconnectCause disconnectCause) {}
+        public void onVideoProviderChanged(android.telecom.Connection c,
+                Connection.VideoProvider videoProvider) {}
+        public void onVideoStateChanged(android.telecom.Connection c, int videoState) {}
+        public void onRingbackRequested(Connection c, boolean ringback) {}
     }
 
     private final PostDialListener mPostDialListener = new PostDialListener() {
@@ -465,7 +533,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
          * @param vrat the RIL Voice Radio Technology used for current connection.
          */
         @Override
-        public void onCallRadioTechChanged(@ServiceState.RilRadioTechnology int vrat) {
+        public void onCallRadioTechChanged(@RilRadioTechnology int vrat) {
             mHandler.obtainMessage(MSG_SET_CALL_RADIO_TECH, vrat).sendToTarget();
         }
 
@@ -539,7 +607,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
             // Inform the InCallService of the fact that the call pull failed (it may choose to
             // display a message informing the user of the pull failure).
-            sendConnectionEvent(Connection.EVENT_CALL_PULL_FAILED, null);
+            sendTelephonyConnectionEvent(Connection.EVENT_CALL_PULL_FAILED, null);
 
             // Swap the ImsPhoneConnection we used to do the pull for the ImsExternalConnection
             // which originally represented the call.
@@ -554,7 +622,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
          */
         @Override
         public void onHandoverToWifiFailed() {
-            sendConnectionEvent(TelephonyManager.EVENT_HANDOVER_TO_WIFI_FAILED, null);
+            sendTelephonyConnectionEvent(TelephonyManager.EVENT_HANDOVER_TO_WIFI_FAILED, null);
         }
 
         /**
@@ -608,6 +676,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         @Override
         public void onRttTerminated() {
             updateConnectionProperties();
+            refreshConferenceSupported();
             sendRttSessionRemotelyTerminated();
         }
 
@@ -623,6 +692,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
     };
 
+    private TelephonyConnectionService mTelephonyConnectionService;
     protected com.android.internal.telephony.Connection mOriginalConnection;
     private Call.State mConnectionState = Call.State.IDLE;
     private Bundle mOriginalConnectionExtras = new Bundle();
@@ -724,6 +794,11 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     private boolean mShowPreciseFailedCause;
 
     /**
+     * Provides a DisconnectCause associated with a hang up request.
+     */
+    private int mHangupDisconnectCause = DisconnectCause.NOT_VALID;
+
+    /**
      * Listeners to our TelephonyConnection specific callbacks
      */
     private final Set<TelephonyConnectionListener> mTelephonyListeners = Collections.newSetFromMap(
@@ -812,14 +887,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     @Override
     public void onAnswer(int videoState) {
-        Log.v(this, "onAnswer");
-        if (isValidRingingCall() && getPhone() != null) {
-            try {
-                getPhone().acceptCall(videoState);
-            } catch (CallStateException e) {
-                Log.e(this, e, "Failed to accept call.");
-            }
-        }
+        performAnswer(videoState);
     }
 
     @Override
@@ -863,9 +931,18 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     @Override
     public void onReject() {
-        Log.v(this, "onReject");
+        performReject(android.telecom.Call.REJECT_REASON_DECLINED);
+    }
+
+    @Override
+    public void onReject(@android.telecom.Call.RejectReason int rejectReason) {
+        performReject(rejectReason);
+    }
+
+    public void performReject(int rejectReason) {
+        Log.v(this, "performReject");
         if (isValidRingingCall()) {
-            mHandler.obtainMessage(MSG_HANGUP, android.telephony.DisconnectCause.INCOMING_REJECTED)
+            mHandler.obtainMessage(MSG_REJECT, rejectReason)
                     .sendToTarget();
         }
         super.onReject();
@@ -935,6 +1012,17 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
         ImsPhoneConnection originalConnection = (ImsPhoneConnection) mOriginalConnection;
         originalConnection.sendRttModifyResponse(textStream);
+    }
+
+    public void performAnswer(int videoState) {
+        Log.v(this, "performAnswer");
+        if (isValidRingingCall() && getPhone() != null) {
+            try {
+                getPhone().acceptCall(videoState);
+            } catch (CallStateException e) {
+                Log.e(this, e, "Failed to accept call.");
+            }
+        }
     }
 
     public void performHold() {
@@ -1068,6 +1156,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
         if (getConnectionCapabilities() != newCapabilities) {
             setConnectionCapabilities(newCapabilities);
+            notifyConnectionCapabilitiesChanged(newCapabilities);
         }
     }
 
@@ -1102,10 +1191,17 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         newProperties = changeBitmask(newProperties, PROPERTY_IS_RTT, isRtt());
         newProperties = changeBitmask(newProperties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL,
                 isNetworkIdentifiedEmergencyCall());
+        newProperties = changeBitmask(newProperties, PROPERTY_IS_ADHOC_CONFERENCE,
+                isAdhocConferenceCall());
 
         if (getConnectionProperties() != newProperties) {
-            setConnectionProperties(newProperties);
+            setTelephonyConnectionProperties(newProperties);
         }
+    }
+
+    public void setTelephonyConnectionProperties(int newProperties) {
+        setConnectionProperties(newProperties);
+        notifyConnectionPropertiesChanged(newProperties);
     }
 
     protected final void updateAddress() {
@@ -1171,6 +1267,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 mHandler, MSG_PRECISE_CALL_STATE_CHANGED, null);
         getPhone().registerForHandoverStateChanged(
                 mHandler, MSG_HANDOVER_STATE_CHANGED, null);
+        getPhone().registerForRedialConnectionChanged(
+                mHandler, MSG_REDIAL_CONNECTION_CHANGED, null);
         getPhone().registerForRingbackTone(mHandler, MSG_RINGBACK_TONE, null);
         getPhone().registerForSuppServiceNotification(mHandler, MSG_SUPP_SERVICE_NOTIFY, null);
         getPhone().registerForOnHoldTone(mHandler, MSG_ON_HOLD_TONE, null);
@@ -1180,11 +1278,12 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         mOriginalConnection.addListener(mOriginalConnectionListener);
 
         // Set video state and capabilities
-        setVideoState(mOriginalConnection.getVideoState());
+        setTelephonyVideoState(mOriginalConnection.getVideoState());
         setOriginalConnectionCapabilities(mOriginalConnection.getConnectionCapabilities());
         setIsNetworkIdentifiedEmergencyCall(mOriginalConnection.isNetworkIdentifiedEmergencyCall());
+        setIsAdhocConferenceCall(mOriginalConnection.isAdhocConference());
         setAudioModeIsVoip(mOriginalConnection.getAudioModeIsVoip());
-        setVideoProvider(mOriginalConnection.getVideoProvider());
+        setTelephonyVideoProvider(mOriginalConnection.getVideoProvider());
         setAudioQuality(mOriginalConnection.getAudioQuality());
         setTechnologyTypeExtra();
 
@@ -1219,8 +1318,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         } else {
             extrasToRemove.add(Connection.EXTRA_DISABLE_ADD_CALL);
         }
-        putExtras(extrasToPut);
-        removeExtras(extrasToRemove);
+        putTelephonyExtras(extrasToPut);
+        removeTelephonyExtras(extrasToRemove);
 
         // updateState can set mOriginalConnection to null if its state is DISCONNECTED, so this
         // should be executed *after* the above setters have run.
@@ -1265,15 +1364,106 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      */
     private void setTechnologyTypeExtra() {
         if (getPhone() != null) {
-            putExtra(TelecomManager.EXTRA_CALL_TECHNOLOGY_TYPE, getPhone().getPhoneType());
+            Bundle newExtras = getExtras();
+            if (newExtras == null) {
+                newExtras = new Bundle();
+            }
+            newExtras.putInt(TelecomManager.EXTRA_CALL_TECHNOLOGY_TYPE, getPhone().getPhoneType());
+            putTelephonyExtras(newExtras);
         }
+    }
+
+    private void refreshHoldSupported() {
+       if (mOriginalConnection == null) {
+           Log.w(this, "refreshHoldSupported org conn is null");
+           return;
+       }
+
+       if (!mOriginalConnection.shouldAllowHoldingVideoCall() && canHoldImsCalls() !=
+               ((getConnectionCapabilities() & (CAPABILITY_HOLD | CAPABILITY_SUPPORT_HOLD)) != 0)) {
+           updateConnectionCapabilities();
+       }
     }
 
     private void refreshDisableAddCall() {
         if (shouldSetDisableAddCallExtra()) {
-            putExtra(Connection.EXTRA_DISABLE_ADD_CALL, true);
+            Bundle newExtras = getExtras();
+            if (newExtras == null) {
+                newExtras = new Bundle();
+            }
+            newExtras.putBoolean(Connection.EXTRA_DISABLE_ADD_CALL, true);
+            putTelephonyExtras(newExtras);
         } else {
             removeExtras(Connection.EXTRA_DISABLE_ADD_CALL);
+        }
+    }
+
+    private void refreshCodecType() {
+        Bundle newExtras = getExtras();
+        if (newExtras == null) {
+            newExtras = new Bundle();
+        }
+        int newCodecType;
+        if (isImsConnection()) {
+            newCodecType = transformCodec(getOriginalConnection().getAudioCodec());
+        } else {
+            // For SRVCC, report AUDIO_CODEC_NONE.
+            newCodecType = Connection.AUDIO_CODEC_NONE;
+        }
+        int oldCodecType = newExtras.getInt(Connection.EXTRA_AUDIO_CODEC,
+                Connection.AUDIO_CODEC_NONE);
+        if (newCodecType != oldCodecType) {
+            newExtras.putInt(Connection.EXTRA_AUDIO_CODEC, newCodecType);
+            putTelephonyExtras(newExtras);
+        }
+    }
+
+    private int transformCodec(int codec) {
+        switch (codec) {
+            case ImsStreamMediaProfile.AUDIO_QUALITY_NONE:
+                return Connection.AUDIO_CODEC_NONE;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_AMR:
+                return Connection.AUDIO_CODEC_AMR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_AMR_WB:
+                return Connection.AUDIO_CODEC_AMR_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_QCELP13K:
+                return Connection.AUDIO_CODEC_QCELP13K;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC:
+                return Connection.AUDIO_CODEC_EVRC;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_B:
+                return Connection.AUDIO_CODEC_EVRC_B;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_WB:
+                return Connection.AUDIO_CODEC_EVRC_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVRC_NW:
+                return Connection.AUDIO_CODEC_EVRC_NW;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_EFR:
+                return Connection.AUDIO_CODEC_GSM_EFR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_FR:
+                return Connection.AUDIO_CODEC_GSM_FR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_GSM_HR:
+                return Connection.AUDIO_CODEC_GSM_HR;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711U:
+                return Connection.AUDIO_CODEC_G711U;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G723:
+                return Connection.AUDIO_CODEC_G723;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711A:
+                return Connection.AUDIO_CODEC_G711A;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G722:
+                return Connection.AUDIO_CODEC_G722;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G711AB:
+                return Connection.AUDIO_CODEC_G711AB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_G729:
+                return Connection.AUDIO_CODEC_G729;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_NB:
+                return Connection.AUDIO_CODEC_EVS_NB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_WB:
+                return Connection.AUDIO_CODEC_EVS_WB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_SWB:
+                return Connection.AUDIO_CODEC_EVS_SWB;
+            case ImsStreamMediaProfile.AUDIO_QUALITY_EVS_FB:
+                return Connection.AUDIO_CODEC_EVS_FB;
+            default:
+                return Connection.AUDIO_CODEC_NONE;
         }
     }
 
@@ -1348,14 +1538,50 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         return true;
     }
 
+    /**
+     * @return The address's to which this Connection is currently communicating.
+     */
+    public final @Nullable List<Uri> getParticipants() {
+        return mParticipants;
+    }
+
+    /**
+     * Sets the value of the {@link #getParticipants()} property.
+     *
+     * @param address The participant address's.
+     */
+    public final void setParticipants(@Nullable List<Uri> address) {
+        mParticipants = address;
+    }
+
+    /**
+     * @return true if connection is adhocConference call else false.
+     */
+    public final boolean isAdhocConferenceCall() {
+        return mIsAdhocConferenceCall;
+    }
+
+    /**
+     * Sets the value of the {@link #isAdhocConferenceCall()} property.
+     *
+     * @param isAdhocConferenceCall represents if the call is adhoc conference call or not.
+     */
+    public void setIsAdhocConferenceCall(boolean isAdhocConferenceCall) {
+        mIsAdhocConferenceCall = isAdhocConferenceCall;
+        updateConnectionProperties();
+    }
+
     private boolean canHoldImsCalls() {
         PersistableBundle b = getCarrierConfig();
         // Return true if the CarrierConfig is unavailable
-        return !doesDeviceRespectHoldCarrierConfig() || b == null ||
-                b.getBoolean(CarrierConfigManager.KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL);
+        return (!doesDeviceRespectHoldCarrierConfig() || b == null ||
+                b.getBoolean(CarrierConfigManager.KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL)) &&
+                ((mOriginalConnection != null && mOriginalConnection.shouldAllowHoldingVideoCall())
+                || !VideoProfile.isVideo(getVideoState()));
     }
 
-    private PersistableBundle getCarrierConfig() {
+    @VisibleForTesting
+    public PersistableBundle getCarrierConfig() {
         Phone phone = getPhone();
         if (phone == null) {
             return null;
@@ -1409,6 +1635,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 getPhone().unregisterForPreciseCallStateChanged(mHandler);
                 getPhone().unregisterForRingbackTone(mHandler);
                 getPhone().unregisterForHandoverStateChanged(mHandler);
+                getPhone().unregisterForRedialConnectionChanged(mHandler);
                 getPhone().unregisterForDisconnect(mHandler);
                 getPhone().unregisterForSuppServiceNotification(mHandler);
                 getPhone().unregisterForOnHoldTone(mHandler);
@@ -1423,6 +1650,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     protected void hangup(int telephonyDisconnectCode) {
         if (mOriginalConnection != null) {
+            mHangupDisconnectCause = telephonyDisconnectCode;
             try {
                 // Hanging up a ringing call requires that we invoke call.hangup() as opposed to
                 // connection.hangup(). Without this change, the party originating the call
@@ -1452,7 +1680,47 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 // There are a few cases where mOriginalConnection has not been set yet. For
                 // example, when the radio has to be turned on to make an emergency call,
                 // mOriginalConnection could not be set for many seconds.
-                setDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
+                setTelephonyConnectionDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
+                        android.telephony.DisconnectCause.LOCAL,
+                        "Local Disconnect before connection established."));
+                close();
+            }
+        }
+    }
+
+    protected void reject(@android.telecom.Call.RejectReason int rejectReason) {
+        if (mOriginalConnection != null) {
+            mHangupDisconnectCause = android.telephony.DisconnectCause.INCOMING_REJECTED;
+            try {
+                // Hanging up a ringing call requires that we invoke call.hangup() as opposed to
+                // connection.hangup(). Without this change, the party originating the call
+                // will not get sent to voicemail if the user opts to reject the call.
+                if (isValidRingingCall()) {
+                    Call call = getCall();
+                    if (call != null) {
+                        call.hangup(rejectReason);
+                    } else {
+                        Log.w(this, "Attempting to hangup a connection without backing call.");
+                    }
+                } else {
+                    // We still prefer to call connection.hangup() for non-ringing calls
+                    // in order to support hanging-up specific calls within a conference call.
+                    // If we invoked call.hangup() while in a conference, we would end up
+                    // hanging up the entire conference call instead of the specific connection.
+                    mOriginalConnection.hangup();
+                }
+            } catch (CallStateException e) {
+                Log.e(this, e, "Call to Connection.hangup failed with exception");
+            }
+        } else {
+            if (getState() == STATE_DISCONNECTED) {
+                Log.i(this, "hangup called on an already disconnected call!");
+                close();
+            } else {
+                // There are a few cases where mOriginalConnection has not been set yet. For
+                // example, when the radio has to be turned on to make an emergency call,
+                // mOriginalConnection could not be set for many seconds.
+                setTelephonyConnectionDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
                         android.telephony.DisconnectCause.LOCAL,
                         "Local Disconnect before connection established."));
                 close();
@@ -1554,8 +1822,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                         for (String key : extras.keySet()) {
                             Object value = extras.get(key);
                             if (value instanceof String) {
-                                Log.d(this, "updateExtras Key=" + Log.pii(key) +
-                                             " value=" + Log.pii((String)value));
+                                Log.d(this, "updateExtras Key=" + Rlog.pii(LOG_TAG, key)
+                                        + " value=" + Rlog.pii(LOG_TAG, value));
                             }
                         }
                     }
@@ -1573,12 +1841,12 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     }
 
                     // Ensure extras are propagated to Telecom.
-                    putExtras(mOriginalConnectionExtras);
+                    putTelephonyExtras(mOriginalConnectionExtras);
                 } else {
                     Log.d(this, "Extras update not required");
                 }
             } else {
-                Log.d(this, "updateExtras extras: " + Log.pii(extras));
+                Log.d(this, "updateExtras extras: " + Rlog.pii(LOG_TAG, extras));
             }
         }
     }
@@ -1642,19 +1910,19 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     setActiveInternal();
                     break;
                 case HOLDING:
-                    setOnHold();
+                    setTelephonyConnectionOnHold();
                     break;
                 case DIALING:
                 case ALERTING:
                     if (mOriginalConnection != null && mOriginalConnection.isPulledCall()) {
-                        setPulling();
+                        setTelephonyConnectionPulling();
                     } else {
-                        setDialing();
+                        setTelephonyConnectionDialing();
                     }
                     break;
                 case INCOMING:
                 case WAITING:
-                    setRinging();
+                    setTelephonyConnectionRinging();
                     break;
                 case DISCONNECTED:
                     if (shouldTreatAsEmergencyCall()
@@ -1675,11 +1943,19 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                             preciseDisconnectCause =
                                     mOriginalConnection.getPreciseDisconnectCause();
                         }
-                        setDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
-                                mOriginalConnection.getDisconnectCause(),
-                                preciseDisconnectCause,
-                                mOriginalConnection.getVendorDisconnectCause(),
-                                getPhone().getPhoneId()));
+                        int disconnectCause = mOriginalConnection.getDisconnectCause();
+                        if ((mHangupDisconnectCause != DisconnectCause.NOT_VALID)
+                                && (mHangupDisconnectCause != disconnectCause)) {
+                            Log.i(LOG_TAG, "setDisconnected: override cause: " + disconnectCause
+                                    + " -> " + mHangupDisconnectCause);
+                            disconnectCause = mHangupDisconnectCause;
+                        }
+                        setTelephonyConnectionDisconnected(
+                                DisconnectCauseUtil.toTelecomDisconnectCause(
+                                        disconnectCause,
+                                        preciseDisconnectCause,
+                                        mOriginalConnection.getVendorDisconnectCause(),
+                                        getPhone().getPhoneId()));
                         close();
                     }
                     break;
@@ -1701,6 +1977,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         updateAddress();
         updateMultiparty();
         refreshDisableAddCall();
+        refreshCodecType();
     }
 
     /**
@@ -1759,8 +2036,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         // To "optimize", we check here to see if there already exists any active calls.  If so,
         // we issue an update for those calls first to make sure we only have one top-level
         // active call.
-        if (getConnectionService() != null) {
-            for (Connection current : getConnectionService().getAllConnections()) {
+        if (getTelephonyConnectionService() != null) {
+            for (Connection current : getTelephonyConnectionService().getAllConnections()) {
                 if (current != this && current instanceof TelephonyConnection) {
                     TelephonyConnection other = (TelephonyConnection) current;
                     if (other.getState() == STATE_ACTIVE) {
@@ -1769,13 +2046,18 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 }
             }
         }
-        setActive();
+        setTelephonyConnectionActive();
     }
 
-    protected void close() {
+    public void close() {
         Log.v(this, "close");
         clearOriginalConnection();
         destroy();
+        if (mTelephonyConnectionService != null) {
+            removeTelephonyConnectionListener(
+                    mTelephonyConnectionService.getTelephonyConnectionListener());
+        }
+        notifyDestroyed();
     }
 
     /**
@@ -1787,9 +2069,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * @return {@code true} if the connection is video capable, {@code false} otherwise.
      */
     private boolean isVideoCapable() {
-        return can(mOriginalConnectionCapabilities, Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL)
-                && can(mOriginalConnectionCapabilities,
-                Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL);
+        return (mOriginalConnectionCapabilities & Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL)
+                == Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL
+                && (mOriginalConnectionCapabilities & Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL)
+                == Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL;
     }
 
     /**
@@ -1801,7 +2084,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * @return {@code true} if the connection is external, {@code false} otherwise.
      */
     private boolean isExternalConnection() {
-        return can(mOriginalConnectionCapabilities, Capability.IS_EXTERNAL_CONNECTION);
+        return (mOriginalConnectionCapabilities
+                & Capability.IS_EXTERNAL_CONNECTION) == Capability.IS_EXTERNAL_CONNECTION;
     }
 
     /**
@@ -1823,8 +2107,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * @return {@code true} if the connection is pullable, {@code false} otherwise.
      */
     private boolean isPullable() {
-        return can(mOriginalConnectionCapabilities, Capability.IS_EXTERNAL_CONNECTION)
-                && can(mOriginalConnectionCapabilities, Capability.IS_PULLABLE);
+        return (mOriginalConnectionCapabilities & Capability.IS_EXTERNAL_CONNECTION)
+                == Capability.IS_EXTERNAL_CONNECTION
+                && (mOriginalConnectionCapabilities & Capability.IS_PULLABLE)
+                == Capability.IS_PULLABLE;
     }
 
     /**
@@ -1882,17 +2168,20 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     public int applyOriginalConnectionCapabilities(int capabilities) {
         // We only support downgrading to audio if both the remote and local side support
         // downgrading to audio.
-        boolean supportsDowngradeToAudio = can(mOriginalConnectionCapabilities,
-                Capability.SUPPORTS_DOWNGRADE_TO_VOICE_LOCAL |
-                        Capability.SUPPORTS_DOWNGRADE_TO_VOICE_REMOTE);
+        int supportsDowngrade = Capability.SUPPORTS_DOWNGRADE_TO_VOICE_LOCAL
+                | Capability.SUPPORTS_DOWNGRADE_TO_VOICE_REMOTE;
+        boolean supportsDowngradeToAudio =
+                (mOriginalConnectionCapabilities & supportsDowngrade) == supportsDowngrade;
         capabilities = changeBitmask(capabilities,
                 CAPABILITY_CANNOT_DOWNGRADE_VIDEO_TO_AUDIO, !supportsDowngradeToAudio);
 
         capabilities = changeBitmask(capabilities, CAPABILITY_SUPPORTS_VT_REMOTE_BIDIRECTIONAL,
-                can(mOriginalConnectionCapabilities, Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL));
+                (mOriginalConnectionCapabilities & Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL)
+                        == Capability.SUPPORTS_VT_REMOTE_BIDIRECTIONAL);
 
-        boolean isLocalVideoSupported = can(mOriginalConnectionCapabilities,
-                Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL) && !mIsTtyEnabled;
+        boolean isLocalVideoSupported = (mOriginalConnectionCapabilities
+                & Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL)
+                == Capability.SUPPORTS_VT_LOCAL_BIDIRECTIONAL && !mIsTtyEnabled;
         capabilities = changeBitmask(capabilities, CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL,
                 isLocalVideoSupported);
 
@@ -2119,13 +2408,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     : R.string.status_hint_label_wifi_call;
 
             Context context = getPhone().getContext();
-            setStatusHints(new StatusHints(
-                    context.getString(labelId),
+            setTelephonyStatusHints(new StatusHints(
+                    getResourceString(labelId),
                     Icon.createWithResource(
                             context, R.drawable.ic_signal_wifi_4_bar_24dp),
                     null /* extras */));
         } else {
-            setStatusHints(null);
+            setTelephonyStatusHints(null);
         }
     }
 
@@ -2203,7 +2492,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * 3. If call is a video call, carrier supports video conference calls.
      * 4. If call is a wifi call and VoWIFI is disabled and carrier supports merging these calls.
      */
-    private void refreshConferenceSupported() {
+    @VisibleForTesting
+    void refreshConferenceSupported() {
         boolean isVideoCall = VideoProfile.isVideo(getVideoState());
         Phone phone = getPhone();
         if (phone == null) {
@@ -2329,7 +2619,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         sb.append(" properties:");
         sb.append(propertiesToString(getConnectionProperties()));
         sb.append(" address:");
-        sb.append(Log.pii(getAddress()));
+        sb.append(Rlog.pii(LOG_TAG, getAddress()));
         sb.append(" originalConnection:");
         sb.append(mOriginalConnection);
         sb.append(" partOfConf:");
@@ -2340,7 +2630,370 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
         sb.append(" confSupported:");
         sb.append(mIsConferenceSupported ? "Y" : "N");
+        sb.append(" isAdhocConf:");
+        sb.append(isAdhocConferenceCall() ? "Y" : "N");
         sb.append("]");
         return sb.toString();
+    }
+
+    public final void setTelephonyConnectionService(TelephonyConnectionService connectionService) {
+        mTelephonyConnectionService = connectionService;
+    }
+
+    public final TelephonyConnectionService getTelephonyConnectionService() {
+        return mTelephonyConnectionService;
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to an active state.
+     * <p>
+     * Note: This should be used instead of {@link #setActive()} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionActive() {
+        setActive();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to a ringing state.
+     * <p>
+     * Note: This should be used instead of {@link #setRinging()} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionRinging() {
+        setRinging();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to an initializing state.
+     * <p>
+     * Note: This should be used instead of {@link #setInitializing()} to ensure listeners are
+     * notified.
+     */
+    public void setTelephonyConnectionInitializing() {
+        setInitializing();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to a dialing state.
+     * <p>
+     * Note: This should be used instead of {@link #setDialing()} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionDialing() {
+        setDialing();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to a pulling state.
+     * <p>
+     * Note: This should be used instead of {@link #setPulling()} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionPulling() {
+        setPulling();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to a held state.
+     * <p>
+     * Note: This should be used instead of {@link #setOnHold()} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionOnHold() {
+        setOnHold();
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Set this {@link TelephonyConnection} to a held state.
+     * <p>
+     * Note: This should be used instead of
+     * {@link #setDisconnected(android.telecom.DisconnectCause)} to ensure listeners are notified.
+     */
+    public void setTelephonyConnectionDisconnected(@NonNull
+            android.telecom.DisconnectCause disconnectCause) {
+        setDisconnected(disconnectCause);
+        notifyDisconnected(disconnectCause);
+        notifyStateChanged(getState());
+    }
+
+    /**
+     * Sends a connection event for this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #sendConnectionEvent(String, Bundle)} to ensure
+     * listeners are notified.
+     */
+    public void sendTelephonyConnectionEvent(@NonNull String event, @Nullable Bundle extras) {
+        sendConnectionEvent(event, extras);
+        notifyTelephonyConnectionEvent(event, extras);
+    }
+
+    /**
+     * Sets the extras associated with this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #putExtras(Bundle)} to ensure listeners are
+     * notified.
+     */
+    public void putTelephonyExtras(@NonNull Bundle extras) {
+        putExtras(extras);
+        notifyPutExtras(extras);
+    }
+
+    /**
+     * Removes the specified extras associated with this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #removeExtras(String...)} to ensure listeners are
+     * notified.
+     */
+    public void removeTelephonyExtras(@NonNull List<String> keys) {
+        removeExtras(keys);
+        notifyRemoveExtras(keys);
+    }
+
+    /**
+     * Sets the video state associated with this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #setVideoState(int)} to ensure listeners are
+     * notified.
+     * @param videoState The new video state. Valid values:
+     *                   {@link VideoProfile#STATE_AUDIO_ONLY},
+     *                   {@link VideoProfile#STATE_BIDIRECTIONAL},
+     *                   {@link VideoProfile#STATE_TX_ENABLED},
+     *                   {@link VideoProfile#STATE_RX_ENABLED}.
+     */
+    public void setTelephonyVideoState(int videoState) {
+        setVideoState(videoState);
+        notifyVideoStateChanged(videoState);
+    }
+
+    /**
+     * Sets the video provider associated with this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #setVideoProvider(VideoProvider)} to ensure
+     * listeners are notified.
+     */
+    public void setTelephonyVideoProvider(@Nullable VideoProvider videoProvider) {
+        setVideoProvider(videoProvider);
+        notifyVideoProviderChanged(videoProvider);
+    }
+
+    /**
+     * Sets the status hints associated with this {@link TelephonyConnection}.
+     * <p>
+     * Note: This should be used instead of {@link #setStatusHints(StatusHints)} to ensure listeners
+     * are notified.
+     */
+    public void setTelephonyStatusHints(@Nullable StatusHints statusHints) {
+        setStatusHints(statusHints);
+        notifyStatusHintsChanged(statusHints);
+    }
+
+    /**
+     * Sets RIL voice radio technology used for current connection.
+     * <p>
+     * This property is set by the Telephony {@link ConnectionService}.
+     *
+     * @param vrat the RIL Voice Radio Technology used for current connection,
+     *             see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
+     */
+    public final void setCallRadioTech(@RilRadioTechnology int vrat) {
+        Bundle extras = getExtras();
+        if (extras == null) {
+            extras = new Bundle();
+        }
+        extras.putInt(TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+                ServiceState.rilRadioTechnologyToNetworkType(vrat));
+        putExtras(extras);
+        // Propagates the call radio technology to its parent {@link android.telecom.Conference}
+        // This action only covers non-IMS CS conference calls.
+        // For IMS PS call conference call, it can be updated via its host connection
+        // {@link #Listener.onExtrasChanged} event.
+        if (getConference() != null) {
+            Bundle newExtras = new Bundle();
+            newExtras.putInt(
+                    TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+                    ServiceState.rilRadioTechnologyToNetworkType(vrat));
+            getConference().putExtras(newExtras);
+        }
+    }
+
+    /**
+     * Returns RIL voice radio technology used for current connection.
+     * <p>
+     * Used by the Telephony {@link ConnectionService}.
+     *
+     * @return the RIL voice radio technology used for current connection,
+     *         see {@code RIL_RADIO_TECHNOLOGY_*} in {@link android.telephony.ServiceState}.
+     */
+    public final @RilRadioTechnology int getCallRadioTech() {
+        int voiceNetworkType = TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        Bundle extras = getExtras();
+        if (extras != null) {
+            voiceNetworkType = extras.getInt(TelecomManager.EXTRA_CALL_NETWORK_TYPE,
+                    TelephonyManager.NETWORK_TYPE_UNKNOWN);
+        }
+        return ServiceState.networkTypeToRilRadioTechnology(voiceNetworkType);
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of a change to conference participant data
+     * received via the {@link ImsConference} (i.e. conference event package).
+     *
+     * @param conferenceParticipants The participants.
+     */
+    private void updateConferenceParticipants(
+            @NonNull List<ConferenceParticipant> conferenceParticipants) {
+        for (TelephonyConnectionListener l : mTelephonyListeners) {
+            l.onConferenceParticipantsChanged(this, conferenceParticipants);
+        }
+    }
+
+    /**
+     * Called by a {@link ConnectionService} to notify Telecom that a {@link Conference#onMerge()}
+     * operation has started.
+     */
+    protected void notifyConferenceStarted() {
+        for (TelephonyConnectionListener l : mTelephonyListeners) {
+            l.onConferenceStarted();
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s when a change has occurred to the Connection
+     * which impacts its ability to be a part of a conference call.
+     * @param isConferenceSupported {@code true} if the connection supports being part of a
+     *      conference call, {@code false} otherwise.
+     */
+    private void notifyConferenceSupportedChanged(boolean isConferenceSupported) {
+        for (TelephonyConnectionListener l : mTelephonyListeners) {
+            l.onConferenceSupportedChanged(this, isConferenceSupported);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of changes to the connection capabilities.
+     * @param newCapabilities the new capabilities.
+     */
+    private void notifyConnectionCapabilitiesChanged(int newCapabilities) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onConnectionCapabilitiesChanged(this, newCapabilities);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of changes to the connection properties.
+     * @param newProperties the new properties.
+     */
+    private void notifyConnectionPropertiesChanged(int newProperties) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onConnectionPropertiesChanged(this, newProperties);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s when a connection is destroyed.
+     */
+    private void notifyDestroyed() {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onDestroyed(this);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s when a connection disconnects.
+     * @param cause The disconnect cause.
+     */
+    private void notifyDisconnected(android.telecom.DisconnectCause cause) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onDisconnected(this, cause);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of connection state changes.
+     * @param newState The new state.
+     */
+    private void notifyStateChanged(int newState) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onStateChanged(this, newState);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of telephony connection events.
+     * @param event The event.
+     * @param extras Any extras.
+     */
+    private void notifyTelephonyConnectionEvent(String event, Bundle extras) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onConnectionEvent(this, event, extras);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s when extras are added to the connection.
+     * @param extras The new extras.
+     */
+    private void notifyPutExtras(Bundle extras) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onExtrasChanged(this, extras);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s when extra keys are removed from a connection.
+     * @param keys The removed keys.
+     */
+    private void notifyRemoveExtras(List<String> keys) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onExtrasRemoved(this, keys);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of a change to the video state of a connection.
+     * @param videoState The new video state. Valid values:
+     *                   {@link VideoProfile#STATE_AUDIO_ONLY},
+     *                   {@link VideoProfile#STATE_BIDIRECTIONAL},
+     *                   {@link VideoProfile#STATE_TX_ENABLED},
+     *                   {@link VideoProfile#STATE_RX_ENABLED}.
+     */
+    private void notifyVideoStateChanged(int videoState) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onVideoStateChanged(this, videoState);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of a whether to play Ringback Tone or not.
+     * @param ringback Whether the ringback tone is to be played
+     */
+    private void notifyRingbackRequested(boolean ringback) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onRingbackRequested(this, ringback);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of changes to the video provider for a
+     * connection.
+     * @param videoProvider The new video provider.
+     */
+    private void notifyVideoProviderChanged(VideoProvider videoProvider) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onVideoProviderChanged(this, videoProvider);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of changes to the status hints for a
+     * connection.
+     * @param statusHints The new status hints.
+     */
+    private void notifyStatusHintsChanged(StatusHints statusHints) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onStatusHintsChanged(this, statusHints);
+        }
     }
 }

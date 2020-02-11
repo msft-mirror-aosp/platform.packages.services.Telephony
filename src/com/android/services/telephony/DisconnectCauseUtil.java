@@ -117,6 +117,8 @@ public class DisconnectCauseUtil {
     private static int toTelecomDisconnectCauseCode(int telephonyDisconnectCause) {
         switch (telephonyDisconnectCause) {
             case android.telephony.DisconnectCause.LOCAL:
+            //  The call was still disconnected locally, so this is not an error condition.
+            case android.telephony.DisconnectCause.OUTGOING_EMERGENCY_CALL_PLACED:
                 return DisconnectCause.LOCAL;
 
             case android.telephony.DisconnectCause.NORMAL:
@@ -170,6 +172,8 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.POWER_OFF:
             case android.telephony.DisconnectCause.LOW_BATTERY:
             case android.telephony.DisconnectCause.DIAL_LOW_BATTERY:
+            case android.telephony.DisconnectCause.EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE:
+            case android.telephony.DisconnectCause.WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION:
             case android.telephony.DisconnectCause.SERVER_ERROR:
             case android.telephony.DisconnectCause.SERVER_UNREACHABLE:
             case android.telephony.DisconnectCause.TIMED_OUT:
@@ -360,6 +364,12 @@ public class DisconnectCauseUtil {
                 break;
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
+                break;
+            case android.telephony.DisconnectCause.EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE:
+                resourceId = R.string.callFailed_emergency_call_over_wfc_not_available;
+                break;
+            case android.telephony.DisconnectCause.WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION:
+                resourceId = R.string.callFailed_wfc_service_not_available_in_this_location;
                 break;
             default:
                 break;
@@ -748,6 +758,12 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
                 break;
+            case android.telephony.DisconnectCause.EMERGENCY_CALL_OVER_WFC_NOT_AVAILABLE:
+                resourceId = R.string.callFailed_emergency_call_over_wfc_not_available;
+                break;
+            case android.telephony.DisconnectCause.WFC_SERVICE_NOT_AVAILABLE_IN_THIS_LOCATION:
+                resourceId = R.string.callFailed_wfc_service_not_available_in_this_location;
+                break;
             default:
                 break;
         }
@@ -783,6 +799,8 @@ public class DisconnectCauseUtil {
                 break;
             case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
                 return DisconnectCause.REASON_IMS_ACCESS_BLOCKED;
+            case android.telephony.DisconnectCause.OUTGOING_EMERGENCY_CALL_PLACED:
+                return DisconnectCause.REASON_EMERGENCY_CALL_PLACED;
         }
 
         // If no specific code-mapping found, then fall back to using the reason.
