@@ -71,6 +71,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -246,12 +247,20 @@ public class TelephonyConnectionService extends ConnectionService {
 
         @Override
         public boolean isCurrentEmergencyNumber(String number) {
-            return mTelephonyManager.isEmergencyNumber(number);
+            try {
+                return mTelephonyManager.isEmergencyNumber(number);
+            } catch (IllegalStateException ise) {
+                return false;
+            }
         }
 
         @Override
         public Map<Integer, List<EmergencyNumber>> getCurrentEmergencyNumberList() {
-            return mTelephonyManager.getEmergencyNumberList();
+            try {
+                return mTelephonyManager.getEmergencyNumberList();
+            } catch (IllegalStateException ise) {
+                return new HashMap<>();
+            }
         }
     }
 
@@ -1167,11 +1176,26 @@ public class TelephonyConnectionService extends ConnectionService {
         Call call = phone.getRingingCall();
         if (!call.getState().isRinging()) {
             Log.i(this, "onCreateIncomingConnection, no ringing call");
-            return Connection.createFailedConnection(
+            Connection connection = Connection.createFailedConnection(
                     mDisconnectCauseFactory.toTelecomDisconnectCause(
                             android.telephony.DisconnectCause.INCOMING_MISSED,
                             "Found no ringing call",
                             phone.getPhoneId()));
+            Bundle extras = request.getExtras();
+
+            long time = extras.getLong(TelecomManager.EXTRA_CALL_CREATED_EPOCH_TIME_MILLIS);
+            if (time != 0) {
+                Log.i(this, "onCreateIncomingConnection. Set connect time info.");
+                connection.setConnectTimeMillis(time);
+            }
+
+            Uri address = extras.getParcelable(TelecomManager.EXTRA_INCOMING_CALL_ADDRESS);
+            if (address != null) {
+                Log.i(this, "onCreateIncomingConnection. Set caller id info.");
+                connection.setAddress(address, TelecomManager.PRESENTATION_ALLOWED);
+            }
+
+            return connection;
         }
 
         com.android.internal.telephony.Connection originalConnection =
@@ -1683,7 +1707,7 @@ public class TelephonyConnectionService extends ConnectionService {
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
                         Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
                 if (SubscriptionManager.isValidSubscriptionId(subId)) {
-                    intent.putExtra(PhoneConstants.SUBSCRIPTION_KEY, subId);
+                    SubscriptionManager.putSubscriptionIdExtra(intent, subId);
                 }
                 startActivity(intent);
             }
@@ -1706,7 +1730,7 @@ public class TelephonyConnectionService extends ConnectionService {
             return true;
         }
         return cfgManager.getConfigForSubId(phone.getSubId()).getBoolean(
-                CarrierConfigManager.KEY_ALLOW_HOLDING_VIDEO_CALL_BOOL, true);
+                CarrierConfigManager.KEY_ALLOW_HOLD_VIDEO_CALL_BOOL, true);
     }
 
     private boolean shouldHoldForEmergencyCall(Phone phone) {
@@ -1783,7 +1807,7 @@ public class TelephonyConnectionService extends ConnectionService {
             if (!isAdhocConference) {
                 // Listen to Telephony specific callbacks from the connection
                 returnConnection.addTelephonyConnectionListener(mTelephonyConnectionListener);
-            } 
+            }
             returnConnection.setVideoPauseSupported(
                     TelecomAccountRegistry.getInstance(this).isVideoPauseSupported(
                             phoneAccountHandle));
