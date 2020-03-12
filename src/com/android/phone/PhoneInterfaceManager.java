@@ -45,6 +45,7 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
+import android.os.ParcelFileDescriptor;
 import android.os.ParcelUuid;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -130,6 +131,7 @@ import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.HalVersion;
+import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.ITelephony;
@@ -188,6 +190,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Set;
+import java.util.function.Consumer;
 
 /**
  * Implementation of the ITelephony interface.
@@ -273,6 +276,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int EVENT_CHANGE_ICC_LOCK_PASSWORD_DONE = 77;
     private static final int CMD_SET_ICC_LOCK_ENABLED = 78;
     private static final int EVENT_SET_ICC_LOCK_ENABLED_DONE = 79;
+    private static final int CMD_SET_SYSTEM_SELECTION_CHANNELS = 80;
+    private static final int EVENT_SET_SYSTEM_SELECTION_CHANNELS_DONE = 81;
     private static final int CMD_GET_CALL_FORWARDING = 83;
     private static final int EVENT_GET_CALL_FORWARDING_DONE = 84;
     private static final int CMD_SET_CALL_FORWARDING = 85;
@@ -1016,14 +1021,47 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     onCompleted = obtainMessage(EVENT_GET_MODEM_ACTIVITY_INFO_DONE, request);
                     if (defaultPhone != null) {
                         defaultPhone.getModemActivityInfo(onCompleted, request.workSource);
+                    } else {
+                        ResultReceiver result = (ResultReceiver) request.argument;
+                        Bundle bundle = new Bundle();
+                        bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY,
+                                new ModemActivityInfo(0, 0, 0, new int[0], 0));
+                        result.send(0, bundle);
                     }
                     break;
 
                 case EVENT_GET_MODEM_ACTIVITY_INFO_DONE:
                     ar = (AsyncResult) msg.obj;
                     request = (MainThreadRequest) ar.userObj;
+                    ResultReceiver result = (ResultReceiver) request.argument;
+
+                    ModemActivityInfo ret = new ModemActivityInfo(0, 0, 0, new int[0], 0);
                     if (ar.exception == null && ar.result != null) {
-                        request.result = ar.result;
+                        // Update the last modem activity info and the result of the request.
+                        ModemActivityInfo info = (ModemActivityInfo) ar.result;
+                        if (isModemActivityInfoValid(info)) {
+                            int[] mergedTxTimeMs = new int[ModemActivityInfo.TX_POWER_LEVELS];
+                            int[] txTimeMs = info.getTransmitTimeMillis();
+                            int[] lastModemTxTimeMs = mLastModemActivityInfo
+                                    .getTransmitTimeMillis();
+                            for (int i = 0; i < mergedTxTimeMs.length; i++) {
+                                mergedTxTimeMs[i] = txTimeMs[i] + lastModemTxTimeMs[i];
+                            }
+                            mLastModemActivityInfo.setTimestamp(info.getTimestamp());
+                            mLastModemActivityInfo.setSleepTimeMillis(info.getSleepTimeMillis()
+                                    + mLastModemActivityInfo.getSleepTimeMillis());
+                            mLastModemActivityInfo.setIdleTimeMillis(info.getIdleTimeMillis()
+                                    + mLastModemActivityInfo.getIdleTimeMillis());
+                            mLastModemActivityInfo.setTransmitTimeMillis(mergedTxTimeMs);
+                            mLastModemActivityInfo.setReceiveTimeMillis(
+                                    info.getReceiveTimeMillis()
+                                            + mLastModemActivityInfo.getReceiveTimeMillis());
+                        }
+                        ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestamp(),
+                                mLastModemActivityInfo.getSleepTimeMillis(),
+                                mLastModemActivityInfo.getIdleTimeMillis(),
+                                mLastModemActivityInfo.getTransmitTimeMillis(),
+                                mLastModemActivityInfo.getReceiveTimeMillis());
                     } else {
                         if (ar.result == null) {
                             loge("queryModemActivityInfo: Empty response");
@@ -1034,10 +1072,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             loge("queryModemActivityInfo: Unknown exception");
                         }
                     }
-                    // Result cannot be null. Return ModemActivityInfo with all fields set to 0.
-                    if (request.result == null) {
-                        request.result = new ModemActivityInfo(0, 0, 0, null, 0);
-                    }
+                    Bundle bundle = new Bundle();
+                    bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
+                    result.send(0, bundle);
                     notifyRequester(request);
                     break;
 
@@ -1335,6 +1372,23 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     }
                     notifyRequester(request);
                     break;
+                case CMD_SET_SYSTEM_SELECTION_CHANNELS: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_SET_SYSTEM_SELECTION_CHANNELS_DONE, request);
+                    Pair<List<RadioAccessSpecifier>, Consumer<Boolean>> args =
+                            (Pair<List<RadioAccessSpecifier>, Consumer<Boolean>>) request.argument;
+                    request.phone.setSystemSelectionChannels(args.first, onCompleted);
+                    break;
+                }
+                case EVENT_SET_SYSTEM_SELECTION_CHANNELS_DONE: {
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    Pair<List<RadioAccessSpecifier>, Consumer<Boolean>> args =
+                            (Pair<List<RadioAccessSpecifier>, Consumer<Boolean>>) request.argument;
+                    args.second.accept(ar.exception == null);
+                    notifyRequester(request);
+                    break;
+                }
                 case EVENT_SET_FORBIDDEN_PLMNS_DONE:
                     ar = (AsyncResult) msg.obj;
                     request = (MainThreadRequest) ar.userObj;
@@ -5657,14 +5711,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim,
+    private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim, int uid,
             Phone phone) {
         //load access rules from carrier configs, and check those as well: b/139133814
         SubscriptionController subController = SubscriptionController.getInstance();
         if (privilegeFromSim == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS
                 || subController == null) return privilegeFromSim;
 
-        int uid = Binder.getCallingUid();
         PackageManager pkgMgr = phone.getContext().getPackageManager();
         String[] packages = pkgMgr.getPackagesForUid(uid);
 
@@ -5718,7 +5771,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         return getCarrierPrivilegeStatusFromCarrierConfigRules(
             card.getCarrierPrivilegeStatusForCurrentTransaction(
-                phone.getContext().getPackageManager()), phone);
+                phone.getContext().getPackageManager()), Binder.getCallingUid(), phone);
     }
 
     @Override
@@ -5737,7 +5790,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
         return getCarrierPrivilegeStatusFromCarrierConfigRules(
                 profile.getCarrierPrivilegeStatusForUid(
-                        phone.getContext().getPackageManager(), uid), phone);
+                        phone.getContext().getPackageManager(), uid), uid, phone);
     }
 
     @Override
@@ -6580,38 +6633,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            ModemActivityInfo ret = null;
-            synchronized (mLastModemActivityInfo) {
-                ModemActivityInfo info = (ModemActivityInfo) sendRequest(
-                        CMD_GET_MODEM_ACTIVITY_INFO,
-                        null, workSource);
-                if (isModemActivityInfoValid(info)) {
-                    int[] mergedTxTimeMs = new int[ModemActivityInfo.TX_POWER_LEVELS];
-                    int[] txTimeMs = info.getTransmitTimeMillis();
-                    int[] lastModemTxTimeMs = mLastModemActivityInfo.getTransmitTimeMillis();
-                    for (int i = 0; i < mergedTxTimeMs.length; i++) {
-                        mergedTxTimeMs[i] = txTimeMs[i] + lastModemTxTimeMs[i];
-                    }
-                    mLastModemActivityInfo.setTimestamp(info.getTimestamp());
-                    mLastModemActivityInfo.setSleepTimeMillis(info.getSleepTimeMillis()
-                            + mLastModemActivityInfo.getSleepTimeMillis());
-                    mLastModemActivityInfo.setIdleTimeMillis(
-                            info.getIdleTimeMillis() + mLastModemActivityInfo.getIdleTimeMillis());
-                    mLastModemActivityInfo.setTransmitTimeMillis(mergedTxTimeMs);
-                    mLastModemActivityInfo.setReceiveTimeMillis(
-                            info.getReceiveTimeMillis() + mLastModemActivityInfo
-                                .getReceiveTimeMillis());
-                }
-
-                ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestamp(),
-                        mLastModemActivityInfo.getSleepTimeMillis(),
-                        mLastModemActivityInfo.getIdleTimeMillis(),
-                        mLastModemActivityInfo.getTransmitTimeMillis(),
-                        mLastModemActivityInfo.getReceiveTimeMillis());
-            }
-            Bundle bundle = new Bundle();
-            bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
-            result.send(0, bundle);
+            sendRequestAsync(CMD_GET_MODEM_ACTIVITY_INFO, result, null, workSource);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -7521,23 +7543,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    @Override
-    public void setRadioIndicationUpdateMode(int subId, int filters, int mode) {
-        enforceModifyPermission();
-        final Phone phone = getPhone(subId);
-        if (phone == null) {
-            loge("setRadioIndicationUpdateMode fails with invalid subId: " + subId);
-            return;
-        }
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            phone.setRadioIndicationUpdateMode(filters, mode);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
     /**
      * A test API to reload the UICC profile.
      *
@@ -7827,7 +7832,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public void updateTestOtaEmergencyNumberDbFilePath(String otaFilePath) {
+    public void updateOtaEmergencyNumberDbFilePath(ParcelFileDescriptor otaParcelFileDescriptor) {
         enforceActiveEmergencySessionPermission();
 
         final long identity = Binder.clearCallingIdentity();
@@ -7835,7 +7840,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             for (Phone phone: PhoneFactory.getPhones()) {
                 EmergencyNumberTracker tracker = phone.getEmergencyNumberTracker();
                 if (tracker != null) {
-                    tracker.updateTestOtaEmergencyNumberDbFilePath(otaFilePath);
+                    tracker.updateOtaEmergencyNumberDbFilePath(otaParcelFileDescriptor);
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void resetOtaEmergencyNumberDbFilePath() {
+        enforceActiveEmergencySessionPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            for (Phone phone: PhoneFactory.getPhones()) {
+                EmergencyNumberTracker tracker = phone.getEmergencyNumberTracker();
+                if (tracker != null) {
+                    tracker.resetOtaEmergencyNumberDbFilePath();
                 }
             }
         } finally {
@@ -8138,6 +8160,39 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return ApnSettingUtils.isMeteredApnType(apnType, phone);
         } finally {
             Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void setSystemSelectionChannels(List<RadioAccessSpecifier> specifiers,
+            int subscriptionId, IBooleanConsumer resultCallback) {
+        enforceModifyPermission();
+        long token = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subscriptionId);
+            if (phone == null) {
+                try {
+                    if (resultCallback != null) {
+                        resultCallback.accept(false);
+                    }
+                } catch (RemoteException e) {
+                    // ignore
+                }
+                return;
+            }
+            Pair<List<RadioAccessSpecifier>, Consumer<Boolean>> argument =
+                    Pair.create(specifiers, (x) -> {
+                        try {
+                            if (resultCallback != null) {
+                                resultCallback.accept(x);
+                            }
+                        } catch (RemoteException e) {
+                            // ignore
+                        }
+                    });
+            sendRequestAsync(CMD_SET_SYSTEM_SELECTION_CHANNELS, argument, phone, null);
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 
