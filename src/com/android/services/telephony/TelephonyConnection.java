@@ -37,12 +37,11 @@ import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
 import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
-import android.telephony.Annotation.RilRadioTechnology;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DisconnectCause;
 import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
 import android.telephony.ServiceState;
+import android.telephony.ServiceState.RilRadioTechnology;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsCallProfile;
@@ -51,6 +50,7 @@ import android.text.TextUtils;
 import android.util.Pair;
 
 import com.android.ims.ImsCall;
+import com.android.ims.ImsException;
 import com.android.ims.internal.ConferenceParticipant;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.SomeArgs;
@@ -63,12 +63,14 @@ import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.imsphone.ImsPhone;
+import com.android.internal.telephony.imsphone.ImsPhoneCall;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.ImsUtil;
 import com.android.phone.PhoneGlobals;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
+import com.android.telephony.Rlog;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -113,6 +115,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     private static final int MSG_SET_CALL_RADIO_TECH = 18;
     private static final int MSG_ON_CONNECTION_EVENT = 19;
     private static final int MSG_REDIAL_CONNECTION_CHANGED = 20;
+    private static final int MSG_REJECT = 21;
+
+    private static final String JAPAN_COUNTRY_CODE_WITH_PLUS_SIGN = "+81";
+    private static final String JAPAN_ISO_COUNTRY_CODE = "JP";
+
+    private List<Uri> mParticipants;
+    private boolean mIsAdhocConferenceCall;
 
     private final Handler mHandler = new Handler(Looper.getMainLooper()) {
         @Override
@@ -163,7 +172,9 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                                 "not foreground connection, skipping");
                         return;
                     }
-                    setRingbackRequested((Boolean) ((AsyncResult) msg.obj).result);
+                    boolean ringback = (Boolean) ((AsyncResult) msg.obj).result;
+                    setRingbackRequested(ringback);
+                    notifyRingbackRequested(ringback);
                     break;
                 case MSG_DISCONNECT:
                     updateState();
@@ -267,6 +278,10 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 case MSG_HANGUP:
                     int cause = (int) msg.obj;
                     hangup(cause);
+                    break;
+                case MSG_REJECT:
+                    int rejectReason = (int) msg.obj;
+                    reject(rejectReason);
                     break;
 
                 case MSG_SET_CALL_RADIO_TECH:
@@ -463,6 +478,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         public void onVideoProviderChanged(android.telecom.Connection c,
                 Connection.VideoProvider videoProvider) {}
         public void onVideoStateChanged(android.telecom.Connection c, int videoState) {}
+        public void onRingbackRequested(Connection c, boolean ringback) {}
     }
 
     private final PostDialListener mPostDialListener = new PostDialListener() {
@@ -859,6 +875,11 @@ abstract class TelephonyConnection extends Connection implements Holdable {
     }
 
     @Override
+    public void onAddConferenceParticipants(List<Uri> participants) {
+        performAddConferenceParticipants(participants);
+    }
+
+    @Override
     public void onAbort() {
         Log.v(this, "onAbort");
         mHandler.obtainMessage(MSG_HANGUP, android.telephony.DisconnectCause.LOCAL).sendToTarget();
@@ -876,14 +897,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     @Override
     public void onAnswer(int videoState) {
-        Log.v(this, "onAnswer");
-        if (isValidRingingCall() && getPhone() != null) {
-            try {
-                getPhone().acceptCall(videoState);
-            } catch (CallStateException e) {
-                Log.e(this, e, "Failed to accept call.");
-            }
-        }
+        performAnswer(videoState);
     }
 
     @Override
@@ -927,12 +941,73 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     @Override
     public void onReject() {
-        Log.v(this, "onReject");
+        performReject(android.telecom.Call.REJECT_REASON_DECLINED);
+    }
+
+    @Override
+    public void onReject(@android.telecom.Call.RejectReason int rejectReason) {
+        performReject(rejectReason);
+    }
+
+    public void performReject(int rejectReason) {
+        Log.v(this, "performReject");
         if (isValidRingingCall()) {
-            mHandler.obtainMessage(MSG_HANGUP, android.telephony.DisconnectCause.INCOMING_REJECTED)
+            mHandler.obtainMessage(MSG_REJECT, rejectReason)
                     .sendToTarget();
         }
         super.onReject();
+    }
+
+    @Override
+    public void onTransfer(Uri number, boolean isConfirmationRequired) {
+        Log.v(this, "onTransfer");
+        if (mOriginalConnection != null) {
+            if (number == null) {
+                Log.w(this, "call transfer uri is null");
+                return;
+            }
+            String scheme = number.getScheme();
+            String transferNumber = "";
+            String uriString = number.getSchemeSpecificPart();
+            if (!PhoneAccount.SCHEME_VOICEMAIL.equals(scheme)) {
+                if (!PhoneAccount.SCHEME_TEL.equals(scheme)) {
+                    Log.w(this, "onTransfer, number scheme is not of type tel instead: "
+                            + scheme);
+                    return;
+                }
+                if (PhoneNumberUtils.isUriNumber(uriString)) {
+                    Log.w(this, "Invalid transfer address. Not a legal PSTN number.");
+                    return;
+                }
+                transferNumber = PhoneNumberUtils.convertAndStrip(uriString);
+                if (TextUtils.isEmpty(transferNumber)) {
+                    Log.w(this, "Empty transfer number obtained from uri");
+                    return;
+                }
+            } else {
+                Log.w(this, "Cannot transfer to voicemail uri");
+                return;
+            }
+
+            try {
+                mOriginalConnection.transfer(transferNumber, isConfirmationRequired);
+            } catch (CallStateException e) {
+                Log.e(this, e, "Failed to transfer call.");
+            }
+        }
+    }
+
+    @Override
+    public void onTransfer(Connection otherConnection) {
+        Log.v(this, "onConsultativeTransfer");
+        if (mOriginalConnection != null && (otherConnection instanceof TelephonyConnection)) {
+            try {
+                mOriginalConnection.consultativeTransfer(
+                        ((TelephonyConnection) otherConnection).getOriginalConnection());
+            } catch (CallStateException e) {
+                Log.e(this, e, "Failed to transfer call.");
+            }
+        }
     }
 
     @Override
@@ -999,6 +1074,17 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
         ImsPhoneConnection originalConnection = (ImsPhoneConnection) mOriginalConnection;
         originalConnection.sendRttModifyResponse(textStream);
+    }
+
+    public void performAnswer(int videoState) {
+        Log.v(this, "performAnswer");
+        if (isValidRingingCall() && getPhone() != null) {
+            try {
+                getPhone().acceptCall(videoState);
+            } catch (CallStateException e) {
+                Log.e(this, e, "Failed to accept call.");
+            }
+        }
     }
 
     public void performHold() {
@@ -1096,6 +1182,29 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
     }
 
+    private String[] getAddConferenceParticipants(List<Uri> participants) {
+        String[] addConfParticipants = new String[participants.size()];
+        int i = 0;
+        for (Uri participant : participants) {
+           addConfParticipants[i] = participant.getSchemeSpecificPart();
+           i++;
+        }
+        return addConfParticipants;
+    }
+
+    public void performAddConferenceParticipants(List<Uri> participants) {
+        Log.v(this, "performAddConferenceParticipants");
+        if (mOriginalConnection.getCall() instanceof ImsPhoneCall) {
+            ImsPhoneCall imsPhoneCall = (ImsPhoneCall)mOriginalConnection.getCall();
+            try {
+                imsPhoneCall.getImsCall().inviteParticipants(
+                        getAddConferenceParticipants(participants));
+            } catch(ImsException e) {
+                Log.e(this, e, "failed to add conference participants");
+            }
+        }
+    }
+
     /**
      * Builds connection capabilities common to all TelephonyConnections. Namely, apply IMS-based
      * capabilities.
@@ -1130,6 +1239,12 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         newCapabilities = changeBitmask(newCapabilities, CAPABILITY_SUPPORT_DEFLECT,
                 isImsConnection() && canDeflectImsCalls());
 
+        newCapabilities = applyAddParticipantCapabilities(newCapabilities);
+        newCapabilities = changeBitmask(newCapabilities, CAPABILITY_TRANSFER_CONSULTATIVE,
+                isImsConnection() && canConsultativeTransfer());
+        newCapabilities = changeBitmask(newCapabilities, CAPABILITY_TRANSFER,
+                isImsConnection() && canTransferToNumber());
+
         if (getConnectionCapabilities() != newCapabilities) {
             setConnectionCapabilities(newCapabilities);
             notifyConnectionCapabilitiesChanged(newCapabilities);
@@ -1162,11 +1277,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 isExternalConnection());
         newProperties = changeBitmask(newProperties, PROPERTY_HAS_CDMA_VOICE_PRIVACY,
                 mIsCdmaVoicePrivacyEnabled);
-        newProperties = changeBitmask(newProperties, PROPERTY_ASSISTED_DIALING_USED,
+        newProperties = changeBitmask(newProperties, PROPERTY_ASSISTED_DIALING,
                 mIsUsingAssistedDialing);
         newProperties = changeBitmask(newProperties, PROPERTY_IS_RTT, isRtt());
         newProperties = changeBitmask(newProperties, PROPERTY_NETWORK_IDENTIFIED_EMERGENCY_CALL,
                 isNetworkIdentifiedEmergencyCall());
+        newProperties = changeBitmask(newProperties, PROPERTY_IS_ADHOC_CONFERENCE,
+                isAdhocConferenceCall());
 
         if (getConnectionProperties() != newProperties) {
             setTelephonyConnectionProperties(newProperties);
@@ -1186,6 +1303,9 @@ abstract class TelephonyConnection extends Connection implements Holdable {
             if (isShowingOriginalDialString()
                     && mOriginalConnection.getOrigDialString() != null) {
                 address = getAddressFromNumber(mOriginalConnection.getOrigDialString());
+            } else if (isNeededToFormatIncomingNumberForJp()) {
+                address = getAddressFromNumber(
+                        formatIncomingNumberForJp(mOriginalConnection.getAddress()));
             } else {
                 address = getAddressFromNumber(mOriginalConnection.getAddress());
             }
@@ -1255,6 +1375,7 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         setTelephonyVideoState(mOriginalConnection.getVideoState());
         setOriginalConnectionCapabilities(mOriginalConnection.getConnectionCapabilities());
         setIsNetworkIdentifiedEmergencyCall(mOriginalConnection.isNetworkIdentifiedEmergencyCall());
+        setIsAdhocConferenceCall(mOriginalConnection.isAdhocConference());
         setAudioModeIsVoip(mOriginalConnection.getAudioModeIsVoip());
         setTelephonyVideoProvider(mOriginalConnection.getVideoProvider());
         setAudioQuality(mOriginalConnection.getAudioQuality());
@@ -1511,6 +1632,39 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         return true;
     }
 
+    /**
+     * @return The address's to which this Connection is currently communicating.
+     */
+    public final @Nullable List<Uri> getParticipants() {
+        return mParticipants;
+    }
+
+    /**
+     * Sets the value of the {@link #getParticipants()} property.
+     *
+     * @param address The participant address's.
+     */
+    public final void setParticipants(@Nullable List<Uri> address) {
+        mParticipants = address;
+    }
+
+    /**
+     * @return true if connection is adhocConference call else false.
+     */
+    public final boolean isAdhocConferenceCall() {
+        return mIsAdhocConferenceCall;
+    }
+
+    /**
+     * Sets the value of the {@link #isAdhocConferenceCall()} property.
+     *
+     * @param isAdhocConferenceCall represents if the call is adhoc conference call or not.
+     */
+    public void setIsAdhocConferenceCall(boolean isAdhocConferenceCall) {
+        mIsAdhocConferenceCall = isAdhocConferenceCall;
+        updateConnectionProperties();
+    }
+
     private boolean canHoldImsCalls() {
         PersistableBundle b = getCarrierConfig();
         // Return true if the CarrierConfig is unavailable
@@ -1518,6 +1672,75 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                 b.getBoolean(CarrierConfigManager.KEY_ALLOW_HOLD_IN_IMS_CALL_BOOL)) &&
                 ((mOriginalConnection != null && mOriginalConnection.shouldAllowHoldingVideoCall())
                 || !VideoProfile.isVideo(getVideoState()));
+    }
+
+    private boolean isConferenceHosted() {
+        boolean isHosted = false;
+        if (getTelephonyConnectionService() != null) {
+            for (Conference current : getTelephonyConnectionService().getAllConferences()) {
+                if (current instanceof ImsConference) {
+                    ImsConference other = (ImsConference) current;
+                    if (getState() == current.getState()) {
+                        continue;
+                    }
+                    if (other.isConferenceHost()) {
+                        isHosted = true;
+                        break;
+                    }
+                }
+            }
+        }
+        return isHosted;
+    }
+
+    private boolean isAddParticipantCapable() {
+        // not add participant capable for non ims phones
+        if (getPhone() == null || getPhone().getPhoneType() != PhoneConstants.PHONE_TYPE_IMS) {
+            return false;
+        }
+
+        if (!getCarrierConfig()
+                .getBoolean(CarrierConfigManager.KEY_SUPPORT_ADD_CONFERENCE_PARTICIPANTS_BOOL)) {
+            return false;
+        }
+
+        boolean isCapable = !mTreatAsEmergencyCall && (mConnectionState == Call.State.ACTIVE ||
+                mConnectionState == Call.State.HOLDING);
+
+        // add participant capable if current connection is a host connection or
+        // if conference is not hosted on the device
+        isCapable = isCapable && ((mOriginalConnection != null &&
+                mOriginalConnection.isConferenceHost()) ||
+                !isConferenceHosted());
+
+        /**
+          * For individual IMS calls, if the extra for remote conference support is
+          *     - indicated, then consider the same for add participant capability
+          *     - not indicated, then the add participant capability is same as before.
+          */
+        if (isCapable && (mOriginalConnection != null) && !mIsMultiParty) {
+            isCapable = mOriginalConnectionExtras.getBoolean(
+                    ImsCallProfile.EXTRA_CONFERENCE_AVAIL, isCapable);
+        }
+        return isCapable;
+    }
+
+    /**
+     * Applies the add participant capabilities to the {@code CallCapabilities} bit-mask.
+     *
+     * @param callCapabilities The {@code CallCapabilities} bit-mask.
+     * @return The capabilities with the add participant capabilities applied.
+     */
+    private int applyAddParticipantCapabilities(int callCapabilities) {
+        int currentCapabilities = callCapabilities;
+        if (isAddParticipantCapable()) {
+            currentCapabilities = changeBitmask(currentCapabilities,
+                    Connection.CAPABILITY_ADD_PARTICIPANT, true);
+        } else {
+            currentCapabilities = changeBitmask(currentCapabilities,
+                    Connection.CAPABILITY_ADD_PARTICIPANT, false);
+        }
+        return currentCapabilities;
     }
 
     @VisibleForTesting
@@ -1538,6 +1761,50 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     isValidRingingCall();
         }
         return false;
+    }
+
+    private boolean isCallTransferSupported() {
+        PersistableBundle b = getCarrierConfig();
+        // Return false if the CarrierConfig is unavailable
+        if (b != null) {
+            return b.getBoolean(CarrierConfigManager.KEY_CARRIER_ALLOW_TRANSFER_IMS_CALL_BOOL);
+        }
+        return false;
+    }
+
+    private boolean canTransfer(TelephonyConnection c) {
+        com.android.internal.telephony.Connection connection = c.getOriginalConnection();
+        return (connection != null && !connection.isMultiparty()
+                && (c.getState() == STATE_ACTIVE || c.getState() == STATE_HOLDING));
+    }
+
+    private boolean canTransferToNumber() {
+        if (!isCallTransferSupported()) {
+            return false;
+        }
+        return canTransfer(this);
+    }
+
+    private boolean canConsultativeTransfer() {
+        if (!isCallTransferSupported()) {
+            return false;
+        }
+        if (!canTransfer(this)) {
+            return false;
+        }
+        boolean canConsultativeTransfer = false;
+        if (getTelephonyConnectionService() != null) {
+            for (Connection current : getTelephonyConnectionService().getAllConnections()) {
+                if (current != this && current instanceof TelephonyConnection) {
+                    TelephonyConnection other = (TelephonyConnection) current;
+                    if (canTransfer(other)) {
+                        canConsultativeTransfer = true;
+                        break;
+                    }
+                }
+            }
+        }
+        return canConsultativeTransfer;
     }
 
     /**
@@ -1599,6 +1866,46 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                     Call call = getCall();
                     if (call != null) {
                         call.hangup();
+                    } else {
+                        Log.w(this, "Attempting to hangup a connection without backing call.");
+                    }
+                } else {
+                    // We still prefer to call connection.hangup() for non-ringing calls
+                    // in order to support hanging-up specific calls within a conference call.
+                    // If we invoked call.hangup() while in a conference, we would end up
+                    // hanging up the entire conference call instead of the specific connection.
+                    mOriginalConnection.hangup();
+                }
+            } catch (CallStateException e) {
+                Log.e(this, e, "Call to Connection.hangup failed with exception");
+            }
+        } else {
+            if (getState() == STATE_DISCONNECTED) {
+                Log.i(this, "hangup called on an already disconnected call!");
+                close();
+            } else {
+                // There are a few cases where mOriginalConnection has not been set yet. For
+                // example, when the radio has to be turned on to make an emergency call,
+                // mOriginalConnection could not be set for many seconds.
+                setTelephonyConnectionDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
+                        android.telephony.DisconnectCause.LOCAL,
+                        "Local Disconnect before connection established."));
+                close();
+            }
+        }
+    }
+
+    protected void reject(@android.telecom.Call.RejectReason int rejectReason) {
+        if (mOriginalConnection != null) {
+            mHangupDisconnectCause = android.telephony.DisconnectCause.INCOMING_REJECTED;
+            try {
+                // Hanging up a ringing call requires that we invoke call.hangup() as opposed to
+                // connection.hangup(). Without this change, the party originating the call
+                // will not get sent to voicemail if the user opts to reject the call.
+                if (isValidRingingCall()) {
+                    Call call = getCall();
+                    if (call != null) {
+                        call.hangup(rejectReason);
                     } else {
                         Log.w(this, "Attempting to hangup a connection without backing call.");
                     }
@@ -1742,6 +2049,12 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
                     // Ensure extras are propagated to Telecom.
                     putTelephonyExtras(mOriginalConnectionExtras);
+                    // If extras contain Conference support information,
+                    // then ensure capabilities are updated.
+                    if (mOriginalConnectionExtras.containsKey(
+                            ImsCallProfile.EXTRA_CONFERENCE_AVAIL)) {
+                        updateConnectionCapabilities();
+                    }
                 } else {
                     Log.d(this, "Extras update not required");
                 }
@@ -2530,6 +2843,8 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         }
         sb.append(" confSupported:");
         sb.append(mIsConferenceSupported ? "Y" : "N");
+        sb.append(" isAdhocConf:");
+        sb.append(isAdhocConferenceCall() ? "Y" : "N");
         sb.append("]");
         return sb.toString();
     }
@@ -2654,8 +2969,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
      * <p>
      * Note: This should be used instead of {@link #setVideoState(int)} to ensure listeners are
      * notified.
+     * @param videoState The new video state. Valid values:
+     *                   {@link VideoProfile#STATE_AUDIO_ONLY},
+     *                   {@link VideoProfile#STATE_BIDIRECTIONAL},
+     *                   {@link VideoProfile#STATE_TX_ENABLED},
+     *                   {@link VideoProfile#STATE_RX_ENABLED}.
      */
-    public void setTelephonyVideoState(@VideoProfile.VideoState int videoState) {
+    public void setTelephonyVideoState(int videoState) {
         setVideoState(videoState);
         notifyVideoStateChanged(videoState);
     }
@@ -2846,11 +3166,25 @@ abstract class TelephonyConnection extends Connection implements Holdable {
 
     /**
      * Notifies {@link TelephonyConnectionListener}s of a change to the video state of a connection.
-     * @param videoState The new video state.
+     * @param videoState The new video state. Valid values:
+     *                   {@link VideoProfile#STATE_AUDIO_ONLY},
+     *                   {@link VideoProfile#STATE_BIDIRECTIONAL},
+     *                   {@link VideoProfile#STATE_TX_ENABLED},
+     *                   {@link VideoProfile#STATE_RX_ENABLED}.
      */
-    private void notifyVideoStateChanged(@VideoProfile.VideoState int videoState) {
+    private void notifyVideoStateChanged(int videoState) {
         for (TelephonyConnectionListener listener : mTelephonyListeners) {
             listener.onVideoStateChanged(this, videoState);
+        }
+    }
+
+    /**
+     * Notifies {@link TelephonyConnectionListener}s of a whether to play Ringback Tone or not.
+     * @param ringback Whether the ringback tone is to be played
+     */
+    private void notifyRingbackRequested(boolean ringback) {
+        for (TelephonyConnectionListener listener : mTelephonyListeners) {
+            listener.onRingbackRequested(this, ringback);
         }
     }
 
@@ -2874,5 +3208,30 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         for (TelephonyConnectionListener listener : mTelephonyListeners) {
             listener.onStatusHintsChanged(this, statusHints);
         }
+    }
+
+    /**
+     * Whether the incoming call number should be formatted to national number for Japan.
+     * @return {@code true} should be convert to the national format, {@code false} otherwise.
+     */
+    private boolean isNeededToFormatIncomingNumberForJp() {
+        if (mOriginalConnection.isIncoming()
+                && !TextUtils.isEmpty(mOriginalConnection.getAddress())
+                && mOriginalConnection.getAddress().startsWith(JAPAN_COUNTRY_CODE_WITH_PLUS_SIGN)) {
+            PersistableBundle b = getCarrierConfig();
+            return b != null && b.getBoolean(
+                    CarrierConfigManager.KEY_FORMAT_INCOMING_NUMBER_TO_NATIONAL_FOR_JP_BOOL);
+        }
+        return false;
+    }
+
+    /**
+     * Format the incoming call number to national number for Japan.
+     * @param number
+     * @return the formatted phone number (e.g, "+819012345678" -> "09012345678")
+     */
+    private String formatIncomingNumberForJp(String number) {
+        return PhoneNumberUtils.stripSeparators(
+                PhoneNumberUtils.formatNumber(number, JAPAN_ISO_COUNTRY_CODE));
     }
 }

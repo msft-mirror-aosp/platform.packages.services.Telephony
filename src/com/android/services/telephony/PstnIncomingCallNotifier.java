@@ -25,7 +25,7 @@ import android.os.SystemClock;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
-import android.telephony.Rlog;
+import com.android.telephony.Rlog;
 import android.text.TextUtils;
 
 import com.android.internal.telephony.Call;
@@ -288,7 +288,11 @@ final class PstnIncomingCallNotifier {
             }
         } else {
             TelecomManager tm = mPhone.getContext().getSystemService(TelecomManager.class);
-            tm.addNewIncomingCall(handle, extras);
+            if (connection.isMultiparty()) {
+                tm.addNewIncomingConference(handle, extras);
+            } else {
+                tm.addNewIncomingCall(handle, extras);
+            }
         }
     }
 

@@ -22,17 +22,24 @@ import android.os.Binder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
+import android.telephony.SubscriptionManager;
 import android.telephony.ims.ImsException;
+import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsRcsController;
+import android.telephony.ims.aidl.IImsRegistrationCallback;
 import android.telephony.ims.aidl.IRcsUceControllerCallback;
 import android.telephony.ims.feature.RcsFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.util.Log;
 
-import com.android.ims.RcsFeatureManager;
+import com.android.ims.ImsManager;
+import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.imsphone.ImsPhone;
+import com.android.services.telephony.rcs.RcsFeatureController;
+import com.android.services.telephony.rcs.TelephonyRcsService;
+import com.android.services.telephony.rcs.UserCapabilityExchangeImpl;
 
 import java.util.List;
 
@@ -46,6 +53,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
     private static ImsRcsController sInstance;
 
     private PhoneGlobals mApp;
+    private TelephonyRcsService mRcsService;
 
     /**
      * Initialize the singleton ImsRcsController instance.
@@ -70,6 +78,86 @@ public class ImsRcsController extends IImsRcsController.Stub {
     }
 
     /**
+     * Register a {@link RegistrationManager.RegistrationCallback} to receive IMS network
+     * registration state.
+     */
+    @Override
+    public void registerImsRegistrationCallback(int subId, IImsRegistrationCallback callback) {
+        enforceReadPrivilegedPermission("registerImsRegistrationCallback");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            getRcsFeatureController(subId).registerImsRegistrationCallback(subId, callback);
+        } catch (ImsException e) {
+            Log.e(TAG, "registerImsRegistrationCallback: sudId=" + subId + ", " + e.getMessage());
+            throw new ServiceSpecificException(e.getCode());
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Removes an existing {@link RegistrationManager.RegistrationCallback}.
+     */
+    @Override
+    public void unregisterImsRegistrationCallback(int subId, IImsRegistrationCallback callback) {
+        enforceReadPrivilegedPermission("unregisterImsRegistrationCallback");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            getRcsFeatureController(subId).unregisterImsRegistrationCallback(subId, callback);
+        } catch (ServiceSpecificException e) {
+            Log.e(TAG, "unregisterImsRegistrationCallback: error=" + e.errorCode);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Get the IMS service registration state for the RcsFeature associated with this sub id.
+     */
+    @Override
+    public void getImsRcsRegistrationState(int subId, IIntegerConsumer consumer) {
+        enforceReadPrivilegedPermission("getImsRcsRegistrationState");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            getRcsFeatureController(subId).getRegistrationState(regState -> {
+                try {
+                    consumer.accept((regState == null)
+                            ? RegistrationManager.REGISTRATION_STATE_NOT_REGISTERED : regState);
+                } catch (RemoteException e) {
+                    Log.w(TAG, "getImsRcsRegistrationState: callback is not available.");
+                }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Gets the Transport Type associated with the current IMS RCS registration.
+     */
+    @Override
+    public void getImsRcsRegistrationTransportType(int subId, IIntegerConsumer consumer) {
+        enforceReadPrivilegedPermission("getImsRcsRegistrationTransportType");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            getRcsFeatureController(subId).getRegistrationTech(regTech -> {
+                // Convert registration tech from ImsRegistrationImplBase -> RegistrationManager
+                int regTechConverted = (regTech == null)
+                        ? ImsRegistrationImplBase.REGISTRATION_TECH_NONE : regTech;
+                regTechConverted = RegistrationManager.IMS_REG_TO_ACCESS_TYPE_MAP.get(
+                        regTechConverted);
+                try {
+                    consumer.accept(regTechConverted);
+                } catch (RemoteException e) {
+                    Log.w(TAG, "getImsRcsRegistrationTransportType: callback is not available.");
+                }
+            });
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
      * Register a capability callback which will provide RCS availability updates for the
      * subscription specified.
      *
@@ -77,13 +165,12 @@ public class ImsRcsController extends IImsRcsController.Stub {
      * @param callback The ImsCapabilityCallback to be registered.
      */
     @Override
-    public void registerRcsAvailabilityCallback(int subId, IImsCapabilityCallback callback)
-            throws RemoteException {
+    public void registerRcsAvailabilityCallback(int subId, IImsCapabilityCallback callback) {
         enforceReadPrivilegedPermission("registerRcsAvailabilityCallback");
         final long token = Binder.clearCallingIdentity();
         try {
-            getRcsFeatureManager(subId).registerRcsAvailabilityCallback(callback);
-        } catch (com.android.ims.ImsException e) {
+            getRcsFeatureController(subId).registerRcsAvailabilityCallback(subId, callback);
+        } catch (ImsException e) {
             Log.e(TAG, "registerRcsAvailabilityCallback: sudId=" + subId + ", " + e.getMessage());
             throw new ServiceSpecificException(e.getCode());
         } finally {
@@ -102,9 +189,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
         enforceReadPrivilegedPermission("unregisterRcsAvailabilityCallback");
         final long token = Binder.clearCallingIdentity();
         try {
-            getRcsFeatureManager(subId).unregisterRcsAvailabilityCallback(callback);
-        } catch (com.android.ims.ImsException e) {
-            Log.e(TAG, "unregisterRcsAvailabilityCallback: sudId=" + subId + "," + e.getMessage());
+            getRcsFeatureController(subId).unregisterRcsAvailabilityCallback(subId, callback);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -125,8 +210,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
         enforceReadPrivilegedPermission("isCapable");
         final long token = Binder.clearCallingIdentity();
         try {
-            return getRcsFeatureManager(subId).isCapable(capability, radioTech);
-        } catch (com.android.ims.ImsException e) {
+            return getRcsFeatureController(subId).isCapable(capability, radioTech);
+        } catch (ImsException e) {
             Log.e(TAG, "isCapable: sudId=" + subId
                     + ", capability=" + capability + ", " + e.getMessage());
             return false;
@@ -149,8 +234,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
         enforceReadPrivilegedPermission("isAvailable");
         final long token = Binder.clearCallingIdentity();
         try {
-            return getRcsFeatureManager(subId).isAvailable(capability);
-        } catch (com.android.ims.ImsException e) {
+            return getRcsFeatureController(subId).isAvailable(capability);
+        } catch (ImsException e) {
             Log.e(TAG, "isAvailable: sudId=" + subId
                     + ", capability=" + capability + ", " + e.getMessage());
             return false;
@@ -163,23 +248,49 @@ public class ImsRcsController extends IImsRcsController.Stub {
     public void requestCapabilities(int subId, List<Uri> contactNumbers,
             IRcsUceControllerCallback c) {
         enforceReadPrivilegedPermission("requestCapabilities");
+        final long token = Binder.clearCallingIdentity();
+        try {
+            UserCapabilityExchangeImpl uce = getRcsFeatureController(subId).getFeature(
+                    UserCapabilityExchangeImpl.class);
+            if (uce == null) {
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                        "This subscription does not support UCE.");
+            }
+            uce.requestCapabilities(contactNumbers, c);
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override
     public int getUcePublishState(int subId) {
         enforceReadPrivilegedPermission("getUcePublishState");
-        return -1;
+        final long token = Binder.clearCallingIdentity();
+        try {
+            UserCapabilityExchangeImpl uce = getRcsFeatureController(subId).getFeature(
+                    UserCapabilityExchangeImpl.class);
+            if (uce == null) {
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                        "This subscription does not support UCE.");
+            }
+            return uce.getUcePublishState();
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
     }
 
     @Override
     public boolean isUceSettingEnabled(int subId) {
         enforceReadPrivilegedPermission("isUceSettingEnabled");
-        return false;
+        return SubscriptionManager.getBooleanSubscriptionProperty(subId,
+                SubscriptionManager.IMS_RCS_UCE_ENABLED, false /*defaultValue*/, mApp);
     }
 
     @Override
     public void setUceSettingEnabled(int subId, boolean isEnabled) {
         enforceModifyPermission();
+        SubscriptionManager.setSubscriptionProperty(subId, SubscriptionManager.IMS_RCS_UCE_ENABLED,
+                (isEnabled ? "1" : "0"));
     }
 
     /**
@@ -202,13 +313,17 @@ public class ImsRcsController extends IImsRcsController.Stub {
     }
 
     /**
-     * Retrieve RcsFeatureManager instance.
+     * Retrieve ImsPhone instance.
      *
      * @param subId the subscription ID
-     * @return The RcsFeatureManager instance
-     * @throws SecurityException if getting Phone or RcsFeatureManager instance failed.
+     * @return The ImsPhone instance
+     * @throws ServiceSpecificException if getting ImsPhone instance failed.
      */
-    private RcsFeatureManager getRcsFeatureManager(int subId) {
+    private ImsPhone getImsPhone(int subId) {
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS is not available on device.");
+        }
         Phone phone = PhoneGlobals.getPhone(subId);
         if (phone == null) {
             throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION,
@@ -216,14 +331,43 @@ public class ImsRcsController extends IImsRcsController.Stub {
         }
         ImsPhone imsPhone = (ImsPhone) phone.getImsPhone();
         if (imsPhone == null) {
-            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
                     "Cannot find ImsPhone instance: " + subId);
         }
-        RcsFeatureManager rcsFeatureManager = imsPhone.getRcsManager();
-        if (rcsFeatureManager == null) {
-            throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
-                    "Cannot find RcsFeatureManager instance: " + subId);
+        return imsPhone;
+    }
+
+    /**
+     * Retrieve RcsFeatureManager instance.
+     *
+     * @param subId the subscription ID
+     * @return The RcsFeatureManager instance
+     * @throws ServiceSpecificException if getting RcsFeatureManager instance failed.
+     */
+    private RcsFeatureController getRcsFeatureController(int subId) {
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS is not available on device.");
         }
-        return rcsFeatureManager;
+        if (mRcsService == null) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS is not available on device.");
+        }
+        Phone phone = PhoneGlobals.getPhone(subId);
+        if (phone == null) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION,
+                    "Invalid subscription Id: " + subId);
+        }
+        int slotId = phone.getPhoneId();
+        RcsFeatureController c = mRcsService.getFeatureController(slotId);
+        if (c == null) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "The requested operation is not supported for subId " + subId);
+        }
+        return c;
+    }
+
+    void setRcsService(TelephonyRcsService rcsService) {
+        mRcsService = rcsService;
     }
 }
