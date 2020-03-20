@@ -45,7 +45,7 @@ import android.telecom.PhoneAccount;
 import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
+import com.android.telephony.Rlog;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
@@ -720,8 +720,12 @@ public class EmergencyDialer extends Activity implements View.OnClickListener,
             isEmergencyNumber = true;
             phoneToMakeCall = mShortcutViewConfig.getPhoneInfo();
         } else {
-            isEmergencyNumber = getSystemService(TelephonyManager.class)
-                    .isEmergencyNumber(mLastNumber);
+            try {
+                isEmergencyNumber = getSystemService(TelephonyManager.class)
+                        .isEmergencyNumber(mLastNumber);
+            } catch (IllegalStateException ise) {
+                isEmergencyNumber = false;
+            }
         }
 
         if (isEmergencyNumber) {

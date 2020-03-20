@@ -30,7 +30,6 @@ import android.telecom.TelecomManager;
 import android.telecom.VideoProfile;
 import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneNumberUtils;
-import android.telephony.Rlog;
 import android.util.Pair;
 
 import com.android.ims.internal.ConferenceParticipant;
@@ -42,6 +41,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.phone.PhoneGlobals;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
+import com.android.telephony.Rlog;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -199,6 +199,18 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                     TelephonyConnection telephonyConnection = (TelephonyConnection) c;
                     handleConferenceParticipantsUpdate(telephonyConnection, participants);
                 }
+
+                /**
+                 * Handles request to play a ringback tone.
+                 *
+                 * @param c The connection.
+                 * @param ringback Whether the ringback tone is to be played.
+                 */
+                @Override
+                public void onRingbackRequested(android.telecom.Connection c, boolean ringback) {
+                    Log.d(this, "onRingbackRequested ringback %s", ringback ? "Y" : "N");
+                    setRingbackRequested(ringback);
+                }
             };
 
     /**
@@ -222,6 +234,11 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
     private Uri[] mConferenceHostAddress;
 
     private TelecomAccountRegistry mTelecomAccountRegistry;
+
+    /**
+     * The participant with which Adhoc Conference call is getting formed.
+     */
+    private List<Uri> mParticipants;
 
     /**
      * The known conference participant connections.  The HashMap is keyed by a Pair containing
@@ -296,10 +313,10 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
         long connectTime = conferenceHost.getOriginalConnection().getConnectTime();
         long connectElapsedTime = conferenceHost.getOriginalConnection().getConnectTimeReal();
         setConnectionTime(connectTime);
-        setConnectionStartElapsedRealTime(connectElapsedTime);
+        setConnectionStartElapsedRealtimeMillis(connectElapsedTime);
         // Set the connectTime in the connection as well.
         conferenceHost.setConnectTimeMillis(connectTime);
-        conferenceHost.setConnectionStartElapsedRealTime(connectElapsedTime);
+        conferenceHost.setConnectionStartElapsedRealtimeMillis(connectElapsedTime);
 
         mTelephonyConnectionService = telephonyConnectionService;
         setConferenceHost(conferenceHost);
@@ -357,6 +374,10 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                 Connection.CAPABILITY_CAN_PAUSE_VIDEO,
                 mConferenceHost.getVideoPauseSupported() && isVideoCapable());
 
+        conferenceCapabilities = changeBitmask(conferenceCapabilities,
+                Connection.CAPABILITY_ADD_PARTICIPANT,
+                (capabilities & Connection.CAPABILITY_ADD_PARTICIPANT) != 0);
+
         return conferenceCapabilities;
     }
 
@@ -382,6 +403,10 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
 
         conferenceProperties = changeBitmask(conferenceProperties,
                 Connection.PROPERTY_REMOTELY_HOSTED, !isConferenceHost());
+
+        conferenceProperties = changeBitmask(conferenceProperties,
+                Connection.PROPERTY_IS_ADHOC_CONFERENCE,
+                (properties & Connection.PROPERTY_IS_ADHOC_CONFERENCE) != 0);
 
         return conferenceProperties;
     }
@@ -420,6 +445,26 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             return mConferenceHost.getVideoState();
         }
         return VideoProfile.STATE_AUDIO_ONLY;
+    }
+
+    public Connection getConferenceHost() {
+        return mConferenceHost;
+    }
+
+    /**
+     * @return The address's to which this Connection is currently communicating.
+     */
+    public final List<Uri> getParticipants() {
+        return mParticipants;
+    }
+
+    /**
+     * Sets the value of the {@link #getParticipants()}.
+     *
+     * @param address The new address's.
+     */
+    public final void setParticipants(List<Uri> address) {
+        mParticipants = address;
     }
 
     /**
@@ -478,6 +523,41 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
         } catch (CallStateException e) {
             Log.e(this, e, "Exception thrown trying to merge call into a conference");
         }
+    }
+
+    /**
+     * Supports adding participants to an existing conference call
+     *
+     * @param participants that are pulled to existing conference call
+     */
+    @Override
+    public void onAddConferenceParticipants(List<Uri> participants) {
+        if (mConferenceHost == null) {
+            return;
+        }
+        mConferenceHost.performAddConferenceParticipants(participants);
+    }
+
+    /**
+     * Invoked when the conference is answered.
+     */
+    @Override
+    public void onAnswer(int videoState) {
+        if (mConferenceHost == null) {
+            return;
+        }
+        mConferenceHost.performAnswer(videoState);
+    }
+
+    /**
+     * Invoked when the conference is rejected.
+     */
+    @Override
+    public void onReject() {
+        if (mConferenceHost == null) {
+            return;
+        }
+        mConferenceHost.performReject(android.telecom.Call.REJECT_REASON_DECLINED);
     }
 
     /**
@@ -678,7 +758,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             setAddress(mConferenceHost.getAddress(), mConferenceHost.getAddressPresentation());
             setCallerDisplayName(mConferenceHost.getCallerDisplayName(),
                     mConferenceHost.getCallerDisplayNamePresentation());
-            setConnectionStartElapsedRealTime(mConferenceHost.getConnectElapsedTimeMillis());
+            setConnectionStartElapsedRealtimeMillis(
+                    mConferenceHost.getConnectionStartElapsedRealtimeMillis());
             setConnectionTime(mConferenceHost.getConnectTimeMillis());
         }
 
@@ -838,7 +919,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                             + "newParticipantcount=%d", oldParticipantCount, newParticipantCount);
             // If the single party call emulation fature flag is enabled, we can potentially treat
             // the conference as a single party call when there is just one participant.
-            if (mFeatureFlagProxy.isUsingSinglePartyCallEmulation()) {
+            if (mFeatureFlagProxy.isUsingSinglePartyCallEmulation() &&
+                    !mConferenceHost.isAdhocConferenceCall()) {
                 if (oldParticipantCount != 1 && newParticipantCount == 1) {
                     // If number of participants goes to 1, emulate a single party call.
                     startEmulatingSinglePartyCall();
@@ -895,7 +977,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             Log.d(this,
                     "stopEmulatingSinglePartyCall: restored lone participant connect time");
             loneParticipant.setConnectTimeMillis(getConnectionTime());
-            loneParticipant.setConnectionStartElapsedRealTime(getConnectionStartElapsedRealTime());
+            loneParticipant.setConnectionStartElapsedRealtimeMillis(
+                    getConnectionStartElapsedRealtimeMillis());
         }
 
         // Tell Telecom its a conference again.
@@ -935,7 +1018,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             setAddress(entry.getAddress(), entry.getAddressPresentation());
             setCallerDisplayName(entry.getCallerDisplayName(),
                     entry.getCallerDisplayNamePresentation());
-            setConnectionStartElapsedRealTime(entry.getConnectElapsedTimeMillis());
+            setConnectionStartElapsedRealtimeMillis(
+                    entry.getConnectionStartElapsedRealtimeMillis());
             setConnectionTime(entry.getConnectTimeMillis());
             mLoneParticipantIdentity = new Pair<>(entry.getUserEntity(), entry.getEndpoint());
 
@@ -979,10 +1063,11 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                 !isConferenceHost() /* isRemotelyHosted */);
         if (participant.getConnectTime() == 0) {
             connection.setConnectTimeMillis(parent.getConnectTimeMillis());
-            connection.setConnectionStartElapsedRealTime(parent.getConnectElapsedTimeMillis());
+            connection.setConnectionStartElapsedRealtimeMillis(
+                    parent.getConnectionStartElapsedRealtimeMillis());
         } else {
             connection.setConnectTimeMillis(participant.getConnectTime());
-            connection.setConnectionStartElapsedRealTime(participant.getConnectElapsedTime());
+            connection.setConnectionStartElapsedRealtimeMillis(participant.getConnectElapsedTime());
         }
         // Indicate whether this is an MT or MO call to Telecom; the participant has the cached
         // data from the time of merge.
@@ -1148,7 +1233,8 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                 c.updateState();
                 // Copy the connect time from the conferenceHost
                 c.setConnectTimeMillis(mConferenceHost.getConnectTimeMillis());
-                c.setConnectionStartElapsedRealTime(mConferenceHost.getConnectElapsedTimeMillis());
+                c.setConnectionStartElapsedRealtimeMillis(
+                        mConferenceHost.getConnectionStartElapsedRealtimeMillis());
                 mTelephonyConnectionService.addExistingConnection(phoneAccountHandle, c);
                 mTelephonyConnectionService.addConnectionToConferenceController(c);
             } // CDMA case not applicable for SRVCC
@@ -1173,11 +1259,13 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
         switch (state) {
             case Connection.STATE_INITIALIZING:
             case Connection.STATE_NEW:
-            case Connection.STATE_RINGING:
                 // No-op -- not applicable.
                 break;
+            case Connection.STATE_RINGING:
+                setConferenceOnRinging();
+                break;
             case Connection.STATE_DIALING:
-                setDialing();
+                setConferenceOnDialing();
                 break;
             case Connection.STATE_DISCONNECTED:
                 DisconnectCause disconnectCause;
@@ -1198,10 +1286,10 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
                 destroyTelephonyConference();
                 break;
             case Connection.STATE_ACTIVE:
-                setActive();
+                setConferenceOnActive();
                 break;
             case Connection.STATE_HOLDING:
-                setOnHold();
+                setConferenceOnHold();
                 break;
         }
     }

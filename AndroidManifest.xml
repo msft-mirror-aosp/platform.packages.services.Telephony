@@ -32,10 +32,8 @@
     <protected-broadcast android:name="android.intent.action.EMERGENCY_CALL_STATE_CHANGED" />
     <protected-broadcast android:name="android.intent.action.SIG_STR" />
     <protected-broadcast android:name="android.intent.action.ANY_DATA_STATE" />
-    <protected-broadcast android:name="android.intent.action.DATA_CONNECTION_FAILED" />
     <protected-broadcast android:name="android.intent.action.DATA_STALL_DETECTED" />
     <protected-broadcast android:name="android.intent.action.SIM_STATE_CHANGED" />
-    <protected-broadcast android:name="android.telephony.action.NETWORK_SET_TIME" />
     <protected-broadcast android:name="com.android.internal.intent.action.ACTION_SHOW_NOTICE_ECM_BLOCK_OTHERS" />
     <protected-broadcast android:name="android.intent.action.ACTION_MDN_STATE_CHANGED" />
     <protected-broadcast android:name="android.provider.Telephony.SPN_STRINGS_UPDATED" />
@@ -77,7 +75,7 @@
     <protected-broadcast android:name= "com.android.imsconnection.DISCONNECTED" />
     <protected-broadcast android:name= "com.android.intent.action.IMS_FEATURE_CHANGED" />
     <protected-broadcast android:name= "com.android.intent.action.IMS_CONFIG_CHANGED" />
-    <protected-broadcast android:name= "com.android.ims.REGISTRATION_ERROR" />
+    <protected-broadcast android:name= "android.telephony.ims.action.WFC_IMS_REGISTRATION_ERROR" />
     <protected-broadcast android:name= "com.android.phone.vvm.omtp.sms.REQUEST_SENT" />
     <protected-broadcast android:name= "com.android.phone.vvm.ACTION_VISUAL_VOICEMAIL_SERVICE_EVENT" />
     <protected-broadcast android:name= "com.android.internal.telephony.CARRIER_VVM_PACKAGE_INSTALLED" />
@@ -94,6 +92,9 @@
 
     <!-- For Vendor Debugging in Telephony -->
     <protected-broadcast android:name="android.telephony.action.ANOMALY_REPORTED" />
+
+    <protected-broadcast android:name= "android.intent.action.SUBSCRIPTION_INFO_RECORD_ADDED" />
+    <protected-broadcast android:name= "android.intent.action.ACTION_MANAGED_ROAMING_IND" />
 
     <!-- Allows granting runtime permissions to telephony related components. -->
     <uses-permission android:name="android.permission.GRANT_RUNTIME_PERMISSIONS_TO_TELEPHONY_DEFAULTS" />
@@ -130,8 +131,8 @@
     <uses-permission android:name="android.permission.WRITE_SMS" />
     <uses-permission android:name="android.permission.SEND_SMS" />
     <uses-permission android:name="android.permission.SEND_RESPOND_VIA_MESSAGE" />
-    <uses-permission android:name="android.permission.SET_TIME" />
     <uses-permission android:name="android.permission.SET_TIME_ZONE" />
+    <uses-permission android:name="android.permission.SUGGEST_TELEPHONY_TIME_AND_ZONE" />
     <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
     <uses-permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
     <uses-permission android:name="android.permission.MODIFY_PHONE_STATE" />
@@ -210,6 +211,7 @@
          ACTION_SIM_SLOT_STATUS_CHANGED broadcast to start activities
          from the background.  -->
     <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
+    <uses-permission android:name="android.permission.NETWORK_STATS_PROVIDER" />
 
     <application android:name="PhoneApp"
             android:persistent="true"
@@ -300,6 +302,15 @@
         </activity>
 
         <activity android:name="GsmUmtsCallForwardOptions"
+                android:label="@string/labelCF"
+                android:configChanges="orientation|screenSize|keyboardHidden"
+                android:theme="@style/DialerSettingsLight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name="CdmaCallForwardOptions"
                 android:label="@string/labelCF"
                 android:configChanges="orientation|screenSize|keyboardHidden"
                 android:theme="@style/DialerSettingsLight">
@@ -509,7 +520,7 @@
 
         <receiver android:name="com.android.services.telephony.sip.SipIncomingCallReceiver">
             <intent-filter>
-                <action android:name="com.android.phone.SIP_INCOMING_CALL" />
+                <action android:name="android.net.sip.action.SIP_INCOMING_CALL" />
             </intent-filter>
         </receiver>
 
@@ -539,6 +550,12 @@
                 android:configChanges="orientation|screenSize|keyboardHidden"
                 android:uiOptions="splitActionBarWhenNarrow">
         </activity>
+
+        <service android:name="com.android.services.telephony.sip.components.TelephonySipService">
+            <intent-filter>
+                <action android:name="android.net.sip.action.START_SIP" />
+            </intent-filter>
+        </service>
 
         <!-- End SIP -->
 
@@ -632,5 +649,33 @@
                 <action android:name="android.telephony.data.DataService" />
             </intent-filter>
         </service>
+
+        <provider
+            android:name="ServiceStateProvider"
+            android:authorities="service-state"
+            android:exported="true"
+            android:multiprocess="false"
+            android:singleUser="true"
+            android:writePermission="android.permission.MODIFY_PHONE_STATE"/>
+
+        <activity
+            android:name=".settings.RadioInfo"
+            android:label="@string/phone_info_label"
+            android:theme="@style/Theme.AppCompat.DayNight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEVELOPMENT_PREFERENCE" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".settings.BandMode"
+                  android:label="@string/band_mode_title"
+                  android:theme="@style/Theme.AppCompat.DayNight">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.VOICE_LAUNCH" />
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

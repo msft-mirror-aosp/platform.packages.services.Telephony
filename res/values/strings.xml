@@ -273,6 +273,15 @@
     <string name="sum_cfnrc_disabled">Off</string>
     <!-- Error message displayed after failing to disable forwarding calls when the phone is unreachable -->
     <string name="disable_cfnrc_forbidden">Your carrier doesn\'t support disabling call forwarding when your phone is unreachable.</string>
+    <string name="registration_cf_forbidden">Your carrier doesn\'t support call forwarding.</string>
+
+    <!-- Cdma Call waiting settings screen, setting option name -->
+    <string name="cdma_call_waiting">Turn on call waiting?</string>
+    <string name="enable_cdma_call_waiting_setting">During a call, you\'ll be notified about incoming calls</string>
+    <string name="enable_cdma_cw">Turn on</string>
+    <string name="disable_cdma_cw">Cancel</string>
+    <string name="cdma_call_waiting_in_ims_on">CDMA Call Waiting under IMS On</string>
+    <string name="cdma_call_waiting_in_ims_off">CDMA Call Waiting under IMS Off</string>
 
     <!-- Title of the progress dialog displayed while updating Call settings -->
     <string name="updating_title">Call settings</string>
@@ -1447,6 +1456,17 @@
     <string name="alert_dialog_no">No</string>
     <!-- ECM: ECM exit dialog choice -->
     <string name="alert_dialog_dismiss">Dismiss</string>
+    <!-- ECM: Notification body wihout data restriction hint -->
+    <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint">The phone is in emergency callback mode</string>
+    <!-- ECM: Displays the time when ECM will end without data restriction hint, Example: "Until 10:45 AM" -->
+    <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint">Until <xliff:g id="completeTime">%s</xliff:g></string>
+    <!-- ECM: Dialog box message without data restriction hint for exiting from the notifications screen -->
+    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint">
+        <!-- number of minutes is one -->
+        <item quantity="one">The phone will be in emergency callback mode for <xliff:g id="count">%s</xliff:g> minute.\nDo you want to exit now?</item>
+        <!-- number of minutes is not equal to one -->
+        <item quantity="other">The phone will be in emergency callback mode for <xliff:g id="count">%s</xliff:g> minutes.\nDo you want to exit now?</item>
+    </plurals>
 
     <!-- For incoming calls, this is a string we can get from a CDMA network instead of
          the actual phone number, to indicate there's no number present.  DO NOT TRANSLATE. -->
@@ -1843,8 +1863,6 @@
     <string name="messageCallBarring">Enter password</string>
     <!-- Call barring settings screen, section heading -->
     <string name="call_barring_settings">Call barring settings</string>
-    <!-- Call barring settings screen, deactivate all call barring settings -->
-    <string name="call_barring_deactivate_all_no_password">Deactivate all call barring settings?</string>
     <!-- In-call screen: error message shown when the user attempts to place a call, but the network
          does not have enough resources (e.g. it is busy) and the call cannot be placed. -->
     <string name="callFailed_NetworkBusy">Network is busy.  Please try your call again later.</string>
@@ -2144,5 +2162,4 @@
     <string name="carrier_provisioning">Carrier Provisioning Info</string>
     <!-- Trigger Carrier Provisioning [CHAR LIMIT=NONE] -->
     <string name="trigger_carrier_provisioning">Trigger Carrier Provisioning</string>
-
 </resources>
