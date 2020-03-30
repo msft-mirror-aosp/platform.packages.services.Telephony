@@ -97,6 +97,7 @@ public class CallFeaturesSetting extends PreferenceActivity
             "phone_account_settings_preference_screen";
 
     private static final String ENABLE_VIDEO_CALLING_KEY = "button_enable_video_calling";
+    private static final String BUTTON_VP_KEY = "button_voice_privacy_key";
 
     private Phone mPhone;
     private ImsManager mImsMgr;
@@ -396,11 +397,10 @@ public class CallFeaturesSetting extends PreferenceActivity
             } else {
                 if (phoneType == PhoneConstants.PHONE_TYPE_CDMA) {
                     prefSet.removePreference(fdnButton);
-
-                    if (!carrierConfig.getBoolean(
-                            CarrierConfigManager.KEY_VOICE_PRIVACY_DISABLE_UI_BOOL)) {
-                        addPreferencesFromResource(R.xml.cdma_call_privacy);
-                    }
+                    addPreferencesFromResource(R.xml.cdma_call_privacy);
+                    CdmaVoicePrivacySwitchPreference buttonVoicePrivacy =
+                            (CdmaVoicePrivacySwitchPreference) findPreference(BUTTON_VP_KEY);
+                    buttonVoicePrivacy.setPhone(mPhone);
                 } else if (phoneType == PhoneConstants.PHONE_TYPE_GSM) {
                     if (mPhone.getIccCard() == null || !mPhone.getIccCard().getIccFdnAvailable()) {
                         prefSet.removePreference(fdnButton);

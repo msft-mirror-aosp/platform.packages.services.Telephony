@@ -17,10 +17,13 @@
 package com.android.services.telephony;
 
 import android.annotation.NonNull;
+import android.app.AlertDialog;
+import android.app.Dialog;
 import android.content.ActivityNotFoundException;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.net.Uri;
@@ -46,6 +49,7 @@ import android.telephony.TelephonyManager;
 import android.telephony.emergency.EmergencyNumber;
 import android.text.TextUtils;
 import android.util.Pair;
+import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.Call;
@@ -65,6 +69,7 @@ import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.MMIDialogActivity;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
+import com.android.phone.settings.SuppServicesUiUtil;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -430,6 +435,14 @@ public class TelephonyConnectionService extends ConnectionService {
     }
 
     /**
+     * Overrides radioOnHelper for testing.
+     */
+    @VisibleForTesting
+    public void setRadioOnHelper(RadioOnHelper radioOnHelper) {
+        mRadioOnHelper = radioOnHelper;
+    }
+
+    /**
      * Overrides PhoneSwitcher dependencies for testing.
      */
     @VisibleForTesting
@@ -772,13 +785,16 @@ public class TelephonyConnectionService extends ConnectionService {
         boolean needToTurnOnRadio = (isEmergencyNumber && (!isRadioOn() || isAirplaneModeOn))
                 || isRadioPowerDownOnBluetooth();
 
+        // Get the right phone object from the account data passed in.
+        final Phone phone = getPhoneForAccount(request.getAccountHandle(), isEmergencyNumber,
+                /* Note: when not an emergency, handle can be null for unknown callers */
+                handle == null ? null : handle.getSchemeSpecificPart());
+
         if (needToTurnOnRadio) {
             final Uri resultHandle = handle;
-            // By default, Connection based on the default Phone, since we need to return to Telecom
-            // now.
-            final int originalPhoneType = mPhoneFactoryProxy.getDefaultPhone().getPhoneType();
+            final int originalPhoneType = phone.getPhoneType();
             final Connection resultConnection = getTelephonyConnection(request, numberToDial,
-                    isEmergencyNumber, resultHandle, PhoneFactory.getDefaultPhone());
+                    isEmergencyNumber, resultHandle, phone);
             if (mRadioOnHelper == null) {
                 mRadioOnHelper = new RadioOnHelper(this);
             }
@@ -786,7 +802,7 @@ public class TelephonyConnectionService extends ConnectionService {
                 @Override
                 public void onComplete(RadioOnStateListener listener, boolean isRadioReady) {
                     handleOnComplete(isRadioReady, isEmergencyNumber, resultConnection, request,
-                            numberToDial, resultHandle, originalPhoneType);
+                            numberToDial, resultHandle, originalPhoneType, phone);
                 }
 
                 @Override
@@ -815,7 +831,7 @@ public class TelephonyConnectionService extends ConnectionService {
                                 || serviceState == ServiceState.STATE_IN_SERVICE;
                     }
                 }
-            });
+            }, isEmergencyNumber && !isTestEmergencyNumber, phone);
             // Return the still unconnected GsmConnection and wait for the Radios to boot before
             // connecting it to the underlying Phone.
             return resultConnection;
@@ -831,10 +847,6 @@ public class TelephonyConnectionService extends ConnectionService {
                                 "Add call restricted due to ongoing video call"));
             }
 
-            // Get the right phone object from the account data passed in.
-            final Phone phone = getPhoneForAccount(request.getAccountHandle(), isEmergencyNumber,
-                    /* Note: when not an emergency, handle can be null for unknown callers */
-                    handle == null ? null : handle.getSchemeSpecificPart());
             if (!isEmergencyNumber) {
                 final Connection resultConnection = getTelephonyConnection(request, numberToDial,
                         false, handle, phone);
@@ -911,18 +923,21 @@ public class TelephonyConnectionService extends ConnectionService {
      */
     private void handleOnComplete(boolean isRadioReady, boolean isEmergencyNumber,
             Connection originalConnection, ConnectionRequest request, String numberToDial,
-            Uri handle, int originalPhoneType) {
+            Uri handle, int originalPhoneType, Phone phone) {
         // Make sure the Call has not already been canceled by the user.
         if (originalConnection.getState() == Connection.STATE_DISCONNECTED) {
             Log.i(this, "Call disconnected before the outgoing call was placed. Skipping call "
                     + "placement.");
+            if (isEmergencyNumber) {
+                // If call is already canceled by the user, notify modem to exit emergency call
+                // mode by sending radio on with forEmergencyCall=false.
+                for (Phone curPhone : mPhoneFactoryProxy.getPhones()) {
+                    curPhone.setRadioPower(true, false, false, true);
+                }
+            }
             return;
         }
-        // Get the right phone object since the radio has been turned on successfully.
         if (isRadioReady) {
-            final Phone phone = getPhoneForAccount(request.getAccountHandle(), isEmergencyNumber,
-                    /* Note: when not an emergency, handle can be null for unknown callers */
-                    handle == null ? null : handle.getSchemeSpecificPart());
             if (!isEmergencyNumber) {
                 adjustAndPlaceOutgoingConnection(phone, originalConnection, request, numberToDial,
                         handle, originalPhoneType, false);
@@ -1640,6 +1655,12 @@ public class TelephonyConnectionService extends ConnectionService {
             TelephonyConnection connection, Phone phone, int videoState, Bundle extras) {
         String number = connection.getAddress().getSchemeSpecificPart();
 
+        if (showDataDialog(phone, number)) {
+            connection.setDisconnected(DisconnectCauseUtil.toTelecomDisconnectCause(
+                        android.telephony.DisconnectCause.DIALED_MMI, "UT is not available"));
+            return;
+        }
+
         com.android.internal.telephony.Connection originalConnection = null;
         try {
             if (phone != null) {
@@ -2155,30 +2176,24 @@ public class TelephonyConnectionService extends ConnectionService {
                             return 1;
                         }
                         // sort by number of RadioAccessFamily Capabilities.
-                        int compare = Integer.bitCount(o1.capabilities) -
-                                Integer.bitCount(o2.capabilities);
+                        int compare = RadioAccessFamily.compare(o1.capabilities, o2.capabilities);
                         if (compare == 0) {
-                            // Sort by highest RAF Capability if the number is the same.
-                            compare = RadioAccessFamily.getHighestRafCapability(o1.capabilities) -
-                                    RadioAccessFamily.getHighestRafCapability(o2.capabilities);
-                            if (compare == 0) {
-                                if (firstOccupiedSlot != null) {
-                                    // If the RAF capability is the same, choose based on whether or
-                                    // not any of the slots are occupied with a SIM card (if both
-                                    // are, always choose the first).
-                                    if (o1.slotId == firstOccupiedSlot.getPhoneId()) {
-                                        return 1;
-                                    } else if (o2.slotId == firstOccupiedSlot.getPhoneId()) {
-                                        return -1;
-                                    }
-                                } else {
-                                    // No slots have SIMs detected in them, so weight the default
-                                    // Phone Id greater than the others.
-                                    if (o1.slotId == defaultPhoneId) {
-                                        return 1;
-                                    } else if (o2.slotId == defaultPhoneId) {
-                                        return -1;
-                                    }
+                            if (firstOccupiedSlot != null) {
+                                // If the RAF capability is the same, choose based on whether or
+                                // not any of the slots are occupied with a SIM card (if both
+                                // are, always choose the first).
+                                if (o1.slotId == firstOccupiedSlot.getPhoneId()) {
+                                    return 1;
+                                } else if (o2.slotId == firstOccupiedSlot.getPhoneId()) {
+                                    return -1;
+                                }
+                            } else {
+                                // No slots have SIMs detected in them, so weight the default
+                                // Phone Id greater than the others.
+                                if (o1.slotId == defaultPhoneId) {
+                                    return 1;
+                                } else if (o2.slotId == defaultPhoneId) {
+                                    return -1;
                                 }
                             }
                         }
@@ -2345,6 +2360,78 @@ public class TelephonyConnectionService extends ConnectionService {
             connection.setDisconnected(cause);
             connection.destroy();
         }
+    }
+
+    private boolean showDataDialog(Phone phone, String number) {
+        boolean ret = false;
+        final Context context = getApplicationContext();
+        String suppKey = MmiCodeUtil.getSuppServiceKey(number);
+        if (suppKey != null) {
+            boolean clirOverUtPrecautions = false;
+            boolean cfOverUtPrecautions = false;
+            boolean cbOverUtPrecautions = false;
+            boolean cwOverUtPrecautions = false;
+
+            CarrierConfigManager cfgManager = (CarrierConfigManager)
+                phone.getContext().getSystemService(Context.CARRIER_CONFIG_SERVICE);
+            if (cfgManager != null) {
+                clirOverUtPrecautions = cfgManager.getConfigForSubId(phone.getSubId())
+                    .getBoolean(CarrierConfigManager.KEY_CALLER_ID_OVER_UT_WARNING_BOOL);
+                cfOverUtPrecautions = cfgManager.getConfigForSubId(phone.getSubId())
+                    .getBoolean(CarrierConfigManager.KEY_CALL_FORWARDING_OVER_UT_WARNING_BOOL);
+                cbOverUtPrecautions = cfgManager.getConfigForSubId(phone.getSubId())
+                    .getBoolean(CarrierConfigManager.KEY_CALL_BARRING_OVER_UT_WARNING_BOOL);
+                cwOverUtPrecautions = cfgManager.getConfigForSubId(phone.getSubId())
+                    .getBoolean(CarrierConfigManager.KEY_CALL_WAITING_OVER_UT_WARNING_BOOL);
+            }
+
+            boolean isSsOverUtPrecautions = SuppServicesUiUtil
+                .isSsOverUtPrecautions(context, phone);
+            if (isSsOverUtPrecautions) {
+                boolean showDialog = false;
+                if (suppKey == MmiCodeUtil.BUTTON_CLIR_KEY && clirOverUtPrecautions) {
+                    showDialog = true;
+                } else if (suppKey == MmiCodeUtil.CALL_FORWARDING_KEY && cfOverUtPrecautions) {
+                    showDialog = true;
+                } else if (suppKey == MmiCodeUtil.CALL_BARRING_KEY && cbOverUtPrecautions) {
+                    showDialog = true;
+                } else if (suppKey == MmiCodeUtil.BUTTON_CW_KEY && cwOverUtPrecautions) {
+                    showDialog = true;
+                }
+
+                if (showDialog) {
+                    Log.d(this, "Creating UT Data enable dialog");
+                    String message = SuppServicesUiUtil.makeMessage(context, suppKey, phone);
+                    AlertDialog.Builder builder = new AlertDialog.Builder(context);
+                    DialogInterface.OnClickListener networkSettingsClickListener =
+                            new Dialog.OnClickListener() {
+                                @Override
+                                public void onClick(DialogInterface dialog, int which) {
+                                    Intent intent = new Intent(Intent.ACTION_MAIN);
+                                    ComponentName mobileNetworkSettingsComponent
+                                        = new ComponentName(
+                                                context.getString(
+                                                    R.string.mobile_network_settings_package),
+                                                context.getString(
+                                                    R.string.mobile_network_settings_class));
+                                    intent.setComponent(mobileNetworkSettingsComponent);
+                                    context.startActivity(intent);
+                                }
+                            };
+                    Dialog dialog = builder.setMessage(message)
+                        .setNeutralButton(context.getResources().getString(
+                                R.string.settings_label),
+                                networkSettingsClickListener)
+                        .setPositiveButton(context.getResources().getString(
+                                R.string.supp_service_over_ut_precautions_dialog_dismiss), null)
+                        .create();
+                    dialog.getWindow().setType(WindowManager.LayoutParams.TYPE_SYSTEM_ALERT);
+                    dialog.show();
+                    ret = true;
+                }
+            }
+        }
+        return ret;
     }
 
     /**
