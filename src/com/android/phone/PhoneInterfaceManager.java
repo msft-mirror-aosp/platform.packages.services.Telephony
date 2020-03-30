@@ -2285,16 +2285,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public String getNetworkCountryIsoForPhone(int phoneId, String callingPackage,
-            String callingFeatureId) {
-        if (!TextUtils.isEmpty(callingPackage)) {
-            final int subId = mSubscriptionController.getSubIdUsingPhoneId(phoneId);
-            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(mApp, subId, callingPackage,
-                    callingFeatureId, "getNetworkCountryIsoForPhone")) {
-                return "";
-            }
-        }
-
+    public String getNetworkCountryIsoForPhone(int phoneId) {
         // Reporting the correct network country is ambiguous when IWLAN could conflict with
         // registered cell info, so return a NULL country instead.
         final long identity = Binder.clearCallingIdentity();
@@ -3053,14 +3044,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public void sendVisualVoicemailSmsForSubscriber(String callingPackage, int subId,
-            String number, int port, String text, PendingIntent sentIntent) {
+    public void sendVisualVoicemailSmsForSubscriber(String callingPackage,
+            String callingAttributionTag, int subId, String number, int port, String text,
+            PendingIntent sentIntent) {
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
         enforceVisualVoicemailPackage(callingPackage, subId);
         enforceSendSmsPermission();
         SmsController smsController = PhoneFactory.getSmsController();
-        smsController.sendVisualVoicemailSmsForSubscriber(callingPackage, subId, number, port, text,
-                sentIntent);
+        smsController.sendVisualVoicemailSmsForSubscriber(callingPackage, callingAttributionTag,
+                subId, number, port, text, sentIntent);
     }
 
     /**
@@ -3444,6 +3436,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = getPhone(subId);
             if (phone == null) return false;
             return phone.isImsCapabilityAvailable(capability, regTech);
+        } catch (com.android.ims.ImsException e) {
+            Log.w(LOG_TAG, "IMS isAvailable - service unavailable: " + e.getMessage());
+            return false;
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -8208,13 +8203,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public void enqueueSmsPickResult(String callingPackage, IIntegerConsumer pendingSubIdResult) {
+    public void enqueueSmsPickResult(String callingPackage, String callingAttributionTag,
+            IIntegerConsumer pendingSubIdResult) {
         if (callingPackage == null) {
             callingPackage = getCurrentPackageName();
         }
         SmsPermissions permissions = new SmsPermissions(getDefaultPhone(), mApp,
                 (AppOpsManager) mApp.getSystemService(Context.APP_OPS_SERVICE));
-        if (!permissions.checkCallingCanSendSms(callingPackage, "Sending message")) {
+        if (!permissions.checkCallingCanSendSms(callingPackage, callingAttributionTag,
+                "Sending message")) {
             throw new SecurityException("Requires SEND_SMS permission to perform this operation");
         }
         PickSmsSubscriptionActivity.addPendingResult(pendingSubIdResult);
