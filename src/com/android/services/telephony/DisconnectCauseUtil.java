@@ -19,6 +19,7 @@ package com.android.services.telephony;
 import android.content.Context;
 import android.media.ToneGenerator;
 import android.os.PersistableBundle;
+import android.provider.Settings;
 import android.telecom.DisconnectCause;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
@@ -347,6 +348,9 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.DATA_LIMIT_REACHED:
                 resourceId = R.string.callFailed_data_limit_reached;
                 break;
+            case android.telephony.DisconnectCause.WIFI_LOST:
+                resourceId = R.string.callFailed_wifi_lost;
+                break;
             case android.telephony.DisconnectCause.ALREADY_DIALING:
                 resourceId = R.string.callFailed_already_dialing;
                 break;
@@ -360,7 +364,12 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_too_many_calls;
                 break;
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
-                resourceId = R.string.incall_error_power_off;
+                int airplaneMode = Settings.Global.getInt(context.getContentResolver(),
+                        Settings.Global.AIRPLANE_MODE_ON, 0);
+                resourceId = R.string.incall_error_call_failed;
+                if (airplaneMode != 0) {
+                    resourceId = R.string.incall_error_power_off;
+                }
                 break;
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
@@ -753,7 +762,12 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_too_many_calls;
                 break;
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
-                resourceId = R.string.incall_error_power_off;
+                int airplaneMode = Settings.Global.getInt(context.getContentResolver(),
+                        Settings.Global.AIRPLANE_MODE_ON, 0);
+                resourceId = R.string.incall_error_call_failed;
+                if (airplaneMode != 0) {
+                    resourceId = R.string.incall_error_power_off;
+                }
                 break;
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
@@ -856,6 +870,7 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.NORMAL:
             case android.telephony.DisconnectCause.NORMAL_UNSPECIFIED:
             case android.telephony.DisconnectCause.VIDEO_CALL_NOT_ALLOWED_WHILE_TTY_ENABLED:
+            case android.telephony.DisconnectCause.WIFI_LOST:
             default:
                 return ToneGenerator.TONE_PROP_PROMPT;
         }
