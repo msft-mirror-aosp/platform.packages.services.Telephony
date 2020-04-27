@@ -30,6 +30,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import com.android.internal.telephony.Call;
+import com.android.internal.telephony.CallStateException;
 import com.android.internal.telephony.Connection;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
@@ -72,8 +73,13 @@ public class TestTelephonyConnection extends TelephonyConnection {
         return mMockRadioConnection;
     }
 
+    @Override
+    protected Call getCall() {
+        return mMockCall;
+    }
+
     public TestTelephonyConnection() {
-        super(null, null, false);
+        super(null, null, android.telecom.Call.Details.DIRECTION_INCOMING);
         MockitoAnnotations.initMocks(this);
 
         mMockPhone = mock(Phone.class);
@@ -100,6 +106,11 @@ public class TestTelephonyConnection extends TelephonyConnection {
         when(mMockPhone.getPhoneType()).thenReturn(PhoneConstants.PHONE_TYPE_IMS);
         when(mMockCall.getState()).thenReturn(Call.State.ACTIVE);
         when(mMockCall.getPhone()).thenReturn(mMockPhone);
+        try {
+            doNothing().when(mMockCall).hangup();
+        } catch (CallStateException e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
