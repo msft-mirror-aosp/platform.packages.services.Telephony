@@ -53,20 +53,11 @@ public class ImsConferenceController {
         }
     };
 
-    private final TelephonyConnection.TelephonyConnectionListener mTelephonyConnectionListener =
-            new TelephonyConnection.TelephonyConnectionListener() {
-        @Override
-        public void onConferenceStarted() {
-            Log.v(this, "onConferenceStarted");
-            recalculate();
-        }
-
-        @Override
-        public void onConferenceSupportedChanged(Connection c, boolean isConferenceSupported) {
-            Log.v(this, "onConferenceSupportedChanged");
-            recalculate();
-        }
-
+    /**
+     * Ims conference controller connection listener.  Used to respond to changes in state of the
+     * Telephony connections the controller is aware of.
+     */
+    private final Connection.Listener mConnectionListener = new Connection.Listener() {
         @Override
         public void onStateChanged(Connection c, int state) {
             Log.v(this, "onStateChanged: %s", Log.pii(c.getAddress()));
@@ -82,6 +73,18 @@ public class ImsConferenceController {
         @Override
         public void onDestroyed(Connection connection) {
             remove(connection);
+        }
+
+        @Override
+        public void onConferenceStarted() {
+            Log.v(this, "onConferenceStarted");
+            recalculate();
+        }
+
+        @Override
+        public void onConferenceSupportedChanged(Connection c, boolean isConferenceSupported) {
+            Log.v(this, "onConferenceSupportedChanged");
+            recalculate();
         }
     };
 
@@ -145,9 +148,8 @@ public class ImsConferenceController {
         }
 
         mTelephonyConnections.add(connection);
-        connection.addTelephonyConnectionListener(mTelephonyConnectionListener);
+        connection.addConnectionListener(mConnectionListener);
         recalculateConference();
-        recalculateConferenceable();
     }
 
     /**
@@ -173,10 +175,7 @@ public class ImsConferenceController {
             Log.v(this, "remove connection: %s", connection);
         }
 
-        if (connection instanceof TelephonyConnection) {
-            TelephonyConnection telephonyConnection = (TelephonyConnection) connection;
-            telephonyConnection.removeTelephonyConnectionListener(mTelephonyConnectionListener);
-        }
+        connection.removeConnectionListener(mConnectionListener);
         mTelephonyConnections.remove(connection);
         recalculateConferenceable();
     }
@@ -388,11 +387,12 @@ public class ImsConferenceController {
         // Cleanup TelephonyConnection which backed the original connection and remove from telecom.
         // Use the "Other" disconnect cause to ensure the call is logged to the call log but the
         // disconnect tone is not played.
-        connection.removeTelephonyConnectionListener(mTelephonyConnectionListener);
-        connection.setTelephonyConnectionDisconnected(new DisconnectCause(DisconnectCause.OTHER,
+        connection.removeConnectionListener(mConnectionListener);
+        connection.clearOriginalConnection();
+        connection.setDisconnected(new DisconnectCause(DisconnectCause.OTHER,
                 android.telephony.DisconnectCause.toString(
                         android.telephony.DisconnectCause.IMS_MERGED_SUCCESSFULLY)));
-        connection.close();
+        connection.destroy();
         mImsConferences.add(conference);
         // If one of the participants failed to join the conference, recalculate will set the
         // conferenceable connections for the conference to show merge calls option.

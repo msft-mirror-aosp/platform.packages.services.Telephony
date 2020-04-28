@@ -286,7 +286,7 @@ public class TelecomAccountRegistry {
                 mIsRttCapable = false;
             }
 
-            mIsVideoCapable = mPhone.isVideoEnabled() && !mIsRttCapable;
+            mIsVideoCapable = mPhone.isVideoEnabled();
             boolean isVideoEnabledByPlatform = ImsManager.getInstance(mPhone.getContext(),
                     mPhone.getPhoneId()).isVtEnabledByPlatform();
 
@@ -803,10 +803,8 @@ public class TelecomAccountRegistry {
                 Log.i(this, "User changed, re-registering phone accounts.");
 
                 int userHandleId = intent.getIntExtra(Intent.EXTRA_USER_HANDLE, 0);
-                UserHandle currentUserHandle = UserHandle.of(userHandleId);
-                UserManager userManager =
-                        (UserManager) context.getSystemService(Context.USER_SERVICE);
-                mIsPrimaryUser = userManager.getPrimaryUser().getUserHandle()
+                UserHandle currentUserHandle = new UserHandle(userHandleId);
+                mIsPrimaryUser = UserManager.get(mContext).getPrimaryUser().getUserHandle()
                         .equals(currentUserHandle);
 
                 // Any time the user changes, re-register the accounts.
@@ -819,15 +817,6 @@ public class TelecomAccountRegistry {
                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
                 handleCarrierConfigChange(subId);
             }
-        }
-    };
-
-    private BroadcastReceiver mLocaleChangeReceiver = new BroadcastReceiver() {
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            Log.i(this, "Locale change; re-registering phone accounts.");
-            tearDownAccounts();
-            setupAccounts();
         }
     };
 
@@ -1093,11 +1082,6 @@ public class TelecomAccountRegistry {
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         mContext.registerReceiver(mReceiver, filter);
-
-        //We also need to listen for locale changes
-        //(e.g. system language changed -> SIM card name changed)
-        mContext.registerReceiver(mLocaleChangeReceiver,
-                new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
 
         // Listen to the RTT system setting so that we update it when the user flips it.
         ContentObserver rttUiSettingObserver = new ContentObserver(

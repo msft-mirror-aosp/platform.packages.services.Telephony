@@ -21,12 +21,8 @@ import static androidx.test.espresso.assertion.ViewAssertions.matches;
 import static androidx.test.espresso.matcher.ViewMatchers.isDisplayed;
 import static androidx.test.espresso.matcher.ViewMatchers.withText;
 
-import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.when;
 
-import android.content.Context;
-
-import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.FlakyTest;
 import androidx.test.rule.ActivityTestRule;
 
@@ -35,6 +31,7 @@ import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
@@ -56,10 +53,9 @@ public class CallFeaturesSettingTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mActivity = mRule.getActivity();
-        Context targetContext = InstrumentationRegistry.getTargetContext();
-        doReturn(targetContext).when(mMockPhone).getContext();
     }
 
+    @Ignore
     @FlakyTest
     @Test
     public void onResume_fdnIsAvailable_shouldShowFdnMenu() throws NoSuchFieldException,
@@ -75,6 +71,7 @@ public class CallFeaturesSettingTest {
         onView(withText(R.string.fdn)).check(matches(isDisplayed()));
     }
 
+    @Ignore
     @FlakyTest
     @Test
     public void onResume_iccCardIsNull_shouldNotShowFdnMenu() throws NoSuchFieldException,
@@ -89,6 +86,7 @@ public class CallFeaturesSettingTest {
         onView(withText(R.string.fdn)).check(doesNotExist());
     }
 
+    @Ignore
     @FlakyTest
     @Test
     public void onResume_fdnIsNotAvailable_shouldNotShowFdnMenu() throws NoSuchFieldException,

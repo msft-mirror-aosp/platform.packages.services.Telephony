@@ -26,6 +26,7 @@ import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.telephony.ServiceState;
 import android.text.method.DigitsKeyListener;
 import android.text.method.PasswordTransformationMethod;
 import android.util.AttributeSet;
@@ -256,7 +257,9 @@ public class CallBarringEditPreference extends EditPinPreference {
 
     private void setShowPassword() {
         ImsPhone imsPhone = mPhone != null ? (ImsPhone) mPhone.getImsPhone() : null;
-        mShowPassword = !(imsPhone != null && imsPhone.isUtEnabled());
+        mShowPassword = !(imsPhone != null
+                && ((imsPhone.getServiceState().getState() == ServiceState.STATE_IN_SERVICE)
+                        || imsPhone.isUtEnabled()));
     }
 
     @Override

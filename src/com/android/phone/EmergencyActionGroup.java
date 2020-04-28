@@ -161,10 +161,7 @@ public class EmergencyActionGroup extends FrameLayout implements View.OnClickLis
             case R.id.action1:
             case R.id.action2:
             case R.id.action3:
-                AccessibilityManager accessibilityMgr =
-                        (AccessibilityManager) mContext.getSystemService(
-                                Context.ACCESSIBILITY_SERVICE);
-                if (accessibilityMgr.isTouchExplorationEnabled()) {
+                if (AccessibilityManager.getInstance(mContext).isTouchExplorationEnabled()) {
                     getContext().startActivity(intent);
                 } else {
                     revealTheButton(v);

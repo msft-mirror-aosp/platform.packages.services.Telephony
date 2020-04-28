@@ -28,7 +28,6 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
-import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.ims.ImsManager;
@@ -114,11 +113,6 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
         if (shouldShowRttSetting()) {
             // TODO: this is going to be a on/off switch for now. Ask UX about how to integrate
             // this settings with TTY
-            if (TelephonyManager.getDefault().isNetworkRoaming(
-                    SubscriptionManager.getDefaultVoiceSubscriptionId())) {
-                mButtonRtt.setSummary(TextUtils.concat(getText(R.string.rtt_mode_summary), "\n",
-                        getText(R.string.no_rtt_when_roaming)));
-            }
             boolean rttOn = Settings.Secure.getInt(
                     mContext.getContentResolver(), Settings.Secure.RTT_CALLING_MODE, 0) != 0;
             mButtonRtt.setChecked(rttOn);
@@ -157,9 +151,9 @@ public class AccessibilitySettingsFragment extends PreferenceFragment {
             Settings.System.putInt(mContext.getContentResolver(), Settings.System.HEARING_AID, hac);
 
             // Update HAC Value in AudioManager.
-            mAudioManager.setParameters(
-                    SettingsConstants.HAC_KEY + "=" + (hac == SettingsConstants.HAC_ENABLED
-                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF));
+            mAudioManager.setParameter(SettingsConstants.HAC_KEY,
+                    hac == SettingsConstants.HAC_ENABLED
+                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF);
             return true;
         } else if (preference == mButtonRtt) {
             Log.i(LOG_TAG, "RTT setting changed -- now " + mButtonRtt.isChecked());

@@ -20,7 +20,6 @@ import android.app.PendingIntent;
 import android.content.Intent;
 import android.service.euicc.EuiccService;
 import android.telephony.euicc.EuiccManager;
-import android.util.ArraySet;
 import android.util.Log;
 
 /**
@@ -34,14 +33,6 @@ import android.util.Log;
 public class EuiccResolutionUiDispatcherActivity extends EuiccUiDispatcherActivity {
     private static final String TAG = "EuiccResUiDispatcher";
 
-    /** List of all valid resolution actions for validation purposes. */
-    private static final ArraySet<String> RESOLUTION_ACTIONS = new ArraySet<>();
-    static {
-        RESOLUTION_ACTIONS.add(EuiccService.ACTION_RESOLVE_DEACTIVATE_SIM);
-        RESOLUTION_ACTIONS.add(EuiccService.ACTION_RESOLVE_NO_PRIVILEGES);
-        RESOLUTION_ACTIONS.add(EuiccService.ACTION_RESOLVE_RESOLVABLE_ERRORS);
-    }
-
     @Override
     @Nullable
     protected Intent getEuiccUiIntent() {
@@ -54,7 +45,7 @@ public class EuiccResolutionUiDispatcherActivity extends EuiccUiDispatcherActivi
         String euiccUiAction =
                 getIntent().getStringExtra(
                         EuiccManager.EXTRA_EMBEDDED_SUBSCRIPTION_RESOLUTION_ACTION);
-        if (!RESOLUTION_ACTIONS.contains(euiccUiAction)) {
+        if (!EuiccService.RESOLUTION_ACTIONS.contains(euiccUiAction)) {
             Log.w(TAG, "Unknown resolution action: " + euiccUiAction);
             return null;
         }

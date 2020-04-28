@@ -37,11 +37,12 @@ import android.os.Handler;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.UpdateLock;
 import android.os.UserManager;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
-import android.sysprop.TelephonyProperties;
 import android.telecom.TelecomManager;
 import android.telephony.AnomalyReporter;
 import android.telephony.CarrierConfigManager;
@@ -147,7 +148,6 @@ public class PhoneGlobals extends ContextWrapper {
     CallerInfoCache callerInfoCache;
     NotificationMgr notificationMgr;
     public PhoneInterfaceManager phoneMgr;
-    public ImsRcsController imsRcsController;
     CarrierConfigLoader configLoader;
 
     private Phone phoneInEcm;
@@ -186,6 +186,8 @@ public class PhoneGlobals extends ContextWrapper {
     private PowerManager.WakeLock mWakeLock;
     private PowerManager.WakeLock mPartialWakeLock;
     private KeyguardManager mKeyguardManager;
+
+    private UpdateLock mUpdateLock;
 
     private int mDefaultDataSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private final LocalLog mDataRoamingNotifLog = new LocalLog(50);
@@ -272,8 +274,7 @@ public class PhoneGlobals extends ContextWrapper {
                     // not want this running if the device is still in the FBE encrypted state.
                     // This is the same procedure that is triggered in the SipIncomingCallReceiver
                     // upon BOOT_COMPLETED.
-                    UserManager userManager =
-                            (UserManager) sMe.getSystemService(Context.USER_SERVICE);
+                    UserManager userManager = UserManager.get(sMe);
                     if (userManager != null && userManager.isUserUnlocked()) {
                         SipUtil.startSipService();
                     }
@@ -346,6 +347,12 @@ public class PhoneGlobals extends ContextWrapper {
 
             mKeyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
 
+            // Get UpdateLock to suppress system-update related events (e.g. dialog show-up)
+            // during phone calls.
+            mUpdateLock = new UpdateLock("phone");
+
+            if (DBG) Log.d(LOG_TAG, "onCreate: mUpdateLock: " + mUpdateLock);
+
             // Create the CallerInfoCache singleton, which remembers custom ring tone and
             // send-to-voicemail settings.
             //
@@ -353,8 +360,6 @@ public class PhoneGlobals extends ContextWrapper {
             callerInfoCache = CallerInfoCache.init(this);
 
             phoneMgr = PhoneInterfaceManager.init(this);
-
-            imsRcsController = ImsRcsController.init(this);
 
             configLoader = CarrierConfigLoader.init(this);
 
@@ -368,6 +373,10 @@ public class PhoneGlobals extends ContextWrapper {
 
             // register for MMI/USSD
             mCM.registerForMmiComplete(mHandler, MMI_COMPLETE, null);
+
+            // Initialize cell status using current airplane mode.
+            handleAirplaneModeChange(this, Settings.Global.getInt(getContentResolver(),
+                    Settings.Global.AIRPLANE_MODE_ON, AIRPLANE_OFF));
 
             // Register for misc other intent broadcasts.
             IntentFilter intentFilter =
@@ -389,6 +398,8 @@ public class PhoneGlobals extends ContextWrapper {
             mCarrierVvmPackageInstalledReceiver.register(this);
 
             //set the default values for the preferences in the phone.
+            PreferenceManager.setDefaultValues(this, R.xml.network_setting_fragment, false);
+
             PreferenceManager.setDefaultValues(this, R.xml.call_feature_setting, false);
         }
 
@@ -405,9 +416,9 @@ public class PhoneGlobals extends ContextWrapper {
                     android.provider.Settings.System.HEARING_AID,
                     0);
             AudioManager audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-            audioManager.setParameters(
-                    SettingsConstants.HAC_KEY + "=" + (hac == SettingsConstants.HAC_ENABLED
-                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF));
+            audioManager.setParameter(SettingsConstants.HAC_KEY,
+                    hac == SettingsConstants.HAC_ENABLED
+                            ? SettingsConstants.HAC_VAL_ON : SettingsConstants.HAC_VAL_OFF);
         }
     }
 
@@ -500,6 +511,19 @@ public class PhoneGlobals extends ContextWrapper {
         mPUKEntryProgressDialog = dialog;
     }
 
+    /**
+     * If we are not currently keeping the screen on, then poke the power
+     * manager to wake up the screen for the user activity timeout duration.
+     */
+    /* package */ void wakeUpScreen() {
+        synchronized (this) {
+            if (mWakeState == WakeState.SLEEP) {
+                if (DBG) Log.d(LOG_TAG, "pulse screen lock");
+                mPowerManager.wakeUp(SystemClock.uptimeMillis(), "android.phone:WAKE");
+            }
+        }
+    }
+
     KeyguardManager getKeyguardManager() {
         return mKeyguardManager;
     }
@@ -531,9 +555,6 @@ public class PhoneGlobals extends ContextWrapper {
                 maybeTurnCellOn(context, isAirplaneNewlyOn);
                 break;
         }
-        for (Phone phone : PhoneFactory.getPhones()) {
-            phone.getServiceStateTracker().onAirplaneModeChanged(isAirplaneNewlyOn);
-        }
     }
 
     /*
@@ -550,7 +571,7 @@ public class PhoneGlobals extends ContextWrapper {
         Log.i(LOG_TAG, "Turning radio off - airplane");
         Settings.Global.putInt(context.getContentResolver(), Settings.Global.CELL_ON,
                  PhoneConstants.CELL_OFF_DUE_TO_AIRPLANE_MODE_FLAG);
-        TelephonyProperties.airplane_mode_on(true); // true means int value 1
+        SystemProperties.set("persist.radio.airplane_mode_on", "1");
         Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT, 0);
         PhoneUtils.setRadioPower(false);
     }
@@ -561,7 +582,7 @@ public class PhoneGlobals extends ContextWrapper {
                 PhoneConstants.CELL_ON_FLAG);
         Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT,
                 1);
-        TelephonyProperties.airplane_mode_on(false); // false means int value 0
+        SystemProperties.set("persist.radio.airplane_mode_on", "0");
         PhoneUtils.setRadioPower(true);
     }
 

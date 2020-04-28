@@ -139,7 +139,6 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.PROCESS_OUTGOING_CALLS" />
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.WRITE_APN_SETTINGS" />
     <uses-permission android:name="android.permission.BROADCAST_SMS"/>
     <uses-permission android:name="android.permission.BROADCAST_WAP_PUSH"/>
@@ -171,7 +170,6 @@
     <uses-permission android:name="android.permission.BIND_CARRIER_MESSAGING_SERVICE" />
     <uses-permission android:name="android.permission.BIND_EUICC_SERVICE" />
     <uses-permission android:name="com.android.permission.BIND_TELEPHONY_NETWORK_SERVICE" />
-    <uses-permission android:name="android.permission.BIND_CELL_BROADCAST_SERVICE" />
     <uses-permission android:name="android.permission.WRITE_EMBEDDED_SUBSCRIPTIONS" />
     <uses-permission android:name="android.permission.READ_SYNC_SETTINGS" />
     <uses-permission android:name="android.permission.WRITE_SYNC_SETTINGS" />
@@ -202,10 +200,6 @@
     <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
     <uses-permission android:name="android.permission.READ_PRECISE_PHONE_STATE" />
     <uses-permission android:name="android.permission.MANAGE_ROLE_HOLDERS" />
-    <!-- Allows us to whitelist receivers of the
-         ACTION_SIM_SLOT_STATUS_CHANGED broadcast to start activities
-         from the background.  -->
-    <uses-permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND" />
 
     <application android:name="PhoneApp"
             android:persistent="true"
@@ -270,6 +264,39 @@
                   android:theme="@android:style/Theme.Translucent.NoTitleBar"
                   android:exported="false"/>
 
+        <!-- "Mobile network settings" screen, used on both
+             non-voice-capable tablets and regular phone devices. -->
+        <activity android:name="MobileNetworkSettings"
+            android:label="@string/network_settings_title"
+            android:theme="@style/NetworkOperatorsSettingsTheme">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <action android:name="android.intent.action.MAIN" />
+                <action android:name="android.settings.NETWORK_OPERATOR_SETTINGS" />
+                <action android:name="android.settings.DATA_ROAMING_SETTINGS" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <activity-alias android:name="Settings"
+            android:targetActivity="MobileNetworkSettings" />
+
+        <!-- networks setting -->
+        <!-- "Choose network" screen. Used only when the Automatically
+             select network turned off-->
+        <activity android:name="NetworkSelectSettingActivity"
+            android:label="@string/choose_network_title"
+            android:theme="@style/NetworkOperatorsSettingsTheme"
+            android:configChanges="orientation|screenSize">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
+        <!-- service to handle network query requests sent to RIL -->
+        <service android:name="NetworkQueryService" />
+
         <activity android:name="GsmUmtsCallOptions"
                 android:label="@string/gsm_umts_options"
                 android:theme="@style/DialerSettingsLight">
@@ -298,7 +325,7 @@
         <activity android:name="GsmUmtsCallBarringOptions"
                 android:label="@string/labelCallBarring"
                 android:configChanges="orientation|screenSize|keyboardHidden"
-                android:theme="@style/CallSettingsWithoutDividerTheme">
+                android:theme="@style/DialerSettingsLight">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
             </intent-filter>

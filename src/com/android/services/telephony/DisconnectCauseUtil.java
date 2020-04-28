@@ -18,14 +18,11 @@ package com.android.services.telephony;
 
 import android.content.Context;
 import android.media.ToneGenerator;
-import android.os.PersistableBundle;
+import android.provider.Settings;
 import android.telecom.DisconnectCause;
-import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 
 import com.android.internal.telephony.CallFailCause;
-import com.android.internal.telephony.Phone;
-import com.android.internal.telephony.PhoneFactory;
 import com.android.phone.ImsUtil;
 import com.android.phone.PhoneGlobals;
 import com.android.phone.common.R;
@@ -106,7 +103,7 @@ public class DisconnectCauseUtil {
                         telephonyPerciseDisconnectCause),
                 toTelecomDisconnectCauseDescription(context, telephonyDisconnectCause, phoneId),
                 toTelecomDisconnectReason(context,telephonyDisconnectCause, reason, phoneId),
-                toTelecomDisconnectCauseTone(telephonyDisconnectCause, phoneId));
+                toTelecomDisconnectCauseTone(telephonyDisconnectCause));
     }
 
     /**
@@ -199,7 +196,6 @@ public class DisconnectCauseUtil {
             case android.telephony.DisconnectCause.WIFI_LOST:
             case android.telephony.DisconnectCause.IMS_ACCESS_BLOCKED:
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
-            case android.telephony.DisconnectCause.MEDIA_TIMEOUT:
                 return DisconnectCause.ERROR;
 
             case android.telephony.DisconnectCause.DIALED_MMI:
@@ -358,7 +354,12 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_too_many_calls;
                 break;
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
-                resourceId = R.string.incall_error_power_off;
+                int airplaneMode = Settings.Global.getInt(context.getContentResolver(),
+                        Settings.Global.AIRPLANE_MODE_ON, 0);
+                resourceId = R.string.incall_error_call_failed;
+                if (airplaneMode != 0) {
+                    resourceId = R.string.incall_error_power_off;
+                }
                 break;
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
@@ -751,7 +752,12 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_too_many_calls;
                 break;
             case android.telephony.DisconnectCause.IMS_SIP_ALTERNATE_EMERGENCY_CALL:
-                resourceId = R.string.incall_error_power_off;
+                int airplaneMode = Settings.Global.getInt(context.getContentResolver(),
+                        Settings.Global.AIRPLANE_MODE_ON, 0);
+                resourceId = R.string.incall_error_call_failed;
+                if (airplaneMode != 0) {
+                    resourceId = R.string.incall_error_power_off;
+                }
                 break;
             case android.telephony.DisconnectCause.OTASP_PROVISIONING_IN_PROCESS:
                 resourceId = R.string.callFailed_otasp_provisioning_in_process;
@@ -811,22 +817,11 @@ public class DisconnectCauseUtil {
     /**
      * Returns the tone to play for the disconnect cause, or UNKNOWN if none should be played.
      */
-    private static int toTelecomDisconnectCauseTone(int telephonyDisconnectCause, int phoneId) {
-        Phone phone = PhoneFactory.getPhone(phoneId);
-        PersistableBundle config;
-        if (phone != null) {
-            config = PhoneGlobals.getInstance().getCarrierConfigForSubId(phone.getSubId());
-        } else {
-            config = PhoneGlobals.getInstance().getCarrierConfig();
-        }
-        int[] busyToneArray = config.getIntArray(
-                CarrierConfigManager.KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY);
-        for (int busyTone : busyToneArray) {
-            if (busyTone == telephonyDisconnectCause) {
-                return ToneGenerator.TONE_SUP_BUSY;
-            }
-        }
+    private static int toTelecomDisconnectCauseTone(int telephonyDisconnectCause) {
         switch (telephonyDisconnectCause) {
+            case android.telephony.DisconnectCause.BUSY:
+                return ToneGenerator.TONE_SUP_BUSY;
+
             case android.telephony.DisconnectCause.CONGESTION:
                 return ToneGenerator.TONE_SUP_CONGESTION;
 

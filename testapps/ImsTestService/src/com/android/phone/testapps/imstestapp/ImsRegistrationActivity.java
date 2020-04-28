@@ -24,7 +24,6 @@ import android.telephony.SubscriptionManager;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ImsMmTelManager;
 import android.telephony.ims.ImsReasonInfo;
-import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -104,8 +103,8 @@ public class ImsRegistrationActivity extends Activity {
     }
 
 
-    private final RegistrationManager.RegistrationCallback mRegistrationCallback =
-            new RegistrationManager.RegistrationCallback() {
+    private final ImsMmTelManager.RegistrationCallback mRegistrationCallback =
+            new ImsMmTelManager.RegistrationCallback() {
 
         @Override
         public void onRegistered(int imsRadioTech) {

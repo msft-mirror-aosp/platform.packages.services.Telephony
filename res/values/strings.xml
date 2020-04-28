@@ -42,10 +42,6 @@
     <string name="payphone">Payphone</string>
     <!-- In-call screen: status label for a call that's on hold -->
     <string name="onHold">On hold</string>
-    <!-- Title for carrier MMI message -->
-    <string name="carrier_mmi_msg_title">(<xliff:g id="mmicarrier" example="T-Mobile">%s</xliff:g>) Message</string>
-    <!-- Default title for carrier MMI message -->
-    <string name="default_carrier_mmi_msg_title">Carrier Message</string>
     <!-- Possible error messages with outgoing calls --><skip/>
     <string name="mmiStarted">MMI code started</string>
     <!-- Dialog label when a USSD code starts running -->
@@ -977,7 +973,7 @@
     <!-- FDN settings: error message displayed in a popup (toast) -->
     <string name="pin2_invalid">FDN wasn\'t updated because you typed an incorrect PIN.</string>
     <!-- FDN settings: error message displayed in a popup (toast) -->
-    <string name="fdn_invalid_number">FDN wasn\'t updated because the number exceeds <xliff:g id="FDN_NUMBER_LIMIT_LENGTH">%d</xliff:g> digits.</string>
+    <string name="fdn_invalid_number">FDN wasn\'t updated because the number exceeds 20 digits.</string>
     <!-- FDN settings: error message displayed in a popup (toast), when the entered
          FDN number was inappropriate, OR, PIN2 the user entered was incorrect.
          Because of API restriction, there's no way to determine which is the exact
@@ -1196,9 +1192,6 @@
          emergency calling is not currently available. -->
     <string name="dial_emergency_calling_not_available">Emergency calling not available</string>
 
-    <!-- Only handle pin entry when phone user is system-->
-    <string name="pin_puk_system_user_only">Only the owner of the device can enter PIN/PUK codes.</string>
-
     <!-- Text for description of police calling type -->
     <string name="police_type_description">Police</string>
     <!-- Text for description of ambulance calling type -->
@@ -1269,8 +1262,6 @@
        &lt;a href="<xliff:g example="http://www.google.com" id="url">http://support.google.com/mobile?p=telephony_rtt</xliff:g>">Learn more&lt;/a>
        &lt;br>&lt;br> - RTT calls are saved as a message transcript
        &lt;br> - RTT is not available for video calls</string>
-
-    <string name="no_rtt_when_roaming">Note: RTT is not available while roaming</string>
 
     <!-- Service option entries.  -->
     <string-array name="tty_mode_entries">

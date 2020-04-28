@@ -183,7 +183,7 @@ public class ConferenceParticipantConnection extends Connection {
         SubscriptionInfo subInfo = TelecomAccountRegistry.getInstance(null).
                 getSubscriptionManager().getActiveSubscriptionInfo(subId);
 
-        if (subInfo == null || TextUtils.isEmpty(subInfo.getCountryIso())) {
+        if (subInfo == null) {
             return null;
         }
         // The SubscriptionInfo reports ISO country codes in lower case.  Convert to upper case,

@@ -153,7 +153,7 @@ public class EmergencyInfoGroup extends FrameLayout implements View.OnClickListe
     private Drawable getCircularUserIcon() {
         final UserManager userManager = (UserManager) getContext().getSystemService(
                 Context.USER_SERVICE);
-        Bitmap bitmapUserIcon = userManager.getUserIcon();
+        Bitmap bitmapUserIcon = userManager.getUserIcon(UserHandle.getCallingUserId());
 
         if (bitmapUserIcon == null) {
             // get default user icon.
@@ -209,10 +209,7 @@ public class EmergencyInfoGroup extends FrameLayout implements View.OnClickListe
     public void onClick(View view) {
         switch (view.getId()) {
             case R.id.emergency_info_view:
-                AccessibilityManager accessibilityMgr =
-                        (AccessibilityManager) mContext.getSystemService(
-                                Context.ACCESSIBILITY_SERVICE);
-                if (accessibilityMgr.isTouchExplorationEnabled()) {
+                if (AccessibilityManager.getInstance(mContext).isTouchExplorationEnabled()) {
                     if (mOnConfirmClickListener != null) {
                         mOnConfirmClickListener.onConfirmClick(this);
                     }

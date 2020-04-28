@@ -31,6 +31,8 @@ import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.Log;
 
+import com.android.internal.util.CollectionUtils;
+
 import java.util.List;
 
 /**
@@ -118,9 +120,8 @@ public class EmergencyAssistanceHelper {
     private static String getDefaultEmergencyPackage(Context context) {
         long identity = Binder.clearCallingIdentity();
         try {
-            List<String> roleHolders = context.getSystemService(RoleManager.class)
-                    .getRoleHolders(RoleManager.ROLE_EMERGENCY);
-            return roleHolders.isEmpty() ? null : roleHolders.get(0);
+            return CollectionUtils.firstOrNull(context.getSystemService(RoleManager.class)
+                    .getRoleHolders(RoleManager.ROLE_EMERGENCY));
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
