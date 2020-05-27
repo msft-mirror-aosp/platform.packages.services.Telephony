@@ -1863,6 +1863,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                                 ((CommandException)(ar.exception)).getCommandError()
                                                 == CommandException.Error.PASSWORD_INCORRECT) {
                                             mResult = PhoneConstants.PIN_PASSWORD_INCORRECT;
+                                        } //When UiccCardApp dispose,handle message and return exception
+                                          else if (ar.exception instanceof CommandException &&
+                                                ((CommandException) (ar.exception)).getCommandError()
+                                                        == CommandException.Error.ABORTED) {
+                                            mResult = PhoneConstants.PIN_OPERATION_ABORTED;
                                         } else {
                                             mResult = PhoneConstants.PIN_GENERAL_FAILURE;
                                         }
@@ -2263,6 +2268,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setCallingPid(Binder.getCallingPid())
                                 .setCallingUid(Binder.getCallingUid())
                                 .setMethod("getCellLocation")
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.BASE)
                                 .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
                                 .build());
         switch (locationResult) {
@@ -2295,29 +2301,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 phoneId = SubscriptionManager.DEFAULT_PHONE_INDEX;
             }
             final int subId = mSubscriptionController.getSubIdUsingPhoneId(phoneId);
-            // Todo: fix this when we can get the actual cellular network info when the device
-            // is on IWLAN.
-            if (TelephonyManager.NETWORK_TYPE_IWLAN
-                    == getVoiceNetworkTypeForSubscriber(subId, mApp.getPackageName(),
-                    null)) {
-                return "";
-            }
             Phone phone = PhoneFactory.getPhone(phoneId);
-            if (phone != null) {
-                ServiceStateTracker sst = phone.getServiceStateTracker();
-                EmergencyNumberTracker emergencyNumberTracker = phone.getEmergencyNumberTracker();
-                if (sst != null) {
-                    LocaleTracker lt = sst.getLocaleTracker();
-                    if (lt != null) {
-                        if (!TextUtils.isEmpty(lt.getCurrentCountry())) {
-                            return lt.getCurrentCountry();
-                        } else if (emergencyNumberTracker != null) {
-                            return emergencyNumberTracker.getEmergencyCountryIso();
-                        }
-                    }
-                }
-            }
-            return "";
+            if (phone == null) return "";
+            ServiceStateTracker sst = phone.getServiceStateTracker();
+            if (sst == null) return "";
+            LocaleTracker lt = sst.getLocaleTracker();
+            if (lt == null) return "";
+            if (!TextUtils.isEmpty(lt.getCurrentCountry())) return lt.getCurrentCountry();
+            EmergencyNumberTracker ent = phone.getEmergencyNumberTracker();
+            return (ent == null) ? "" : ent.getEmergencyCountryIso();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -8404,5 +8396,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Binder.restoreCallingIdentity(identity);
         }
         return 0;
+    }
+
+    @Override
+    public boolean canConnectTo5GInDsdsMode() {
+        return mApp.getResources().getBoolean(R.bool.config_5g_connection_in_dsds_mode);
     }
 }
