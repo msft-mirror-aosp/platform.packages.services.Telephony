@@ -22,16 +22,22 @@ import android.app.ProgressDialog;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
+import android.content.res.Resources;
+import android.media.AudioAttributes;
+import android.media.AudioManager;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
 import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.os.PersistableBundle;
+import android.os.VibrationEffect;
+import android.os.Vibrator;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.VideoProfile;
 import android.telephony.CarrierConfigManager;
 import android.telephony.PhoneNumberUtils;
-import com.android.telephony.Rlog;
 import android.telephony.SubscriptionManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -53,7 +59,9 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.TelephonyCapabilities;
 import com.android.phone.settings.SuppServicesUiUtil;
+import com.android.telephony.Rlog;
 
+import java.io.IOException;
 import java.util.List;
 
 /**
@@ -79,6 +87,9 @@ public class PhoneUtils {
     /** Define for not a special CNAP string */
     private static final int CNAP_SPECIAL_CASE_NO = -1;
 
+    /** Define for default vibrate pattern if res cannot be found */
+    private static final long[] DEFAULT_VIBRATE_PATTERN = {0, 250, 250, 250};
+
     /**
      * Theme to use for dialogs displayed by utility methods in this class. This is needed
      * because these dialogs are displayed using the application context, which does not resolve
@@ -87,7 +98,6 @@ public class PhoneUtils {
     private static final int THEME = com.android.internal.R.style.Theme_DeviceDefault_Dialog_Alert;
 
     /** USSD information used to aggregate all USSD messages */
-    private static AlertDialog sUssdDialog = null;
     private static StringBuilder sUssdMsg = new StringBuilder();
 
     private static final ComponentName PSTN_CONNECTION_SERVICE_COMPONENT =
@@ -500,7 +510,57 @@ public class PhoneUtils {
                 newDialog.getButton(DialogInterface.BUTTON_NEGATIVE)
                         .setTextColor(context.getResources().getColor(R.color.dialer_theme_color));
             }
+
+            if (mmiCode.isNetworkInitiatedUssd()) {
+                playSound(context);
+            }
         }
+    }
+
+    private static void playSound(Context context) {
+        AudioManager audioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
+        int callsRingerMode = audioManager.getRingerMode();
+
+        if (callsRingerMode == AudioManager.RINGER_MODE_NORMAL) {
+            log("playSound : RINGER_MODE_NORMAL");
+            try {
+                Uri notificationUri = RingtoneManager.getDefaultUri(
+                        RingtoneManager.TYPE_NOTIFICATION);
+                MediaPlayer mediaPlayer = new MediaPlayer();
+                mediaPlayer.setDataSource(context, notificationUri);
+                AudioAttributes aa = new AudioAttributes.Builder()
+                        .setLegacyStreamType(AudioManager.STREAM_NOTIFICATION)
+                        .setUsage(AudioAttributes.USAGE_NOTIFICATION)
+                        .build();
+                mediaPlayer.setAudioAttributes(aa);
+                mediaPlayer.setLooping(false);
+                mediaPlayer.prepare();
+                mediaPlayer.start();
+            } catch (IOException e) {
+                log("playSound exception : " + e);
+            }
+        } else if (callsRingerMode == AudioManager.RINGER_MODE_VIBRATE) {
+            log("playSound : RINGER_MODE_VIBRATE");
+            Vibrator vibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
+            // Use NotificationManagerService#DEFAULT_VIBRATE_PATTERN if
+            // R.array.config_defaultNotificationVibePattern is not defined.
+            long[] pattern = getLongArray(context.getResources(),
+                    R.array.config_defaultNotificationVibePattern, DEFAULT_VIBRATE_PATTERN);
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
+        }
+    }
+
+    private static long[] getLongArray(Resources r, int resid, long[] def) {
+        int[] ar = r.getIntArray(resid);
+        if (ar == null) {
+            return def;
+        }
+        final int len = ar.length;
+        long[] out = new long[len];
+        for (int i = 0; i < len; i++) {
+            out[i] = ar[i];
+        }
+        return out;
     }
 
     /**
@@ -524,39 +584,36 @@ public class PhoneUtils {
         // displaying system alert dialog on the screen instead of
         // using another activity to display the message.  This
         // places the message at the forefront of the UI.
+        AlertDialog ussdDialog = new AlertDialog.Builder(context, THEME)
+                .setPositiveButton(R.string.ok, null)
+                .setCancelable(true)
+                .setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                        sUssdMsg.setLength(0);
+                    }
+                })
+                .create();
 
-        if (sUssdDialog == null) {
-            sUssdDialog = new AlertDialog.Builder(context, THEME)
-                    .setPositiveButton(R.string.ok, null)
-                    .setCancelable(true)
-                    .setOnDismissListener(new DialogInterface.OnDismissListener() {
-                        @Override
-                        public void onDismiss(DialogInterface dialog) {
-                            sUssdMsg.setLength(0);
-                        }
-                    })
-                    .create();
+        ussdDialog.getWindow().setType(windowType);
+        ussdDialog.getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 
-            sUssdDialog.getWindow().setType(windowType);
-            sUssdDialog.getWindow().addFlags(
-                    WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
         if (sUssdMsg.length() != 0) {
-            sUssdMsg
-                    .insert(0, "\n")
+            sUssdMsg.insert(0, "\n")
                     .insert(0, app.getResources().getString(R.string.ussd_dialog_sep))
                     .insert(0, "\n");
         }
         if (phone != null && phone.getCarrierName() != null) {
-            sUssdDialog.setTitle(app.getResources().getString(R.string.carrier_mmi_msg_title,
+            ussdDialog.setTitle(app.getResources().getString(R.string.carrier_mmi_msg_title,
                     phone.getCarrierName()));
         } else {
-            sUssdDialog
+            ussdDialog
                     .setTitle(app.getResources().getString(R.string.default_carrier_mmi_msg_title));
         }
         sUssdMsg.insert(0, text);
-        sUssdDialog.setMessage(sUssdMsg.toString());
-        sUssdDialog.show();
+        ussdDialog.setMessage(sUssdMsg.toString());
+        ussdDialog.show();
     }
 
     /**

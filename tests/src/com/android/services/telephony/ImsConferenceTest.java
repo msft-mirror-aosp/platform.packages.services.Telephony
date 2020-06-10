@@ -18,7 +18,6 @@ package com.android.services.telephony;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.never;
@@ -43,6 +42,8 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 
 public class ImsConferenceTest {
     @Mock
@@ -73,14 +74,15 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         ConferenceParticipant participant1 = new ConferenceParticipant(
                 Uri.parse("tel:6505551212"),
                 "A",
                 Uri.parse("sip:6505551212@testims.com"),
                 Connection.STATE_ACTIVE,
-                Call.Details.DIRECTION_INCOMING);
+                Call.Details.DIRECTION_OUTGOING);
         ConferenceParticipant participant2 = new ConferenceParticipant(
                 Uri.parse("tel:6505551213"),
                 "A",
@@ -98,6 +100,8 @@ public class ImsConferenceTest {
         imsConference.handleConferenceParticipantsUpdate(mConferenceHost,
                 Arrays.asList(participant1));
         assertEquals(0, imsConference.getNumberOfParticipants());
+        // Ensure the call direction is set correctly during emulation
+        assertEquals(Call.Details.DIRECTION_OUTGOING, imsConference.getCallDirection());
         reset(mMockTelephonyConnectionServiceProxy);
 
         // Back to 2!
@@ -120,7 +124,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         // Start off with 3 participants.
         ConferenceParticipant participant1 = new ConferenceParticipant(
@@ -183,7 +188,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         // Start off with 3 participants.
         ConferenceParticipant participant1 = new ConferenceParticipant(
@@ -240,7 +246,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         // Setup the initial conference state with 2 participants.
         ConferenceParticipant participant1 = new ConferenceParticipant(
@@ -298,7 +305,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         final boolean[] isConferenceState = new boolean[1];
         TelephonyConferenceBase.TelephonyConferenceListener conferenceListener =
@@ -354,7 +362,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         ConferenceParticipant participant1 = new ConferenceParticipant(
                 Uri.parse("tel:6505551212"),
@@ -364,7 +373,37 @@ public class ImsConferenceTest {
                 Call.Details.DIRECTION_INCOMING);
         imsConference.handleConferenceParticipantsUpdate(mConferenceHost,
                 Arrays.asList(participant1));
-        assertTrue(imsConference.isEmulatingSinglePartyCall());
+        assertFalse(imsConference.isMultiparty());
+    }
+
+    /**
+     * Verify that the single party emulate correctly when the conference starts with a single
+     * party as part of the initial setup.  This mimics how an ImsCall can get CEP data prior to the
+     * ImsConference being created.
+     */
+    @Test
+    @SmallTest
+    public void testSinglePartyEmulationWithSinglePartyAtCreation() {
+        when(mMockTelecomAccountRegistry.isUsingSimCallManager(any(PhoneAccountHandle.class)))
+                .thenReturn(false);
+
+        ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
+                mMockTelephonyConnectionServiceProxy, mConferenceHost,
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
+
+        ConferenceParticipant participant1 = new ConferenceParticipant(
+                Uri.parse("tel:6505551214"),
+                "A",
+                Uri.parse("sip:6505551214@testims.com"),
+                Connection.STATE_ACTIVE,
+                Call.Details.DIRECTION_INCOMING);
+        List<ConferenceParticipant> cps = Arrays.asList(participant1);
+        when(mConferenceHost.mMockRadioConnection.getConferenceParticipants())
+                .thenReturn(cps);
+        imsConference.updateConferenceParticipantsAfterCreation();
+
+        assertFalse(imsConference.isMultiparty());
     }
 
     /**
@@ -379,7 +418,8 @@ public class ImsConferenceTest {
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> true /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         ConferenceParticipant participant1 = new ConferenceParticipant(
                 Uri.parse("tel:6505551212"),
@@ -410,13 +450,14 @@ public class ImsConferenceTest {
 
     @Test
     @SmallTest
-    public void testNormalConference() {
+    public void testNormalConference() throws Exception {
         when(mMockTelecomAccountRegistry.isUsingSimCallManager(any(PhoneAccountHandle.class)))
                 .thenReturn(false);
 
         ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
                 mMockTelephonyConnectionServiceProxy, mConferenceHost,
-                null /* phoneAccountHandle */, () -> false /* featureFlagProxy */);
+                null /* phoneAccountHandle */, () -> false /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder().build());
 
         ConferenceParticipant participant1 = new ConferenceParticipant(
                 Uri.parse("tel:6505551212"),
@@ -438,5 +479,45 @@ public class ImsConferenceTest {
         imsConference.handleConferenceParticipantsUpdate(mConferenceHost,
                 Arrays.asList(participant1));
         assertEquals(1, imsConference.getNumberOfParticipants());
+
+        // Drop to 0 participants; should not hangup the conf now
+        imsConference.handleConferenceParticipantsUpdate(mConferenceHost, Collections.emptyList());
+        assertEquals(0, imsConference.getNumberOfParticipants());
+        verify(mConferenceHost.mMockCall, never()).hangup();
+    }
+
+    @Test
+    @SmallTest
+    public void testLocalDisconnectOnEmptyConference() throws Exception {
+        when(mMockTelecomAccountRegistry.isUsingSimCallManager(any(PhoneAccountHandle.class)))
+                .thenReturn(false);
+
+        ImsConference imsConference = new ImsConference(mMockTelecomAccountRegistry,
+                mMockTelephonyConnectionServiceProxy, mConferenceHost,
+                null /* phoneAccountHandle */, () -> false /* featureFlagProxy */,
+                new ImsConference.CarrierConfiguration.Builder()
+                        .setShouldLocalDisconnectEmptyConference(true)
+                        .build());
+
+        ConferenceParticipant participant1 = new ConferenceParticipant(
+                Uri.parse("tel:6505551212"),
+                "A",
+                Uri.parse("sip:6505551212@testims.com"),
+                Connection.STATE_ACTIVE,
+                Call.Details.DIRECTION_INCOMING);
+        ConferenceParticipant participant2 = new ConferenceParticipant(
+                Uri.parse("tel:6505551213"),
+                "A",
+                Uri.parse("sip:6505551213@testims.com"),
+                Connection.STATE_ACTIVE,
+                Call.Details.DIRECTION_INCOMING);
+        imsConference.handleConferenceParticipantsUpdate(mConferenceHost,
+                Arrays.asList(participant1, participant2));
+        assertEquals(2, imsConference.getNumberOfParticipants());
+
+        // Drop to 0 participants; should have a hangup request.
+        imsConference.handleConferenceParticipantsUpdate(mConferenceHost, Collections.emptyList());
+        assertEquals(0, imsConference.getNumberOfParticipants());
+        verify(mConferenceHost.mMockCall).hangup();
     }
 }
