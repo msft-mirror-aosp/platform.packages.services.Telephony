@@ -152,15 +152,18 @@ abstract class TelephonyConnection extends Connection implements Holdable {
                             mOriginalConnection.getAddress() != null &&
                             mOriginalConnection.getAddress().equals(connection.getAddress())) ||
                             connection.getState() == mOriginalConnection.getStateBeforeHandover())) {
-                            Log.d(TelephonyConnection.this,
-                                    "SettingOriginalConnection " + mOriginalConnection.toString()
-                                            + " with " + connection.toString());
+                            Log.d(TelephonyConnection.this, "Setting original connection after"
+                                    + " handover or redial, current original connection="
+                                    + mOriginalConnection.toString()
+                                    + ", new original connection="
+                                    + connection.toString());
                             setOriginalConnection(connection);
                             mWasImsConnection = false;
                         }
                     } else {
                         Log.w(TelephonyConnection.this,
-                                what + ": mOriginalConnection==null - invalid state (not cleaned up)");
+                                what + ": mOriginalConnection==null --"
+                                        + " invalid state (not cleaned up)");
                     }
                     break;
                 case MSG_RINGBACK_TONE:
@@ -1574,12 +1577,13 @@ abstract class TelephonyConnection extends Connection implements Holdable {
         boolean wasVideoCall = false;
         boolean isVowifiEnabled = false;
         if (phone instanceof ImsPhone) {
-            ImsPhone imsPhone = (ImsPhone) phone;
-            if (imsPhone.getForegroundCall() != null
-                    && imsPhone.getForegroundCall().getImsCall() != null) {
-                ImsCall call = imsPhone.getForegroundCall().getImsCall();
-                isCurrentVideoCall = call.isVideoCall();
-                wasVideoCall = call.wasVideoCall();
+            ImsPhoneCall foregroundCall = ((ImsPhone) phone).getForegroundCall();
+            if (foregroundCall != null) {
+                ImsCall call = foregroundCall.getImsCall();
+                if (call != null) {
+                    isCurrentVideoCall = call.isVideoCall();
+                    wasVideoCall = call.wasVideoCall();
+                }
             }
 
             isVowifiEnabled = ImsUtil.isWfcEnabled(phone.getContext(), phone.getPhoneId());
