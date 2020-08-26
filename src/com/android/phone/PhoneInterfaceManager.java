@@ -116,6 +116,7 @@ import android.telephony.ims.stub.ImsConfigImplBase;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
 import android.util.ArraySet;
+import android.util.EventLog;
 import android.util.Log;
 import android.util.Pair;
 
@@ -755,7 +756,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     if (ar.exception == null && ar.result != null) {
                         request.result = ar.result;     // Integer
                     } else {
-                        request.result = null;
+                        // request.result must be set to something non-null
+                        // for the calling thread to unblock
+                        request.result = new int[]{-1};
                         if (ar.result == null) {
                             loge("getPreferredNetworkType: Empty response");
                         } else if (ar.exception instanceof CommandException) {
@@ -1929,20 +1932,52 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
+    /**
+     * This method has been removed due to privacy and stability concerns.
+     */
+    @Override
     public void updateServiceLocation() {
-        updateServiceLocationForSubscriber(getDefaultSubscription());
-
+        Log.e(LOG_TAG, "Call to unsupported method updateServiceLocation()");
+        return;
     }
 
-    public void updateServiceLocationForSubscriber(int subId) {
-        // No permission check needed here: this call is harmless, and it's
-        // needed for the ServiceState.requestStateUpdate() call (which is
-        // already intentionally exposed to 3rd parties.)
+    @Override
+    public void updateServiceLocationWithPackageName(String callingPackage) {
+        mApp.getSystemService(AppOpsManager.class)
+                .checkPackage(Binder.getCallingUid(), callingPackage);
+
+        final int targetSdk = getTargetSdk(callingPackage);
+        if (targetSdk > android.os.Build.VERSION_CODES.R) {
+            // Callers targeting S have no business invoking this method.
+            return;
+        }
+
+        LocationAccessPolicy.LocationPermissionResult locationResult =
+                LocationAccessPolicy.checkLocationPermission(mApp,
+                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                .setCallingPackage(callingPackage)
+                                .setCallingFeatureId(null)
+                                .setCallingPid(Binder.getCallingPid())
+                                .setCallingUid(Binder.getCallingUid())
+                                .setMethod("updateServiceLocation")
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.BASE)
+                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .build());
+        // Apps that lack location permission have no business calling this method;
+        // however, because no permission was declared in the public API, denials must
+        // all be "soft".
+        switch (locationResult) {
+            case DENIED_HARD: /* fall through */
+            case DENIED_SOFT:
+                return;
+        }
+
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
-            final Phone phone = getPhone(subId);
+            final Phone phone = getPhone(getDefaultSubscription());
             if (phone != null) {
-                phone.updateServiceLocation();
+                phone.updateServiceLocation(workSource);
             }
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -2317,46 +2352,30 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
+    /**
+     * This method was removed due to potential issues caused by performing partial
+     * updates of service state, and lack of a credible use case.
+     *
+     * This has the ability to break the telephony implementation by disabling notification of
+     * changes in device connectivity. DO NOT USE THIS!
+     */
     @Override
     public void enableLocationUpdates() {
-        enableLocationUpdatesForSubscriber(getDefaultSubscription());
-    }
-
-    @Override
-    public void enableLocationUpdatesForSubscriber(int subId) {
         mApp.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CONTROL_LOCATION_UPDATES, null);
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null) {
-                phone.enableLocationUpdates();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
     }
 
+    /**
+     * This method was removed due to potential issues caused by performing partial
+     * updates of service state, and lack of a credible use case.
+     *
+     * This has the ability to break the telephony implementation by disabling notification of
+     * changes in device connectivity. DO NOT USE THIS!
+     */
     @Override
     public void disableLocationUpdates() {
-        disableLocationUpdatesForSubscriber(getDefaultSubscription());
-    }
-
-    @Override
-    public void disableLocationUpdatesForSubscriber(int subId) {
         mApp.enforceCallingOrSelfPermission(
                 android.Manifest.permission.CONTROL_LOCATION_UPDATES, null);
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null) {
-                phone.disableLocationUpdates();
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
     }
 
     /**
@@ -2489,12 +2508,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setCallingPid(Binder.getCallingPid())
                                 .setCallingUid(Binder.getCallingUid())
                                 .setMethod("requestCellInfoUpdate")
-                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.BASE)
+                                .setMinSdkVersionForFine(Build.VERSION_CODES.BASE)
                                 .build());
         switch (locationResult) {
             case DENIED_HARD:
+                if (getTargetSdk(callingPackage) < Build.VERSION_CODES.Q) {
+                    // Safetynet logging for b/154934934
+                    EventLog.writeEvent(0x534e4554, "154934934", Binder.getCallingUid());
+                }
                 throw new SecurityException("Not allowed to access cell info");
             case DENIED_SOFT:
+                if (getTargetSdk(callingPackage) < Build.VERSION_CODES.Q) {
+                    // Safetynet logging for b/154934934
+                    EventLog.writeEvent(0x534e4554, "154934934", Binder.getCallingUid());
+                }
                 try {
                     cb.onCellInfo(new ArrayList<CellInfo>());
                 } catch (RemoteException re) {
@@ -4355,7 +4383,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone == null) {
                 return PhoneConstants.LTE_ON_CDMA_UNKNOWN;
             } else {
-                return phone.getLteOnCdmaMode();
+                return TelephonyProperties.lte_on_cdma_device()
+                        .orElse(PhoneConstants.LTE_ON_CDMA_FALSE);
             }
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -5004,6 +5033,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
+     * Unregister a previously registered IImsServiceFeatureCallback associated with an ImsFeature.
+     */
+    public void unregisterImsFeatureCallback(int slotId, int featureType,
+            IImsServiceFeatureCallback callback) {
+        enforceModifyPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            if (mImsResolver == null) return;
+            mImsResolver.unregisterImsFeatureCallback(slotId, featureType, callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
      * Returns the {@link IImsRegistration} structure associated with the slotId and feature
      * specified or null if IMS is not supported on the slot specified.
      */
@@ -5521,6 +5566,74 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
+     * Get the allowed network types for certain reason.
+     *
+     * @param subId the id of the subscription.
+     * @param reason the reason the allowed network type change is taking place
+     * @return the allowed network types.
+     */
+    @Override
+    public long getAllowedNetworkTypesForReason(int subId,
+            @TelephonyManager.AllowedNetworkTypesReason int reason) {
+        TelephonyPermissions
+                .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
+                        mApp, subId, "getAllowedNetworkTypesForReason");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return getPhoneFromSubId(subId).getAllowedNetworkTypes(reason);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Get the effective allowed network types on the device.
+     * This API will return an intersection of allowed network types for all reasons,
+     * including the configuration done through setAllowedNetworkTypes
+     *
+     * @param subId the id of the subscription.
+     * @return the allowed network types
+     */
+    @Override
+    public long getEffectiveAllowedNetworkTypes(int subId) {
+        TelephonyPermissions
+                .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
+                        mApp, subId, "getEffectiveAllowedNetworkTypes");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return getPhoneFromSubId(subId).getEffectiveAllowedNetworkTypes();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Set the allowed network types of the device and
+     * provide the reason triggering the allowed network change.
+     *
+     * @param subId the id of the subscription.
+     * @param reason the reason the allowed network type change is taking place
+     * @param allowedNetworkTypes the allowed network types.
+     * @return true on success; false on any failure.
+     */
+    @Override
+    public boolean setAllowedNetworkTypesForReason(int subId,
+            @TelephonyManager.AllowedNetworkTypesReason int reason, long allowedNetworkTypes) {
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
+                mApp, subId, "setAllowedNetworkTypesForReason");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            getPhoneFromSubId(subId).setAllowedNetworkTypes(reason, allowedNetworkTypes);
+            int preferredNetworkMode = Settings.Global.getInt(mApp.getContentResolver(),
+                    Settings.Global.PREFERRED_NETWORK_MODE + subId,
+                    RILConstants.PREFERRED_NETWORK_MODE);
+            return setPreferredNetworkType(subId, preferredNetworkMode);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
      * Check whether DUN APN is required for tethering with subId.
      *
      * @param subId the id of the subscription to require tethering.
@@ -5682,6 +5795,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim, int uid,
             Phone phone) {
+        if (uid == Process.SYSTEM_UID || uid == Process.PHONE_UID) {
+            // Skip the check if it's one of these special uids
+            return TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
+        }
+
         //load access rules from carrier configs, and check those as well: b/139133814
         SubscriptionController subController = SubscriptionController.getInstance();
         if (privilegeFromSim == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS
@@ -6413,6 +6531,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public @Nullable PhoneAccountHandle getPhoneAccountHandleForSubscriptionId(int subscriptionId) {
+        enforceReadPrivilegedPermission("getPhoneAccountHandleForSubscriptionId, "
+                + "subscriptionId: " + subscriptionId);
         final long identity = Binder.clearCallingIdentity();
         try {
             Phone phone = getPhone(subscriptionId);
@@ -7374,15 +7494,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public List<UiccCardInfo> getUiccCardsInfo(String callingPackage) {
-        try {
-            PackageManager pm = mApp.getPackageManager();
-            if (Binder.getCallingUid() != pm.getPackageUid(callingPackage, 0)) {
-                throw new SecurityException("Calling package " + callingPackage + " does not match "
-                        + "calling UID");
-            }
-        } catch (PackageManager.NameNotFoundException e) {
-            throw new SecurityException("Invalid calling package. e=" + e);
-        }
+        // Verify that tha callingPackage belongs to the calling UID
+        mApp.getSystemService(AppOpsManager.class)
+                .checkPackage(Binder.getCallingUid(), callingPackage);
+
         boolean hasReadPermission = false;
         try {
             enforceReadPrivilegedPermission("getUiccCardsInfo");
@@ -7567,7 +7682,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private boolean getDefaultDataRoamingEnabled(int subId) {
         final CarrierConfigManager configMgr = (CarrierConfigManager)
                 mApp.getSystemService(Context.CARRIER_CONFIG_SERVICE);
-        boolean isDataRoamingEnabled = TelephonyProperties.data_roaming().orElse(true);
+        boolean isDataRoamingEnabled = TelephonyProperties.data_roaming().orElse(false);
         isDataRoamingEnabled |= configMgr.getConfigForSubId(subId).getBoolean(
                 CarrierConfigManager.KEY_CARRIER_DEFAULT_DATA_ROAMING_ENABLED_BOOL);
         return isDataRoamingEnabled;
@@ -8212,6 +8327,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         //TODO investigate if this API should require proper permission check in R b/133791609
         final long identity = Binder.clearCallingIdentity();
         try {
+            String carrierUAProfUrl = mApp.getCarrierConfigForSubId(subId).getString(
+                    CarrierConfigManager.KEY_MMS_UA_PROF_URL_STRING);
+            if (!TextUtils.isEmpty(carrierUAProfUrl)) {
+                return carrierUAProfUrl;
+            }
             return SubscriptionManager.getResourcesForSubId(getDefaultPhone().getContext(), subId)
                     .getString(com.android.internal.R.string.config_mms_user_agent_profile_url);
         } finally {
@@ -8224,6 +8344,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         //TODO investigate if this API should require proper permission check in R b/133791609
         final long identity = Binder.clearCallingIdentity();
         try {
+            String carrierUserAgent = mApp.getCarrierConfigForSubId(subId).getString(
+                    CarrierConfigManager.KEY_MMS_USER_AGENT_STRING);
+            if (!TextUtils.isEmpty(carrierUserAgent)) {
+                return carrierUserAgent;
+            }
             return SubscriptionManager.getResourcesForSubId(getDefaultPhone().getContext(), subId)
                     .getString(com.android.internal.R.string.config_mms_user_agent);
         } finally {

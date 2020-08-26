@@ -48,6 +48,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.stream.Collectors;
 
 /**
  * Represents an IMS conference call.
@@ -268,7 +269,7 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
 
                 @Override
                 public void onExtrasChanged(Connection c, Bundle extras) {
-                    Log.v(this, "onExtrasChanged: c=" + c + " Extras=" + extras);
+                    Log.v(this, "onExtrasChanged: c=" + c + " Extras=" + Rlog.pii(LOG_TAG, extras));
                     putExtras(extras);
                 }
 
@@ -834,9 +835,7 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
      * @param conferenceHost The connection hosting the conference.
      */
     private void setConferenceHost(TelephonyConnection conferenceHost) {
-        if (Log.VERBOSE) {
-            Log.v(this, "setConferenceHost " + conferenceHost);
-        }
+        Log.i(this, "setConferenceHost " + conferenceHost);
 
         mConferenceHost = conferenceHost;
 
@@ -867,6 +866,16 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
 
             mConferenceHostAddress = new Uri[hostAddresses.size()];
             mConferenceHostAddress = hostAddresses.toArray(mConferenceHostAddress);
+            Log.i(this, "setConferenceHost: temp log hosts are "
+                    + Arrays.stream(mConferenceHostAddress)
+                    .map(Uri::toString)
+                    .collect(Collectors.joining(", ")));
+
+            Log.i(this, "setConferenceHost: hosts are "
+                    + Arrays.stream(mConferenceHostAddress)
+                    .map(Uri::getSchemeSpecificPart)
+                    .map(ssp -> Rlog.pii(LOG_TAG, ssp))
+                    .collect(Collectors.joining(", ")));
 
             mIsUsingSimCallManager = mTelecomAccountRegistry.isUsingSimCallManager(
                     mConferenceHostPhoneAccountHandle);
@@ -1350,9 +1359,12 @@ public class ImsConference extends TelephonyConferenceBase implements Holdable {
             }
 
             if (mConferenceHost.getPhone().getPhoneType() == PhoneConstants.PHONE_TYPE_GSM) {
-                Log.i(this,"handleOriginalConnectionChange : SRVCC to GSM");
                 GsmConnection c = new GsmConnection(originalConnection, getTelecomCallId(),
                         mConferenceHost.getCallDirection());
+                Log.i(this, "handleOriginalConnectionChange : SRVCC to GSM."
+                        + " Created new GsmConnection with objId=" + System.identityHashCode(c)
+                        + " and originalConnection objId="
+                        + System.identityHashCode(originalConnection));
                 // This is a newly created conference connection as a result of SRVCC
                 c.setConferenceSupported(true);
                 c.setTelephonyConnectionProperties(
