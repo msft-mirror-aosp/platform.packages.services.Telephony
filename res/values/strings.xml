@@ -43,7 +43,7 @@
     <!-- In-call screen: status label for a call that's on hold -->
     <string name="onHold">On hold</string>
     <!-- Title for carrier MMI message -->
-    <string name="carrier_mmi_msg_title">(<xliff:g id="mmicarrier" example="T-Mobile">%s</xliff:g>) Message</string>
+    <string name="carrier_mmi_msg_title"><xliff:g id="mmicarrier" example="T-Mobile">%s</xliff:g> Message</string>
     <!-- Default title for carrier MMI message -->
     <string name="default_carrier_mmi_msg_title">Carrier Message</string>
     <!-- Possible error messages with outgoing calls --><skip/>
@@ -107,6 +107,8 @@
     <!-- network depersonalization -->
     <!-- Label text for PIN entry widget on SIM Network Depersonalization panel -->
     <string name="label_ndp">SIM network unlock PIN</string>
+    <!-- Label text for Operator displayName on SIM Network Depersonalization panel -->
+    <string name="label_phoneid">SIM locked for operator</string>
     <!-- Button label on SIM Network Depersonalization panel -->
     <string name="sim_ndp_unlock_text">Unlock</string>
     <!-- Button label on SIM Network Depersonalization panel -->
@@ -2077,8 +2079,6 @@
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_ul_kbps">UL Bandwidth (kbps):</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
-    <string name="radio_info_signal_location_label">Cell Location Info (deprecated):</string>
-    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_phy_chan_config">LTE Physical Channel Configuration:</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_cell_info_refresh_rate">Cell Info Refresh Rate:</string>
@@ -2140,6 +2140,16 @@
     <string name="radio_info_toggle_dns_check_label">Toggle DNS Check</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="oem_radio_info_label">OEM-specific Info/Settings</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_endc_available">EN-DC Available:</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_dcnr_restricted">DCNR Restricted:</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_nr_available">NR Available:</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_nr_state">NR State:</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_nr_frequency">NR Frequency:</string>
 
     <!-- Band Mode Selection -->
     <!-- Band mode screen.  Title of activity. -->

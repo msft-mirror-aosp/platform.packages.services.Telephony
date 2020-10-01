@@ -41,6 +41,7 @@ import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.SystemProperties;
 import android.provider.Settings;
+import android.telephony.AccessNetworkConstants;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellIdentityCdma;
 import android.telephony.CellIdentityGsm;
@@ -51,11 +52,12 @@ import android.telephony.CellInfoCdma;
 import android.telephony.CellInfoGsm;
 import android.telephony.CellInfoLte;
 import android.telephony.CellInfoWcdma;
-import android.telephony.CellLocation;
 import android.telephony.CellSignalStrengthCdma;
 import android.telephony.CellSignalStrengthGsm;
 import android.telephony.CellSignalStrengthLte;
 import android.telephony.CellSignalStrengthWcdma;
+import android.telephony.DataSpecificRegistrationInfo;
+import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhoneStateListener;
 import android.telephony.PhysicalChannelConfig;
 import android.telephony.PreciseCallState;
@@ -63,8 +65,6 @@ import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
-import android.telephony.cdma.CdmaCellLocation;
-import android.telephony.gsm.GsmCellLocation;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
@@ -229,7 +229,6 @@ public class RadioInfo extends AppCompatActivity {
     private TextView mDBm;
     private TextView mMwi;
     private TextView mCfi;
-    private TextView mLocation;
     private TextView mCellInfo;
     private TextView mSent;
     private TextView mReceived;
@@ -240,6 +239,11 @@ public class RadioInfo extends AppCompatActivity {
     private TextView mDnsCheckState;
     private TextView mDownlinkKbps;
     private TextView mUplinkKbps;
+    private TextView mEndcAvailable;
+    private TextView mDcnrRestricted;
+    private TextView mNrAvailable;
+    private TextView mNrState;
+    private TextView mNrFrequency;
     private EditText mSmsc;
     private Switch mRadioPowerOnSwitch;
     private Button mCellInfoRefreshRateButton;
@@ -276,7 +280,6 @@ public class RadioInfo extends AppCompatActivity {
     private boolean mCfiValue = false;
 
     private List<CellInfo> mCellInfoResult = null;
-    private CellLocation mCellLocationResult = null;
 
     private int mPreferredNetworkTypeResult;
     private int mCellInfoRefreshRateIndex;
@@ -321,11 +324,6 @@ public class RadioInfo extends AppCompatActivity {
         }
 
         @Override
-        public void onCellLocationChanged(CellLocation location) {
-            updateLocation(location);
-        }
-
-        @Override
         public void onMessageWaitingIndicatorChanged(boolean mwi) {
             mMwiValue = mwi;
             updateMessageWaiting();
@@ -357,6 +355,7 @@ public class RadioInfo extends AppCompatActivity {
             updateRadioPowerState();
             updateNetworkType();
             updateImsProvisionedState();
+            updateNrStats(serviceState);
         }
 
     }
@@ -490,7 +489,6 @@ public class RadioInfo extends AppCompatActivity {
         mDBm = (TextView) findViewById(R.id.dbm);
         mMwi = (TextView) findViewById(R.id.mwi);
         mCfi = (TextView) findViewById(R.id.cfi);
-        mLocation = (TextView) findViewById(R.id.location);
         mCellInfo = (TextView) findViewById(R.id.cellinfo);
         mCellInfo.setTypeface(Typeface.MONOSPACE);
 
@@ -501,8 +499,27 @@ public class RadioInfo extends AppCompatActivity {
         mPingHostnameV4 = (TextView) findViewById(R.id.pingHostnameV4);
         mPingHostnameV6 = (TextView) findViewById(R.id.pingHostnameV6);
         mHttpClientTest = (TextView) findViewById(R.id.httpClientTest);
-
+        mEndcAvailable = (TextView) findViewById(R.id.endc_available);
+        mDcnrRestricted = (TextView) findViewById(R.id.dcnr_restricted);
+        mNrAvailable = (TextView) findViewById(R.id.nr_available);
+        mNrState = (TextView) findViewById(R.id.nr_state);
+        mNrFrequency = (TextView) findViewById(R.id.nr_frequency);
         mPhyChanConfig = (TextView) findViewById(R.id.phy_chan_config);
+
+        // hide 5G stats on devices that don't support 5G
+        if ((mTelephonyManager.getSupportedRadioAccessFamily()
+                & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
+            ((TextView) findViewById(R.id.endc_available_label)).setVisibility(View.GONE);
+            mEndcAvailable.setVisibility(View.GONE);
+            ((TextView) findViewById(R.id.dcnr_restricted_label)).setVisibility(View.GONE);
+            mDcnrRestricted.setVisibility(View.GONE);
+            ((TextView) findViewById(R.id.nr_available_label)).setVisibility(View.GONE);
+            mNrAvailable.setVisibility(View.GONE);
+            ((TextView) findViewById(R.id.nr_state_label)).setVisibility(View.GONE);
+            mNrState.setVisibility(View.GONE);
+            ((TextView) findViewById(R.id.nr_frequency_label)).setVisibility(View.GONE);
+            mNrFrequency.setVisibility(View.GONE);
+        }
 
         mPreferredNetworkType = (Spinner) findViewById(R.id.preferredNetworkType);
         ArrayAdapter<String> mPreferredNetworkTypeAdapter = new ArrayAdapter<String>(this,
@@ -625,8 +642,8 @@ public class RadioInfo extends AppCompatActivity {
         updateProperties();
         updateDnsCheckState();
         updateNetworkType();
+        updateNrStats(null);
 
-        updateLocation(mCellLocationResult);
         updateCellInfo(mCellInfoResult);
         updateSubscriptionIds();
 
@@ -786,7 +803,6 @@ public class RadioInfo extends AppCompatActivity {
         mSent.setText("");
         mReceived.setText("");
         mCallState.setText("");
-        mLocation.setText("");
         mMwiValue = false;
         mMwi.setText("");
         mCfiValue = false;
@@ -842,45 +858,6 @@ public class RadioInfo extends AppCompatActivity {
                 + r.getString(R.string.radioInfo_display_dbm) + "   "
                 + String.valueOf(signalAsu) + " "
                 + r.getString(R.string.radioInfo_display_asu));
-    }
-
-    private void updateLocation(CellLocation location) {
-        Resources r = getResources();
-        if (location instanceof GsmCellLocation) {
-            GsmCellLocation loc = (GsmCellLocation) location;
-            int lac = loc.getLac();
-            int cid = loc.getCid();
-            mLocation.setText(r.getString(R.string.radioInfo_lac) + " = "
-                    + ((lac == -1) ? "unknown" : Integer.toHexString(lac))
-                    + "   "
-                    + r.getString(R.string.radioInfo_cid) + " = "
-                    + ((cid == -1) ? "unknown" : Integer.toHexString(cid)));
-        } else if (location instanceof CdmaCellLocation) {
-            CdmaCellLocation loc = (CdmaCellLocation) location;
-            int bid = loc.getBaseStationId();
-            int sid = loc.getSystemId();
-            int nid = loc.getNetworkId();
-            int lat = loc.getBaseStationLatitude();
-            int lon = loc.getBaseStationLongitude();
-            mLocation.setText("BID = "
-                    + ((bid == -1) ? "unknown" : Integer.toHexString(bid))
-                    + "   "
-                    + "SID = "
-                    + ((sid == -1) ? "unknown" : Integer.toHexString(sid))
-                    + "   "
-                    + "NID = "
-                    + ((nid == -1) ? "unknown" : Integer.toHexString(nid))
-                    + "\n"
-                    + "LAT = "
-                    + ((lat == -1) ? "unknown" : Integer.toHexString(lat))
-                    + "   "
-                    + "LONG = "
-                    + ((lon == -1) ? "unknown" : Integer.toHexString(lon)));
-        } else {
-            mLocation.setText("unknown");
-        }
-
-
     }
 
     private String getCellInfoDisplayString(int i) {
@@ -1132,6 +1109,32 @@ public class RadioInfo extends AppCompatActivity {
         }
     }
 
+    private void updateNrStats(ServiceState serviceState) {
+        if ((mTelephonyManager.getSupportedRadioAccessFamily()
+                & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
+            return;
+        }
+
+        ServiceState ss = serviceState;
+        if (ss == null && mPhone != null) {
+            ss = mPhone.getServiceState();
+        }
+        if (ss != null) {
+            NetworkRegistrationInfo nri = ss.getNetworkRegistrationInfo(
+                    NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
+            if (nri != null) {
+                DataSpecificRegistrationInfo dsri = nri.getDataSpecificInfo();
+                if (dsri != null) {
+                    mEndcAvailable.setText(dsri.isEnDcAvailable ? "True" : "False");
+                    mDcnrRestricted.setText(dsri.isDcNrRestricted ? "True" : "False");
+                    mNrAvailable.setText(dsri.isNrAvailable ? "True" : "False");
+                }
+            }
+            mNrState.setText(NetworkRegistrationInfo.nrStateToString(ss.getNrState()));
+            mNrFrequency.setText(ServiceState.frequencyRangeToString(ss.getNrFrequencyRange()));
+        }
+    }
+
     private void updateProperties() {
         String s;
         Resources r = getResources();
@@ -1232,11 +1235,9 @@ public class RadioInfo extends AppCompatActivity {
     private void updateAllCellInfo() {
 
         mCellInfo.setText("");
-        mLocation.setText("");
 
         final Runnable updateAllCellInfoResults = new Runnable() {
             public void run() {
-                updateLocation(mCellLocationResult);
                 updateCellInfo(mCellInfoResult);
             }
         };
@@ -1245,7 +1246,6 @@ public class RadioInfo extends AppCompatActivity {
             @Override
             public void run() {
                 mCellInfoResult = mTelephonyManager.getAllCellInfo();
-                mCellLocationResult = mTelephonyManager.getCellLocation();
 
                 mHandler.post(updateAllCellInfoResults);
             }
