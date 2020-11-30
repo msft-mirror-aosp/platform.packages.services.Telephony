@@ -428,8 +428,7 @@ public class TelecomAccountRegistry {
                             .getBoolean(R.bool.config_support_video_calling_fallback));
 
             if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
-                extras.putString(PhoneAccount.EXTRA_SORT_ORDER,
-                    String.valueOf(slotId));
+                extras.putInt(PhoneAccount.EXTRA_SORT_ORDER, slotId);
             }
 
             mIsMergeCallSupported = isCarrierMergeCallSupported();
@@ -854,7 +853,8 @@ public class TelecomAccountRegistry {
                 // Next check whether we're in or near a country that supports it
                 String country =
                         mPhone.getServiceStateTracker().getLocaleTracker()
-                                .getCurrentCountry().toLowerCase();
+                                .getLastKnownCountryIso().toLowerCase();
+
                 String[] supportedCountries = mContext.getResources().getStringArray(
                         R.array.config_simless_emergency_rtt_supported_countries);
                 if (supportedCountries == null || Arrays.stream(supportedCountries).noneMatch(
@@ -863,7 +863,7 @@ public class TelecomAccountRegistry {
                             + " not supported in this country: " + country);
                     return false;
                 }
-                
+
                 return true;
             }
 
