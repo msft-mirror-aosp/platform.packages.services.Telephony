@@ -55,6 +55,7 @@ import android.util.LocalLog;
 import android.util.Log;
 import android.widget.Toast;
 
+import com.android.ims.ImsFeatureBinderRepository;
 import com.android.internal.telephony.CallManager;
 import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.MmiCode;
@@ -68,6 +69,8 @@ import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.dataconnection.DataConnectionReasons;
 import com.android.internal.telephony.dataconnection.DataConnectionReasons.DataDisallowedReasonType;
 import com.android.internal.telephony.ims.ImsResolver;
+import com.android.internal.telephony.imsphone.ImsPhone;
+import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.phone.settings.SettingsConstants;
 import com.android.phone.vvm.CarrierVvmPackageInstalledReceiver;
@@ -356,8 +359,28 @@ public class PhoneGlobals extends ContextWrapper {
                 String defaultImsRcsPackage = getResources().getString(
                         R.string.config_ims_rcs_package);
                 mImsResolver = new ImsResolver(this, defaultImsMmtelPackage,
-                        defaultImsRcsPackage, PhoneFactory.getPhones().length);
+                        defaultImsRcsPackage, PhoneFactory.getPhones().length,
+                        new ImsFeatureBinderRepository());
                 mImsResolver.initialize();
+
+                // With the IMS phone created, load static config.xml values from the phone process
+                // so that it can be provided to the ImsPhoneCallTracker.
+                for (Phone p : PhoneFactory.getPhones()) {
+                    Phone imsPhone = p.getImsPhone();
+                    if (imsPhone != null && imsPhone instanceof ImsPhone) {
+                        ImsPhone theImsPhone = (ImsPhone) imsPhone;
+                        if (theImsPhone.getCallTracker() instanceof ImsPhoneCallTracker) {
+                            ImsPhoneCallTracker ict = (ImsPhoneCallTracker)
+                                    theImsPhone.getCallTracker();
+
+                            ImsPhoneCallTracker.Config config = new ImsPhoneCallTracker.Config();
+                            config.isD2DCommunicationSupported = getResources().getBoolean(
+                                    R.bool.config_use_device_to_device_communication);
+                            ict.setConfig(config);
+                        }
+                    }
+                }
+                RcsProvisioningMonitor.make(this);
             }
 
             // Start TelephonyDebugService After the default phone is created.

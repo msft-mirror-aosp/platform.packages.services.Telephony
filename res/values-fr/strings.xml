@@ -36,7 +36,7 @@
     <string name="ok" msgid="7818974223666140165">"OK"</string>
     <string name="audio_mode_speaker" msgid="243689733219312360">"Haut-parleur"</string>
     <string name="audio_mode_earpiece" msgid="2823700267171134282">"Écouteur du combiné"</string>
-    <string name="audio_mode_wired_headset" msgid="5028010823105817443">"Écouteurs filaires"</string>
+    <string name="audio_mode_wired_headset" msgid="5028010823105817443">"Casque filaire"</string>
     <string name="audio_mode_bluetooth" msgid="25732183428018809">"Bluetooth"</string>
     <string name="wait_prompt_str" msgid="5136209532150094910">"Envoyer les tonalités suivantes ?\n"</string>
     <string name="pause_prompt_str" msgid="2308897950360272213">"Envoi des tonalités\n"</string>
@@ -875,7 +875,6 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"Sous-identifiant de la carte SIM par défaut pour les données :"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Bande passante de téléchargement (kbit/s) :"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Bande passante d\'importation (kbit/s) :"</string>
-    <string name="radio_info_signal_location_label" msgid="6188435197086550049">"Informations de géolocalisation mobiles (obsolètes) :"</string>
     <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"Configuration de la chaîne physique LTE :"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"Fréquence d\'actualisation des informations mobiles :"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"Toutes les informations mobiles liées aux mesures :"</string>
