@@ -63,6 +63,7 @@ import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.PhoneSwitcher;
 import com.android.internal.telephony.RIL;
 import com.android.internal.telephony.SubscriptionController;
+import com.android.internal.telephony.d2d.Communicator;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
@@ -77,6 +78,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -160,6 +162,9 @@ public class TelephonyConnectionService extends ConnectionService {
     private EmergencyTonePlayer mEmergencyTonePlayer;
     private HoldTracker mHoldTracker;
     private boolean mIsTtyEnabled;
+    /** Set to true when there is an emergency call pending which will potential trigger a dial.
+     * This must be set to false when the call is dialed. */
+    private volatile boolean mIsEmergencyCallPending;
 
     // Contains one TelephonyConnection that has placed a call and a memory of which Phones it has
     // already tried to connect with. There should be only one TelephonyConnection trying to place a
@@ -800,6 +805,10 @@ public class TelephonyConnectionService extends ConnectionService {
             if (mRadioOnHelper == null) {
                 mRadioOnHelper = new RadioOnHelper(this);
             }
+
+            if (isEmergencyNumber) {
+                mIsEmergencyCallPending = true;
+            }
             mRadioOnHelper.triggerRadioOnAndListen(new RadioOnStateListener.Callback() {
                 @Override
                 public void onComplete(RadioOnStateListener listener, boolean isRadioReady) {
@@ -912,6 +921,14 @@ public class TelephonyConnectionService extends ConnectionService {
     }
 
     /**
+     * @return whether radio has recently been turned on for emergency call but hasn't actually
+     * dialed the call yet.
+     */
+    public boolean isEmergencyCallPending() {
+        return mIsEmergencyCallPending;
+    }
+
+    /**
      * Whether the cellular radio is power off because the device is on Bluetooth.
      */
     private boolean isRadioPowerDownOnBluetooth() {
@@ -936,6 +953,7 @@ public class TelephonyConnectionService extends ConnectionService {
                 for (Phone curPhone : mPhoneFactoryProxy.getPhones()) {
                     curPhone.setRadioPower(true, false, false, true);
                 }
+                mIsEmergencyCallPending = false;
             }
             return;
         }
@@ -951,6 +969,7 @@ public class TelephonyConnectionService extends ConnectionService {
                         Log.i(this, "handleOnComplete - delayDialForDdsSwitch result = " + result);
                         adjustAndPlaceOutgoingConnection(phone, originalConnection, request,
                                 numberToDial, handle, originalPhoneType, true);
+                        mIsEmergencyCallPending = false;
                     }
                 });
             }
@@ -961,6 +980,7 @@ public class TelephonyConnectionService extends ConnectionService {
                     mDisconnectCauseFactory.toTelecomDisconnectCause(
                             android.telephony.DisconnectCause.POWER_OFF,
                             "Failed to turn on radio."));
+            mIsEmergencyCallPending = false;
         }
     }
 
@@ -1060,7 +1080,8 @@ public class TelephonyConnectionService extends ConnectionService {
         if (state == ServiceState.STATE_OUT_OF_SERVICE) {
             int dataNetType = phone.getServiceState().getDataNetworkType();
             if (dataNetType == TelephonyManager.NETWORK_TYPE_LTE ||
-                    dataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                    dataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA ||
+                    dataNetType == TelephonyManager.NETWORK_TYPE_NR) {
                 state = phone.getServiceState().getDataRegistrationState();
             }
         }
@@ -1144,9 +1165,9 @@ public class TelephonyConnectionService extends ConnectionService {
                             phone.getPhoneId()));
         }
 
-
+        PhoneAccountHandle accountHandle = adjustAccountHandle(phone, request.getAccountHandle());
         final TelephonyConnection connection =
-                createConnectionFor(phone, null, true /* isOutgoing */, request.getAccountHandle(),
+                createConnectionFor(phone, null, true /* isOutgoing */, accountHandle,
                         request.getTelecomCallId(), request.isAdhocConferenceCall());
         if (connection == null) {
             return Connection.createFailedConnection(
@@ -1687,7 +1708,6 @@ public class TelephonyConnectionService extends ConnectionService {
                 EmergencyNumber emergencyNumber =
                         phone.getEmergencyNumberTracker().getEmergencyNumber(number);
                 if (emergencyNumber != null) {
-                    phone.notifyOutgoingEmergencyCall(emergencyNumber);
                     if (!getAllConnections().isEmpty()) {
                         if (!shouldHoldForEmergencyCall(phone)) {
                             // If we do not support holding ongoing calls for an outgoing
@@ -2465,5 +2485,46 @@ public class TelephonyConnectionService extends ConnectionService {
     public void addTelephonyConference(@NonNull TelephonyConferenceBase conference) {
         addConference(conference);
         conference.addTelephonyConferenceListener(mTelephonyConferenceListener);
+    }
+
+    /**
+     * Sends a test device to device message on the active call which supports it.
+     * Used exclusively from the telephony shell command to send a test message.
+     *
+     * @param message the message
+     * @param value the value
+     */
+    public void sendTestDeviceToDeviceMessage(int message, int value) {
+       getAllConnections().stream()
+               .filter(f -> f instanceof TelephonyConnection)
+               .forEach(t -> {
+                        TelephonyConnection tc = (TelephonyConnection) t;
+                        Communicator c = tc.getCommunicator();
+                        if (c == null) {
+                            Log.w(this, "sendTestDeviceToDeviceMessage: D2D not enabled");
+                            return;
+                        }
+
+                        c.sendMessages(new HashSet<Communicator.Message>() {{
+                            add(new Communicator.Message(message, value));
+                        }});
+
+       });
+    }
+
+    private PhoneAccountHandle adjustAccountHandle(Phone phone,
+            PhoneAccountHandle origAccountHandle) {
+        int origSubId = PhoneUtils.getSubIdForPhoneAccountHandle(origAccountHandle);
+        int subId = phone.getSubId();
+        if (origSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                && subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                && origSubId != subId) {
+            PhoneAccountHandle handle = TelecomAccountRegistry.getInstance(this)
+                .getPhoneAccountHandleForSubId(subId);
+            if (handle != null) {
+                return handle;
+            }
+        }
+        return origAccountHandle;
     }
 }
