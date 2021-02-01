@@ -120,6 +120,7 @@ public class TelecomAccountRegistry {
         private final PstnPhoneCapabilitiesNotifier mPhoneCapabilitiesNotifier;
         private boolean mIsEmergency;
         private boolean mIsRttCapable;
+        private boolean mIsCallComposerCapable;
         private boolean mIsAdhocConfCapable;
         private boolean mIsEmergencyPreferred;
         private MmTelFeature.MmTelCapabilities mMmTelCapabilities;
@@ -173,6 +174,7 @@ public class TelecomAccountRegistry {
                         MmTelFeature.MmTelCapabilities capabilities) {
                     mMmTelCapabilities = capabilities;
                     updateRttCapability();
+                    updateCallComposerCapability(capabilities);
                 }
             };
             registerMmTelCapabilityCallback();
@@ -365,6 +367,10 @@ public class TelecomAccountRegistry {
                 mIsRttCapable = true;
             } else {
                 mIsRttCapable = false;
+            }
+
+            if (mIsCallComposerCapable) {
+                capabilities |= PhoneAccount.CAPABILITY_CALL_COMPOSER;
             }
 
             mIsVideoCapable = mPhone.isVideoEnabled();
@@ -580,7 +586,9 @@ public class TelecomAccountRegistry {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
             boolean carrierConfigEnabled = b != null
-                    && b.getBoolean(CarrierConfigManager.KEY_USE_RCS_PRESENCE_BOOL);
+                    && (b.getBoolean(CarrierConfigManager.KEY_USE_RCS_PRESENCE_BOOL)
+                    || b.getBoolean(
+                    CarrierConfigManager.Ims.KEY_ENABLE_PRESENCE_CAPABILITY_EXCHANGE_BOOL));
             return carrierConfigEnabled && isUserContactDiscoverySettingEnabled();
         }
 
@@ -735,6 +743,15 @@ public class TelecomAccountRegistry {
         }
 
         /**
+         * Determines from carrier config whether to always allow RTT while roaming.
+         */
+        private boolean isCarrierAllowRttWhenRoaming() {
+            PersistableBundle b =
+                    PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            return b.getBoolean(CarrierConfigManager.KEY_RTT_SUPPORTED_WHILE_ROAMING_BOOL);
+        }
+
+        /**
          * Where a device supports instant lettering and call subjects, retrieves the necessary
          * PhoneAccount extras for those features.
          *
@@ -824,6 +841,17 @@ public class TelecomAccountRegistry {
             }
         }
 
+        public void updateCallComposerCapability(MmTelFeature.MmTelCapabilities capabilities) {
+            boolean isCallComposerCapable = capabilities.isCapable(
+                    MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_CALL_COMPOSER);
+            if (isCallComposerCapable != mIsCallComposerCapable) {
+                mIsCallComposerCapable = isCallComposerCapable;
+                Log.i(this, "updateCallComposerCapability - changed, new value: "
+                        + isCallComposerCapable);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+            }
+        }
+
         public void updateDefaultDataSubId(int activeDataSubId) {
             boolean isEmergencyPreferred = isEmergencyPreferredAccount(mPhone.getSubId(),
                     activeDataSubId);
@@ -875,11 +903,15 @@ public class TelecomAccountRegistry {
             boolean isRoaming = mTelephonyManager.isNetworkRoaming(mPhone.getSubId());
             boolean isOnWfc = mPhone.getImsRegistrationTech()
                     == ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
+            boolean alwaysAllowWhileRoaming = isCarrierAllowRttWhenRoaming();
 
-            boolean shouldDisableBecauseRoamingOffWfc = isRoaming && !isOnWfc;
+            boolean shouldDisableBecauseRoamingOffWfc =
+                    (isRoaming && !isOnWfc) && !alwaysAllowWhileRoaming;
+
             Log.i(this, "isRttCurrentlySupported -- regular acct,"
                     + " hasVoiceAvailability: " + hasVoiceAvailability + "\n"
                     + " isRttSupported: " + isRttSupported + "\n"
+                    + " alwaysAllowWhileRoaming: " + alwaysAllowWhileRoaming + "\n"
                     + " isRoaming: " + isRoaming + "\n"
                     + " isOnWfc: " + isOnWfc + "\n");
 
@@ -1410,6 +1442,17 @@ public class TelecomAccountRegistry {
             }
         }
         return false;
+    }
+
+    PhoneAccountHandle getPhoneAccountHandleForSubId(int subId) {
+        synchronized (mAccountsLock) {
+            for (AccountEntry entry : mAccounts) {
+                if (entry.getSubId() == subId) {
+                    return entry.getPhoneAccountHandle();
+                }
+            }
+        }
+        return null;
     }
 
     /**
