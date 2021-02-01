@@ -263,10 +263,6 @@ public class ImsRcsController extends IImsRcsController.Stub {
     public void requestCapabilities(int subId, String callingPackage, String callingFeatureId,
             List<Uri> contactNumbers, IRcsUceControllerCallback c) {
         enforceReadPrivilegedPermission("requestCapabilities");
-        if (!isUceSettingEnabled(subId, callingPackage, callingFeatureId)) {
-            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
-                    "The user has not enabled UCE for this subscription.");
-        }
         final long token = Binder.clearCallingIdentity();
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
@@ -284,13 +280,9 @@ public class ImsRcsController extends IImsRcsController.Stub {
     }
 
     @Override
-    public void requestNetworkAvailability(int subId, String callingPackage,
+    public void requestAvailability(int subId, String callingPackage,
             String callingFeatureId, Uri contactNumber, IRcsUceControllerCallback c) {
-        enforceReadPrivilegedPermission("requestNetworkAvailability");
-        if (!isUceSettingEnabled(subId, callingPackage, callingFeatureId)) {
-            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
-                    "The user has not enabled UCE for this subscription.");
-        }
+        enforceReadPrivilegedPermission("requestAvailability");
         final long token = Binder.clearCallingIdentity();
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
@@ -461,6 +453,24 @@ public class ImsRcsController extends IImsRcsController.Stub {
                 return;
             }
             transport.destroySipDelegate(subId, connection, reason);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void triggerNetworkRegistration(int subId, ISipDelegate connection, int sipCode,
+            String sipReason) {
+        enforceModifyPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            SipTransportController transport = getRcsFeatureController(subId).getFeature(
+                    SipTransportController.class);
+            if (transport == null) {
+                return;
+            }
+            transport.triggerFullNetworkRegistration(subId, connection, sipCode, sipReason);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

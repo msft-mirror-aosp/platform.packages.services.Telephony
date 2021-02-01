@@ -63,6 +63,7 @@ import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.PhoneSwitcher;
 import com.android.internal.telephony.RIL;
 import com.android.internal.telephony.SubscriptionController;
+import com.android.internal.telephony.d2d.Communicator;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
@@ -77,6 +78,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
@@ -1078,7 +1080,8 @@ public class TelephonyConnectionService extends ConnectionService {
         if (state == ServiceState.STATE_OUT_OF_SERVICE) {
             int dataNetType = phone.getServiceState().getDataNetworkType();
             if (dataNetType == TelephonyManager.NETWORK_TYPE_LTE ||
-                    dataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA) {
+                    dataNetType == TelephonyManager.NETWORK_TYPE_LTE_CA ||
+                    dataNetType == TelephonyManager.NETWORK_TYPE_NR) {
                 state = phone.getServiceState().getDataRegistrationState();
             }
         }
@@ -1162,9 +1165,9 @@ public class TelephonyConnectionService extends ConnectionService {
                             phone.getPhoneId()));
         }
 
-
+        PhoneAccountHandle accountHandle = adjustAccountHandle(phone, request.getAccountHandle());
         final TelephonyConnection connection =
-                createConnectionFor(phone, null, true /* isOutgoing */, request.getAccountHandle(),
+                createConnectionFor(phone, null, true /* isOutgoing */, accountHandle,
                         request.getTelecomCallId(), request.isAdhocConferenceCall());
         if (connection == null) {
             return Connection.createFailedConnection(
@@ -2482,5 +2485,46 @@ public class TelephonyConnectionService extends ConnectionService {
     public void addTelephonyConference(@NonNull TelephonyConferenceBase conference) {
         addConference(conference);
         conference.addTelephonyConferenceListener(mTelephonyConferenceListener);
+    }
+
+    /**
+     * Sends a test device to device message on the active call which supports it.
+     * Used exclusively from the telephony shell command to send a test message.
+     *
+     * @param message the message
+     * @param value the value
+     */
+    public void sendTestDeviceToDeviceMessage(int message, int value) {
+       getAllConnections().stream()
+               .filter(f -> f instanceof TelephonyConnection)
+               .forEach(t -> {
+                        TelephonyConnection tc = (TelephonyConnection) t;
+                        Communicator c = tc.getCommunicator();
+                        if (c == null) {
+                            Log.w(this, "sendTestDeviceToDeviceMessage: D2D not enabled");
+                            return;
+                        }
+
+                        c.sendMessages(new HashSet<Communicator.Message>() {{
+                            add(new Communicator.Message(message, value));
+                        }});
+
+       });
+    }
+
+    private PhoneAccountHandle adjustAccountHandle(Phone phone,
+            PhoneAccountHandle origAccountHandle) {
+        int origSubId = PhoneUtils.getSubIdForPhoneAccountHandle(origAccountHandle);
+        int subId = phone.getSubId();
+        if (origSubId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                && subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID
+                && origSubId != subId) {
+            PhoneAccountHandle handle = TelecomAccountRegistry.getInstance(this)
+                .getPhoneAccountHandleForSubId(subId);
+            if (handle != null) {
+                return handle;
+            }
+        }
+        return origAccountHandle;
     }
 }
