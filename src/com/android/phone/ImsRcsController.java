@@ -67,6 +67,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
     private PhoneGlobals mApp;
     private TelephonyRcsService mRcsService;
     private ImsResolver mImsResolver;
+    // set by shell cmd phone src set-device-enabled true/false
+    private Boolean mSingleRegistrationOverride;
 
     /**
      * Initialize the singleton ImsRcsController instance.
@@ -98,7 +100,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
      */
     @Override
     public void registerImsRegistrationCallback(int subId, IImsRegistrationCallback callback) {
-        enforceReadPrivilegedPermission("registerImsRegistrationCallback");
+        TelephonyPermissions.enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                mApp, subId, "registerImsRegistrationCallback");
         final long token = Binder.clearCallingIdentity();
         try {
             getRcsFeatureController(subId).registerImsRegistrationCallback(subId, callback);
@@ -115,7 +118,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
      */
     @Override
     public void unregisterImsRegistrationCallback(int subId, IImsRegistrationCallback callback) {
-        enforceReadPrivilegedPermission("unregisterImsRegistrationCallback");
+        TelephonyPermissions.enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                mApp, subId, "unregisterImsRegistrationCallback");
         final long token = Binder.clearCallingIdentity();
         try {
             getRcsFeatureController(subId).unregisterImsRegistrationCallback(subId, callback);
@@ -131,7 +135,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
      */
     @Override
     public void getImsRcsRegistrationState(int subId, IIntegerConsumer consumer) {
-        enforceReadPrivilegedPermission("getImsRcsRegistrationState");
+        TelephonyPermissions.enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                mApp, subId, "getImsRcsRegistrationState");
         final long token = Binder.clearCallingIdentity();
         try {
             getRcsFeatureController(subId).getRegistrationState(regState -> {
@@ -152,7 +157,8 @@ public class ImsRcsController extends IImsRcsController.Stub {
      */
     @Override
     public void getImsRcsRegistrationTransportType(int subId, IIntegerConsumer consumer) {
-        enforceReadPrivilegedPermission("getImsRcsRegistrationTransportType");
+        TelephonyPermissions.enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                mApp, subId, "getImsRcsRegistrationTransportType");
         final long token = Binder.clearCallingIdentity();
         try {
             getRcsFeatureController(subId).getRegistrationTech(regTech -> {
@@ -215,7 +221,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
      *
      * @param subId the subscription ID
      * @param capability the RCS capability to query.
-     * @param radioTech the radio tech that this capability failed for
+     * @param radioTech the radio technology type that we are querying.
      * @return true if the RCS capability is capable for this subscription, false otherwise.
      */
     @Override
@@ -241,15 +247,17 @@ public class ImsRcsController extends IImsRcsController.Stub {
      * @param subId the subscription ID
      * @param capability the RCS capability to query.
      * @return true if the RCS capability is currently available for the associated subscription,
+     * @param radioTech the radio technology type that we are querying.
      * false otherwise.
      */
     @Override
     public boolean isAvailable(int subId,
-            @RcsFeature.RcsImsCapabilities.RcsImsCapabilityFlag int capability) {
+            @RcsFeature.RcsImsCapabilities.RcsImsCapabilityFlag int capability,
+            @ImsRegistrationImplBase.ImsRegistrationTech int radioTech) {
         enforceReadPrivilegedPermission("isAvailable");
         final long token = Binder.clearCallingIdentity();
         try {
-            return getRcsFeatureController(subId).isAvailable(capability);
+            return getRcsFeatureController(subId).isAvailable(capability, radioTech);
         } catch (ImsException e) {
             Log.e(TAG, "isAvailable: sudId=" + subId
                     + ", capability=" + capability + ", " + e.getMessage());
@@ -386,6 +394,9 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public boolean isSipDelegateSupported(int subId) {
         enforceReadPrivilegedPermission("isSipDelegateSupported");
+        if (!isImsSingleRegistrationSupportedOnDevice()) {
+            return false;
+        }
         final long token = Binder.clearCallingIdentity();
         try {
             SipTransportController transport = getRcsFeatureController(subId).getFeature(
@@ -411,6 +422,11 @@ public class ImsRcsController extends IImsRcsController.Stub {
             ISipDelegateConnectionStateCallback delegateState,
             ISipDelegateMessageCallback delegateMessage) {
         enforceModifyPermission();
+        if (!isImsSingleRegistrationSupportedOnDevice()) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "SipDelegate creation is only supported for devices supporting IMS single "
+                            + "registration");
+        }
         if (!UserHandle.getUserHandleForUid(Binder.getCallingUid()).isSystem()) {
             throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                     "SipDelegate creation is only available to primary user.");
@@ -586,7 +602,21 @@ public class ImsRcsController extends IImsRcsController.Stub {
         return c;
     }
 
+    private boolean isImsSingleRegistrationSupportedOnDevice() {
+        return mSingleRegistrationOverride != null ? mSingleRegistrationOverride
+                : mApp.getPackageManager().hasSystemFeature(
+                        PackageManager.FEATURE_TELEPHONY_IMS_SINGLE_REGISTRATION);
+    }
+
     void setRcsService(TelephonyRcsService rcsService) {
         mRcsService = rcsService;
+    }
+
+    /**
+     * Override device RCS single registration support check for CTS testing or remove override
+     * if the Boolean is set to null.
+     */
+    void setDeviceSingleRegistrationSupportOverride(Boolean deviceOverrideValue) {
+        mSingleRegistrationOverride = deviceOverrideValue;
     }
 }

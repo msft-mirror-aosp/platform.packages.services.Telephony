@@ -68,6 +68,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String EMERGENCY_NUMBER_TEST_MODE = "emergency-number-test-mode";
     private static final String END_BLOCK_SUPPRESSION = "end-block-suppression";
     private static final String RESTART_MODEM = "restart-modem";
+    private static final String UNATTENDED_REBOOT = "unattended-reboot";
     private static final String CARRIER_CONFIG_SUBCOMMAND = "cc";
     private static final String DATA_TEST_MODE = "data";
     private static final String DATA_ENABLE = "enable";
@@ -201,6 +202,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSingleRegistrationConfigCommand();
             case RESTART_MODEM:
                 return handleRestartModemCommand();
+            case UNATTENDED_REBOOT:
+                return handleUnattendedReboot();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -231,6 +234,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("    RCS VoLTE Single Registration Config Commands.");
         pw.println("  restart-modem");
         pw.println("    Restart modem command.");
+        pw.println("  unattended-reboot");
+        pw.println("    Prepare for unattended reboot.");
         onHelpIms();
         onHelpUce();
         onHelpEmergencyNumber();
@@ -1456,6 +1461,20 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return result ? 0 : -1;
     }
 
+    private int handleUnattendedReboot() {
+        // Verify that the user is allowed to run the command. Only allowed in rooted device in a
+        // non user build.
+        if (Binder.getCallingUid() != Process.ROOT_UID || TelephonyUtils.IS_USER) {
+            getErrPrintWriter().println("UnattendedReboot: Permission denied.");
+            return -1;
+        }
+
+        int result = TelephonyManager.getDefault().prepareForUnattendedReboot();
+        getOutPrintWriter().println("result: " + result);
+
+        return result != TelephonyManager.PREPARE_UNATTENDED_REBOOT_ERROR ? 0 : -1;
+    }
+
     private int handleGbaCommand() {
         String arg = getNextArg();
         if (arg == null) {
@@ -1658,7 +1677,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         if (VDBG) {
             Log.v(LOG_TAG, "uce remove-eab-contact -s " + subId + ", result: " + result);
         }
-        return result;
+        return 0;
     }
 
     private int handleGettingEabContactCommand() {
@@ -1679,6 +1698,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         if (VDBG) {
             Log.v(LOG_TAG, "uce get-eab-contact, result: " + result);
         }
+        getOutPrintWriter().println(result);
         return 0;
     }
 
