@@ -388,9 +388,6 @@ public class PhoneGlobals extends ContextWrapper {
             startService(intent);
 
             mCM = CallManager.getInstance();
-            for (Phone phone : PhoneFactory.getPhones()) {
-                mCM.registerPhone(phone);
-            }
 
             // Create the NotificationMgr singleton, which is used to display
             // status bar icons and control other status bar behavior.
@@ -939,6 +936,23 @@ public class PhoneGlobals extends ContextWrapper {
             notificationMgr.updateNetworkSelection(phone.getServiceState().getState(), subId);
         } else {
             Log.w(LOG_TAG, "onNetworkSelectionChanged on null phone, subId: " + subId);
+        }
+    }
+
+    /**
+     * @return whether the device supports RCS User Capability Exchange or not.
+     */
+    public boolean getDeviceUceEnabled() {
+        return (mTelephonyRcsService == null) ? false : mTelephonyRcsService.isDeviceUceEnabled();
+    }
+
+    /**
+     * Set the device supports RCS User Capability Exchange.
+     * @param isEnabled true if the device supports UCE.
+     */
+    public void setDeviceUceEnabled(boolean isEnabled) {
+        if (mTelephonyRcsService != null) {
+            mTelephonyRcsService.setDeviceUceEnabled(isEnabled);
         }
     }
 
