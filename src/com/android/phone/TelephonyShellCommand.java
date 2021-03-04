@@ -68,6 +68,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String EMERGENCY_NUMBER_TEST_MODE = "emergency-number-test-mode";
     private static final String END_BLOCK_SUPPRESSION = "end-block-suppression";
     private static final String RESTART_MODEM = "restart-modem";
+    private static final String UNATTENDED_REBOOT = "unattended-reboot";
     private static final String CARRIER_CONFIG_SUBCOMMAND = "cc";
     private static final String DATA_TEST_MODE = "data";
     private static final String DATA_ENABLE = "enable";
@@ -101,12 +102,17 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String SRC_GET_DEVICE_ENABLED = "get-device-enabled";
     private static final String SRC_SET_CARRIER_ENABLED = "set-carrier-enabled";
     private static final String SRC_GET_CARRIER_ENABLED = "get-carrier-enabled";
+    private static final String SRC_SET_TEST_ENABLED = "set-test-enabled";
+    private static final String SRC_GET_TEST_ENABLED = "get-test-enabled";
 
     private static final String D2D_SUBCOMMAND = "d2d";
     private static final String D2D_SEND = "send";
 
     private static final String RCS_UCE_COMMAND = "uce";
+    private static final String UCE_GET_EAB_CONTACT = "get-eab-contact";
     private static final String UCE_REMOVE_EAB_CONTACT = "remove-eab-contact";
+    private static final String UCE_GET_DEVICE_ENABLED = "get-device-enabled";
+    private static final String UCE_SET_DEVICE_ENABLED = "set-device-enabled";
 
     // Take advantage of existing methods that already contain permissions checks when possible.
     private final ITelephony mInterface;
@@ -198,6 +204,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSingleRegistrationConfigCommand();
             case RESTART_MODEM:
                 return handleRestartModemCommand();
+            case UNATTENDED_REBOOT:
+                return handleUnattendedReboot();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -228,6 +236,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("    RCS VoLTE Single Registration Config Commands.");
         pw.println("  restart-modem");
         pw.println("    Restart modem command.");
+        pw.println("  unattended-reboot");
+        pw.println("    Prepare for unattended reboot.");
         onHelpIms();
         onHelpUce();
         onHelpEmergencyNumber();
@@ -294,12 +304,23 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private void onHelpUce() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("User Capability Exchange Commands:");
+        pw.println("  uce get-eab-contact [PHONE_NUMBER]");
+        pw.println("    Get the EAB contacts from the EAB database.");
+        pw.println("    Options are:");
+        pw.println("      PHONE_NUMBER: The phone numbers to be removed from the EAB databases");
+        pw.println("    Expected output format :");
+        pw.println("      [PHONE_NUMBER],[RAW_CONTACT_ID],[CONTACT_ID],[DATA_ID]");
         pw.println("  uce remove-eab-contact [-s SLOT_ID] [PHONE_NUMBER]");
         pw.println("    Remove the EAB contacts from the EAB database.");
         pw.println("    Options are:");
         pw.println("      -s: The SIM slot ID to read carrier config value for. If no option");
         pw.println("          is specified, it will choose the default voice SIM slot.");
         pw.println("      PHONE_NUMBER: The phone numbers to be removed from the EAB databases");
+        pw.println("  uce get-device-enabled");
+        pw.println("    Get the config to check whether the device supports RCS UCE or not.");
+        pw.println("  uce set-device-enabled true|false");
+        pw.println("    Set the device config for RCS User Capability Exchange to the value.");
+        pw.println("    The value could be true, false.");
     }
 
     private void onHelpNumberVerification() {
@@ -398,6 +419,11 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private void onHelpSrc() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("RCS VoLTE Single Registration Config Commands:");
+        pw.println("  src set-test-enabled true|false");
+        pw.println("    Sets the test mode enabled for RCS VoLTE single registration.");
+        pw.println("    The value could be true, false, or null(undefined).");
+        pw.println("  src get-test-enabled");
+        pw.println("    Gets the test mode for RCS VoLTE single registration.");
         pw.println("  src set-device-enabled true|false|null");
         pw.println("    Sets the device config for RCS VoLTE single registration to the value.");
         pw.println("    The value could be true, false, or null(undefined).");
@@ -1442,6 +1468,20 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return result ? 0 : -1;
     }
 
+    private int handleUnattendedReboot() {
+        // Verify that the user is allowed to run the command. Only allowed in rooted device in a
+        // non user build.
+        if (Binder.getCallingUid() != Process.ROOT_UID || TelephonyUtils.IS_USER) {
+            getErrPrintWriter().println("UnattendedReboot: Permission denied.");
+            return -1;
+        }
+
+        int result = TelephonyManager.getDefault().prepareForUnattendedReboot();
+        getOutPrintWriter().println("result: " + result);
+
+        return result != TelephonyManager.PREPARE_UNATTENDED_REBOOT_ERROR ? 0 : -1;
+    }
+
     private int handleGbaCommand() {
         String arg = getNextArg();
         if (arg == null) {
@@ -1585,6 +1625,12 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         }
 
         switch (arg) {
+            case SRC_SET_TEST_ENABLED: {
+                return handleSrcSetTestEnabledCommand();
+            }
+            case SRC_GET_TEST_ENABLED: {
+                return handleSrcGetTestEnabledCommand();
+            }
             case SRC_SET_DEVICE_ENABLED: {
                 return handleSrcSetDeviceEnabledCommand();
             }
@@ -1612,6 +1658,12 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         switch (arg) {
             case UCE_REMOVE_EAB_CONTACT:
                 return handleRemovingEabContactCommand();
+            case UCE_GET_EAB_CONTACT:
+                return handleGettingEabContactCommand();
+            case UCE_GET_DEVICE_ENABLED:
+                return handleUceGetDeviceEnabledCommand();
+            case UCE_SET_DEVICE_ENABLED:
+                return handleUceSetDeviceEnabledCommand();
         }
         return -1;
     }
@@ -1638,7 +1690,98 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         if (VDBG) {
             Log.v(LOG_TAG, "uce remove-eab-contact -s " + subId + ", result: " + result);
         }
-        return result;
+        return 0;
+    }
+
+    private int handleGettingEabContactCommand() {
+        String phoneNumber = getNextArgRequired();
+        if (TextUtils.isEmpty(phoneNumber)) {
+            return -1;
+        }
+        String result = "";
+        try {
+            result = mInterface.getContactFromEab(phoneNumber);
+
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "uce get-eab-contact, error " + e.getMessage());
+            getErrPrintWriter().println("Exception: " + e.getMessage());
+            return -1;
+        }
+
+        if (VDBG) {
+            Log.v(LOG_TAG, "uce get-eab-contact, result: " + result);
+        }
+        getOutPrintWriter().println(result);
+        return 0;
+    }
+
+    private int handleUceGetDeviceEnabledCommand() {
+        boolean result = false;
+        try {
+            result = mInterface.getDeviceUceEnabled();
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "uce get-device-enabled, error " + e.getMessage());
+            return -1;
+        }
+        if (VDBG) {
+            Log.v(LOG_TAG, "uce get-device-enabled, returned: " + result);
+        }
+        getOutPrintWriter().println(result);
+        return 0;
+    }
+
+    private int handleUceSetDeviceEnabledCommand() {
+        String enabledStr = getNextArg();
+        if (TextUtils.isEmpty(enabledStr)) {
+            return -1;
+        }
+
+        try {
+            boolean isEnabled = Boolean.parseBoolean(enabledStr);
+            mInterface.setDeviceUceEnabled(isEnabled);
+            if (VDBG) {
+                Log.v(LOG_TAG, "uce set-device-enabled " + enabledStr + ", done");
+            }
+        } catch (NumberFormatException | RemoteException e) {
+            Log.w(LOG_TAG, "uce set-device-enabled " + enabledStr + ", error " + e.getMessage());
+            getErrPrintWriter().println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleSrcSetTestEnabledCommand() {
+        String enabledStr = getNextArg();
+        if (enabledStr == null) {
+            return -1;
+        }
+
+        try {
+            mInterface.setRcsSingleRegistrationTestModeEnabled(Boolean.parseBoolean(enabledStr));
+            if (VDBG) {
+                Log.v(LOG_TAG, "src set-test-enabled " + enabledStr + ", done");
+            }
+            getOutPrintWriter().println("Done");
+        } catch (NumberFormatException | RemoteException e) {
+            Log.w(LOG_TAG, "src set-test-enabled " + enabledStr + ", error" + e.getMessage());
+            getErrPrintWriter().println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleSrcGetTestEnabledCommand() {
+        boolean result = false;
+        try {
+            result = mInterface.getRcsSingleRegistrationTestModeEnabled();
+        } catch (RemoteException e) {
+            return -1;
+        }
+        if (VDBG) {
+            Log.v(LOG_TAG, "src get-test-enabled, returned: " + result);
+        }
+        getOutPrintWriter().println(result);
+        return 0;
     }
 
     private int handleSrcSetDeviceEnabledCommand() {

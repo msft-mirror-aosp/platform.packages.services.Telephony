@@ -18,6 +18,7 @@ package com.android.services.telephony;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.drawable.Icon;
@@ -28,6 +29,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
 import android.os.PersistableBundle;
+import android.telecom.BluetoothCallQualityReport;
 import android.telecom.CallAudioState;
 import android.telecom.Conference;
 import android.telecom.Connection;
@@ -64,8 +66,11 @@ import com.android.internal.telephony.Connection.PostDialListener;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.d2d.Communicator;
+import com.android.internal.telephony.d2d.DtmfAdapter;
+import com.android.internal.telephony.d2d.DtmfTransport;
 import com.android.internal.telephony.d2d.RtpAdapter;
 import com.android.internal.telephony.d2d.RtpTransport;
+import com.android.internal.telephony.d2d.Timeouts;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCall;
@@ -86,6 +91,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
 
 /**
  * Base class for CDMA and GSM connections.
@@ -843,6 +849,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
 
     private RtpTransport mRtpTransport;
 
+    private DtmfTransport mDtmfTransport;
+
     /**
      * Facilitates device to device communication.
      */
@@ -854,6 +862,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     private final Set<TelephonyConnectionListener> mTelephonyListeners = Collections.newSetFromMap(
             new ConcurrentHashMap<TelephonyConnectionListener, Boolean>(8, 0.9f, 1));
 
+    private CallQualityManager mCallQualityManager;
+
     protected TelephonyConnection(com.android.internal.telephony.Connection originalConnection,
             String callId, @android.telecom.Call.Details.CallDirection int callDirection) {
         setCallDirection(callDirection);
@@ -863,6 +873,20 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         }
     }
 
+    @Override
+    public void onCallEvent(String event, Bundle extras) {
+        switch (event) {
+            case BluetoothCallQualityReport.EVENT_BLUETOOTH_CALL_QUALITY_REPORT:
+                if (mCallQualityManager == null) {
+                    mCallQualityManager = new CallQualityManager(getPhone().getContext());
+                }
+                mCallQualityManager.onBluetoothCallQualityReported(extras);
+                break;
+            default:
+                break;
+        }
+
+    }
     /**
      * Creates a clone of the current {@link TelephonyConnection}.
      *
@@ -3029,6 +3053,9 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         setDisconnected(disconnectCause);
         notifyDisconnected(disconnectCause);
         notifyStateChanged(getState());
+        if (mCallQualityManager != null) {
+            mCallQualityManager.clearNotifications();
+        }
     }
 
     /**
@@ -3202,7 +3229,20 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
             }
         };
         mRtpTransport = new RtpTransport(rtpAdapter, null /* TODO: not needed yet */, mHandler);
-        mCommunicator = new Communicator(List.of(mRtpTransport), this);
+
+        DtmfAdapter dtmfAdapter = digit -> {
+            if (!isImsConnection()) {
+                Log.w(TelephonyConnection.this, "sendDtmf: not an ims conn.");
+            }
+            Log.d(TelephonyConnection.this, "sendDtmf: send digit %c", digit);
+            ImsPhoneConnection originalConnection =
+                    (ImsPhoneConnection) mOriginalConnection;
+            originalConnection.getImsCall().sendDtmf(digit, null /* result msg not needed */);
+        };
+        ContentResolver cr = getPhone().getContext().getContentResolver();
+        mDtmfTransport = new DtmfTransport(dtmfAdapter, new Timeouts.Adapter(cr),
+                Executors.newSingleThreadScheduledExecutor());
+        mCommunicator = new Communicator(List.of(mRtpTransport, mDtmfTransport), this);
         mD2DCallStateAdapter = new D2DCallStateAdapter(mCommunicator);
         addTelephonyConnectionListener(mD2DCallStateAdapter);
     }
@@ -3222,14 +3262,13 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     @Override
     public void onMessagesReceived(@NonNull Set<Communicator.Message> messages) {
         Log.i(this, "onMessagesReceived: got d2d messages: %s", messages);
-        // TODO: Actually do something WITH the messages.
-
-        // TODO: Remove this prior to launch.
-        // This is just here for debug purposes; send as a connection event so that it
-        // will be output in the Telecom logs.
+        // Send connection events up to Telecom so that we can relay the messages to a valid
+        // CallDiagnosticService which is bound.
         for (Communicator.Message msg : messages) {
-            sendConnectionEvent("D2D_" + Communicator.messageToString(msg.getType())
-                + "_" + Communicator.valueToString(msg.getType(), msg.getValue()), null);
+            Bundle extras = new Bundle();
+            extras.putInt(Connection.EXTRA_DEVICE_TO_DEVICE_MESSAGE_TYPE, msg.getType());
+            extras.putInt(Connection.EXTRA_DEVICE_TO_DEVICE_MESSAGE_VALUE, msg.getValue());
+            sendConnectionEvent(Connection.EVENT_DEVICE_TO_DEVICE_MESSAGE, extras);
         }
     }
 
