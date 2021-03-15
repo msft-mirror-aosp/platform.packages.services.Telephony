@@ -16,6 +16,8 @@
 
 package com.android.phone;
 
+import android.Manifest;
+import android.app.ActivityManager;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Binder;
@@ -270,7 +272,11 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public void requestCapabilities(int subId, String callingPackage, String callingFeatureId,
             List<Uri> contactNumbers, IRcsUceControllerCallback c) {
-        enforceReadPrivilegedPermission("requestCapabilities");
+        enforceAccessUserCapabilityExchangePermission("requestCapabilities");
+        enforceReadContactsPermission("requestCapabilities");
+        if (!isCallingProcessInForeground(Binder.getCallingUid())) {
+            throw new SecurityException("The caller is not in the foreground.");
+        }
         final long token = Binder.clearCallingIdentity();
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
@@ -290,7 +296,11 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public void requestAvailability(int subId, String callingPackage,
             String callingFeatureId, Uri contactNumber, IRcsUceControllerCallback c) {
-        enforceReadPrivilegedPermission("requestAvailability");
+        enforceAccessUserCapabilityExchangePermission("requestAvailability");
+        enforceReadContactsPermission("requestAvailability");
+        if (!isCallingProcessInForeground(Binder.getCallingUid())) {
+            throw new SecurityException("The caller is not in the foreground.");
+        }
         final long token = Binder.clearCallingIdentity();
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
@@ -393,7 +403,10 @@ public class ImsRcsController extends IImsRcsController.Stub {
 
     @Override
     public boolean isSipDelegateSupported(int subId) {
-        enforceReadPrivilegedPermission("isSipDelegateSupported");
+        TelephonyPermissions.enforceAnyPermissionGranted(mApp, Binder.getCallingUid(),
+                "isSipDelegateSupported",
+                Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION,
+                Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
         if (!isImsSingleRegistrationSupportedOnDevice()) {
             return false;
         }
@@ -421,7 +434,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
     public void createSipDelegate(int subId, DelegateRequest request, String packageName,
             ISipDelegateConnectionStateCallback delegateState,
             ISipDelegateMessageCallback delegateMessage) {
-        enforceModifyPermission();
+        enforceImsSingleRegistrationPermission("createSipDelegate");
         if (!isImsSingleRegistrationSupportedOnDevice()) {
             throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                     "SipDelegate creation is only supported for devices supporting IMS single "
@@ -459,7 +472,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
 
     @Override
     public void destroySipDelegate(int subId, ISipDelegate connection, int reason) {
-        enforceModifyPermission();
+        enforceImsSingleRegistrationPermission("destroySipDelegate");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -477,7 +490,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public void triggerNetworkRegistration(int subId, ISipDelegate connection, int sipCode,
             String sipReason) {
-        enforceModifyPermission();
+        enforceImsSingleRegistrationPermission("triggerNetworkRegistration");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -539,12 +552,54 @@ public class ImsRcsController extends IImsRcsController.Stub {
     }
 
     /**
+     * @throws SecurityException if the caller does not have the required
+     *     PERFORM_IMS_SINGLE_REGISTRATION permission.
+     */
+    private void enforceImsSingleRegistrationPermission(String message) {
+        mApp.enforceCallingOrSelfPermission(
+                Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION, message);
+    }
+
+    /**
      * Make sure the caller has the MODIFY_PHONE_STATE permission.
      *
      * @throws SecurityException if the caller does not have the required permission
      */
     private void enforceModifyPermission() {
         mApp.enforceCallingOrSelfPermission(android.Manifest.permission.MODIFY_PHONE_STATE, null);
+    }
+
+    /**
+     * Make sure the caller has the ACCESS_RCS_USER_CAPABILITY_EXCHANGE permission.
+     *
+     * @throws SecurityException if the caller does not have the required permission.
+     */
+    private void enforceAccessUserCapabilityExchangePermission(String message) {
+        mApp.enforceCallingOrSelfPermission(
+                android.Manifest.permission.ACCESS_RCS_USER_CAPABILITY_EXCHANGE, message);
+    }
+
+    /**
+     * Make sure the caller has the READ_CONTACTS permission.
+     *
+     * @throws SecurityException if the caller does not have the required permission.
+     */
+    private void enforceReadContactsPermission(String message) {
+        mApp.enforceCallingOrSelfPermission(
+                android.Manifest.permission.READ_CONTACTS, message);
+    }
+
+    /**
+     * Check if the calling process is in the foreground.
+     *
+     * @return true if the caller is in the foreground.
+     */
+    private boolean isCallingProcessInForeground(int uid) {
+        ActivityManager am = mApp.getSystemService(ActivityManager.class);
+        boolean isCallingProcessForeground = am != null
+                && am.getUidImportance(uid)
+                        == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND;
+        return isCallingProcessForeground;
     }
 
     /**

@@ -167,8 +167,10 @@ public class SimpleChatSession {
         mStartFuture = future;
         mRemoteUri = SipUtils.createUri(telUriContact);
         try {
-            SipSessionConfiguration configuration = mContext.getSipSession().getSessionConfiguration();
-            SimpleSdpMessage sdp = SdpUtils.createSdpForMsrp(configuration.getLocalIpAddress(), false);
+            SipSessionConfiguration configuration =
+                    mContext.getSipSession().getSessionConfiguration();
+            SimpleSdpMessage sdp = SdpUtils.createSdpForMsrp(configuration.getLocalIpAddress(),
+                    false);
             SIPRequest invite =
                     SipUtils.buildInvite(
                             mContext.getSipSession().getSessionConfiguration(),
@@ -229,6 +231,7 @@ public class SimpleChatSession {
         try {
             SIPResponse response = SipUtils.buildInviteResponse(configuration, invite, statusCode,
                     sdp);
+            mLocalSdp = sdp;
             return Futures.transform(
                     mService.sendSipResponse(response, this), result -> null,
                     MoreExecutors.directExecutor());
@@ -411,6 +414,7 @@ public class SimpleChatSession {
                         @Override
                         public void onSuccess(MsrpSession result) {
                             mMsrpSession = result;
+                            sendEmptyPacket();
                             notifySuccess();
                         }
 
@@ -431,6 +435,25 @@ public class SimpleChatSession {
         }
     }
 
+    private void sendEmptyPacket() {
+        MsrpChunk msrpChunk =
+                MsrpChunk.newBuilder()
+                        .method(MsrpChunk.Method.SEND)
+                        .transactionId(MsrpUtils.generateRandomId())
+                        .continuation(Continuation.COMPLETE)
+                        .addHeader(MsrpConstants.HEADER_TO_PATH, mRemoteSdp.getPath().get())
+                        .addHeader(MsrpConstants.HEADER_FROM_PATH, mLocalSdp.getPath().get())
+                        .addHeader(MsrpConstants.HEADER_FAILURE_REPORT,
+                                MsrpConstants.REPORT_VALUE_NO)
+                        .addHeader(MsrpConstants.HEADER_SUCCESS_REPORT,
+                                MsrpConstants.REPORT_VALUE_NO)
+                        .addHeader(MsrpConstants.HEADER_BYTE_RANGE, "1/0-0")
+                        .addHeader(MsrpConstants.HEADER_MESSAGE_ID, MsrpUtils.generateRandomId())
+                        .build();
+
+        mMsrpSession.send(msrpChunk);
+    }
+
     private String getLocalIp() {
         SipSessionConfiguration configuration = mContext.getSipSession().getSessionConfiguration();
         return configuration.getLocalIpAddress();
@@ -447,6 +470,7 @@ public class SimpleChatSession {
 
         String contentType = contentTypeHeader.value();
         if ("message/cpim".equals(contentType)) {
+            Log.d(TAG, "Received CPIM: " + new String(chunk.content(), UTF_8));
             try {
                 SimpleCpimMessage cpim = SimpleCpimMessage.parse(chunk.content());
                 if (mListener != null) {

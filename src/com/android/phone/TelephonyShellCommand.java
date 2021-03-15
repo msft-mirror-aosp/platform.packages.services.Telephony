@@ -102,6 +102,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String SRC_GET_DEVICE_ENABLED = "get-device-enabled";
     private static final String SRC_SET_CARRIER_ENABLED = "set-carrier-enabled";
     private static final String SRC_GET_CARRIER_ENABLED = "get-carrier-enabled";
+    private static final String SRC_SET_TEST_ENABLED = "set-test-enabled";
+    private static final String SRC_GET_TEST_ENABLED = "get-test-enabled";
 
     private static final String D2D_SUBCOMMAND = "d2d";
     private static final String D2D_SEND = "send";
@@ -111,6 +113,9 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String UCE_REMOVE_EAB_CONTACT = "remove-eab-contact";
     private static final String UCE_GET_DEVICE_ENABLED = "get-device-enabled";
     private static final String UCE_SET_DEVICE_ENABLED = "set-device-enabled";
+
+    // Check if a package has carrier privileges on any SIM, regardless of subId/phoneId.
+    private static final String HAS_CARRIER_PRIVILEGES_COMMAND = "has-carrier-privileges";
 
     // Take advantage of existing methods that already contain permissions checks when possible.
     private final ITelephony mInterface;
@@ -204,6 +209,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleRestartModemCommand();
             case UNATTENDED_REBOOT:
                 return handleUnattendedReboot();
+            case HAS_CARRIER_PRIVILEGES_COMMAND:
+                return handleHasCarrierPrivilegesCommand();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -236,6 +243,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("    Restart modem command.");
         pw.println("  unattended-reboot");
         pw.println("    Prepare for unattended reboot.");
+        pw.println("  has-carrier-privileges [package]");
+        pw.println("    Query carrier privilege status for a package. Prints true or false.");
         onHelpIms();
         onHelpUce();
         onHelpEmergencyNumber();
@@ -417,6 +426,11 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private void onHelpSrc() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("RCS VoLTE Single Registration Config Commands:");
+        pw.println("  src set-test-enabled true|false");
+        pw.println("    Sets the test mode enabled for RCS VoLTE single registration.");
+        pw.println("    The value could be true, false, or null(undefined).");
+        pw.println("  src get-test-enabled");
+        pw.println("    Gets the test mode for RCS VoLTE single registration.");
         pw.println("  src set-device-enabled true|false|null");
         pw.println("    Sets the device config for RCS VoLTE single registration to the value.");
         pw.println("    The value could be true, false, or null(undefined).");
@@ -659,7 +673,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             errPw.println("message value must be a valid integer");
             return -1;
         }
-        
+
         try {
             mInterface.sendDeviceToDeviceMessage(messageType, messageValue);
         } catch (RemoteException e) {
@@ -1618,6 +1632,12 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         }
 
         switch (arg) {
+            case SRC_SET_TEST_ENABLED: {
+                return handleSrcSetTestEnabledCommand();
+            }
+            case SRC_GET_TEST_ENABLED: {
+                return handleSrcGetTestEnabledCommand();
+            }
             case SRC_SET_DEVICE_ENABLED: {
                 return handleSrcSetDeviceEnabledCommand();
             }
@@ -1737,6 +1757,40 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return 0;
     }
 
+    private int handleSrcSetTestEnabledCommand() {
+        String enabledStr = getNextArg();
+        if (enabledStr == null) {
+            return -1;
+        }
+
+        try {
+            mInterface.setRcsSingleRegistrationTestModeEnabled(Boolean.parseBoolean(enabledStr));
+            if (VDBG) {
+                Log.v(LOG_TAG, "src set-test-enabled " + enabledStr + ", done");
+            }
+            getOutPrintWriter().println("Done");
+        } catch (NumberFormatException | RemoteException e) {
+            Log.w(LOG_TAG, "src set-test-enabled " + enabledStr + ", error" + e.getMessage());
+            getErrPrintWriter().println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleSrcGetTestEnabledCommand() {
+        boolean result = false;
+        try {
+            result = mInterface.getRcsSingleRegistrationTestModeEnabled();
+        } catch (RemoteException e) {
+            return -1;
+        }
+        if (VDBG) {
+            Log.v(LOG_TAG, "src get-test-enabled, returned: " + result);
+        }
+        getOutPrintWriter().println(result);
+        return 0;
+    }
+
     private int handleSrcSetDeviceEnabledCommand() {
         String enabledStr = getNextArg();
         if (enabledStr == null) {
@@ -1817,6 +1871,24 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             Log.v(LOG_TAG, "src get-carrier-enabled -s " + subId + ", returned: " + result);
         }
         getOutPrintWriter().println(result);
+        return 0;
+    }
+
+    private int handleHasCarrierPrivilegesCommand() {
+        String packageName = getNextArgRequired();
+
+        boolean hasCarrierPrivileges;
+        try {
+            hasCarrierPrivileges =
+                    mInterface.checkCarrierPrivilegesForPackageAnyPhone(packageName)
+                            == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, HAS_CARRIER_PRIVILEGES_COMMAND + " exception", e);
+            getErrPrintWriter().println("Exception: " + e.getMessage());
+            return -1;
+        }
+
+        getOutPrintWriter().println(hasCarrierPrivileges);
         return 0;
     }
 }
