@@ -67,7 +67,6 @@ import android.telecom.TelecomManager;
 import android.telephony.Annotation.ApnType;
 import android.telephony.Annotation.ThermalMitigationResult;
 import android.telephony.CallForwardingInfo;
-import android.telephony.CarrierBandwidth;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CarrierRestrictionRules;
 import android.telephony.CellIdentity;
@@ -111,6 +110,7 @@ import android.telephony.gba.UaSecurityProtocolIdentifier;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.RcsClientConfiguration;
+import android.telephony.ims.RcsContactUceCapability;
 import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsConfig;
@@ -6081,7 +6081,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             @TelephonyManager.NrDualConnectivityState int nrDualConnectivityState) {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "enableNRDualConnectivity");
-        if (isRadioInterfaceCapabilitySupported(
+        if (!isRadioInterfaceCapabilitySupported(
                 TelephonyManager.CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE)) {
             return TelephonyManager.ENABLE_NR_DUAL_CONNECTIVITY_NOT_SUPPORTED;
         }
@@ -6108,7 +6108,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions
                 .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
                         mApp, subId, "isNRDualConnectivityEnabled");
-        if (isRadioInterfaceCapabilitySupported(
+        if (!isRadioInterfaceCapabilitySupported(
                 TelephonyManager.CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE)) {
             return false;
         }
@@ -6119,28 +6119,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     null, subId, workSource);
             if (DBG) log("isNRDualConnectivityEnabled: " + isEnabled);
             return isEnabled;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
-    /**
-     * get carrier bandwidth per primary and secondary carrier
-     * @param subId subscription id of the sim card
-     * @return CarrierBandwidth with bandwidth of both primary and secondary carrier..
-     */
-    @Override
-    public CarrierBandwidth getCarrierBandwidth(int subId) {
-        TelephonyPermissions
-                .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                        mApp, subId, "isNRDualConnectivityEnabled");
-        WorkSource workSource = getWorkSource(Binder.getCallingUid());
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            CarrierBandwidth carrierBandwidth =
-                    getPhoneFromSubId(subId).getCarrierBandwidth();
-            if (DBG) log("getCarrierBandwidth: " + carrierBandwidth);
-            return carrierBandwidth;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -9909,6 +9887,104 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Binder.restoreCallingIdentity(identity);
         }
     }
+
+    /**
+     * Add new feature tags to the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability addUceRegistrationOverrideShell(int subId,
+            List<String> featureTags) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "addUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.addUceRegistrationOverrideShell(subId,
+                    new ArraySet<>(featureTags));
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Remove existing feature tags to the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability removeUceRegistrationOverrideShell(int subId,
+            List<String> featureTags) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "removeUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.removeUceRegistrationOverrideShell(subId,
+                    new ArraySet<>(featureTags));
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Clear all overrides in the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability clearUceRegistrationOverrideShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "clearUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.clearUceRegistrationOverrideShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability getLatestRcsContactUceCapabilityShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "getLatestRcsContactUceCapabilityShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.getLatestRcsContactUceCapabilityShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Returns the last PIDF XML sent to the network during the last PUBLISH or "none" if the
+     * device does not have an active PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public String getLastUcePidfXmlShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "uceGetLastPidfXml");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.getLastUcePidfXmlShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
 
     @Override
     public void setSignalStrengthUpdateRequest(int subId, SignalStrengthUpdateRequest request,
