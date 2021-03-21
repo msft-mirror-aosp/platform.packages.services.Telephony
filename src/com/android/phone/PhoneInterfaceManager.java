@@ -67,7 +67,6 @@ import android.telecom.TelecomManager;
 import android.telephony.Annotation.ApnType;
 import android.telephony.Annotation.ThermalMitigationResult;
 import android.telephony.CallForwardingInfo;
-import android.telephony.CarrierBandwidth;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CarrierRestrictionRules;
 import android.telephony.CellIdentity;
@@ -111,6 +110,7 @@ import android.telephony.gba.UaSecurityProtocolIdentifier;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.RcsClientConfiguration;
+import android.telephony.ims.RcsContactUceCapability;
 import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsConfig;
@@ -159,6 +159,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.ProxyController;
 import com.android.internal.telephony.RIL;
+import com.android.internal.telephony.RadioInterfaceCapabilityController;
 import com.android.internal.telephony.ServiceStateTracker;
 import com.android.internal.telephony.SmsController;
 import com.android.internal.telephony.SmsPermissions;
@@ -341,6 +342,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private SubscriptionController mSubscriptionController;
     private SharedPreferences mTelephonySharedPreferences;
     private PhoneConfigurationManager mPhoneConfigurationManager;
+    private final RadioInterfaceCapabilityController mRadioInterfaceCapabilities;
 
     /** User Activity */
     private AtomicBoolean mNotifyUserActivity;
@@ -861,6 +863,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 request.result =
                                         TelephonyManager
                                                 .ENABLE_NR_DUAL_CONNECTIVITY_RADIO_NOT_AVAILABLE;
+                            } else if (error == CommandException.Error.REQUEST_NOT_SUPPORTED) {
+                                request.result =
+                                        TelephonyManager
+                                                .ENABLE_NR_DUAL_CONNECTIVITY_NOT_SUPPORTED;
                             }
                             loge("enableNrDualConnectivity" + ": CommandException: "
                                     + ar.exception);
@@ -2091,6 +2097,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 PreferenceManager.getDefaultSharedPreferences(mApp);
         mNetworkScanRequestTracker = new NetworkScanRequestTracker();
         mPhoneConfigurationManager = PhoneConfigurationManager.getInstance();
+        mRadioInterfaceCapabilities = RadioInterfaceCapabilityController.getInstance();
         mNotifyUserActivity = new AtomicBoolean(false);
 
         publish();
@@ -2798,9 +2805,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (sst == null) return "";
             LocaleTracker lt = sst.getLocaleTracker();
             if (lt == null) return "";
-            if (!TextUtils.isEmpty(lt.getCurrentCountry())) return lt.getCurrentCountry();
-            EmergencyNumberTracker ent = phone.getEmergencyNumberTracker();
-            return (ent == null) ? "" : ent.getEmergencyCountryIso();
+            return lt.getCurrentCountry();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -6076,6 +6081,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             @TelephonyManager.NrDualConnectivityState int nrDualConnectivityState) {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "enableNRDualConnectivity");
+        if (!isRadioInterfaceCapabilitySupported(
+                TelephonyManager.CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE)) {
+            return TelephonyManager.ENABLE_NR_DUAL_CONNECTIVITY_NOT_SUPPORTED;
+        }
+
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -6098,6 +6108,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions
                 .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
                         mApp, subId, "isNRDualConnectivityEnabled");
+        if (!isRadioInterfaceCapabilitySupported(
+                TelephonyManager.CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE)) {
+            return false;
+        }
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -6105,28 +6119,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     null, subId, workSource);
             if (DBG) log("isNRDualConnectivityEnabled: " + isEnabled);
             return isEnabled;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
-    /**
-     * get carrier bandwidth per primary and secondary carrier
-     * @param subId subscription id of the sim card
-     * @return CarrierBandwidth with bandwidth of both primary and secondary carrier..
-     */
-    @Override
-    public CarrierBandwidth getCarrierBandwidth(int subId) {
-        TelephonyPermissions
-                .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                        mApp, subId, "isNRDualConnectivityEnabled");
-        WorkSource workSource = getWorkSource(Binder.getCallingUid());
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            CarrierBandwidth carrierBandwidth =
-                    getPhoneFromSubId(subId).getCarrierBandwidth();
-            if (DBG) log("getCarrierBandwidth: " + carrierBandwidth);
-            return carrierBandwidth;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -7239,6 +7231,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
                 setAllowedNetworkTypesForReason(subId,
                         TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
+                        RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
+                setAllowedNetworkTypesForReason(subId,
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G,
                         RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
                 setDataRoamingEnabled(subId, getDefaultDataRoamingEnabled(subId));
                 CarrierInfoManager.deleteAllCarrierKeysForImsiEncryption(mApp);
@@ -9306,7 +9301,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public boolean isRadioInterfaceCapabilitySupported(
             @NonNull @TelephonyManager.RadioInterfaceCapability String capability) {
         Set<String> radioInterfaceCapabilities =
-                mPhoneConfigurationManager.getRadioInterfaceCapabilities();
+                mRadioInterfaceCapabilities.getCapabilities();
         if (radioInterfaceCapabilities == null) {
             throw new RuntimeException("radio interface capabilities are not available");
         } else {
@@ -9622,10 +9617,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * Register RCS provisioning callback.
      */
     @Override
-    public void registerRcsProvisioningChangedCallback(int subId,
+    public void registerRcsProvisioningCallback(int subId,
             IRcsConfigCallback callback) {
         TelephonyPermissions.enforceAnyPermissionGrantedOrCarrierPrivileges(mApp, subId,
-                Binder.getCallingUid(), "registerRcsProvisioningChangedCallback",
+                Binder.getCallingUid(), "registerRcsProvisioningCallback",
                 Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION,
                 permission.READ_PRIVILEGED_PHONE_STATE);
 
@@ -9640,7 +9635,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             if (!RcsProvisioningMonitor.getInstance()
-                    .registerRcsProvisioningChangedCallback(subId, callback)) {
+                    .registerRcsProvisioningCallback(subId, callback)) {
                 throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                         "Service not available for the subscription.");
             }
@@ -9653,10 +9648,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * Unregister RCS provisioning callback.
      */
     @Override
-    public void unregisterRcsProvisioningChangedCallback(int subId,
+    public void unregisterRcsProvisioningCallback(int subId,
             IRcsConfigCallback callback) {
         TelephonyPermissions.enforceAnyPermissionGrantedOrCarrierPrivileges(mApp, subId,
-                Binder.getCallingUid(), "unregisterRcsProvisioningChangedCallback",
+                Binder.getCallingUid(), "unregisterRcsProvisioningCallback",
                 Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION,
                 permission.READ_PRIVILEGED_PHONE_STATE);
 
@@ -9671,7 +9666,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             RcsProvisioningMonitor.getInstance()
-                    .unregisterRcsProvisioningChangedCallback(subId, callback);
+                    .unregisterRcsProvisioningCallback(subId, callback);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -9895,6 +9890,104 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Binder.restoreCallingIdentity(identity);
         }
     }
+
+    /**
+     * Add new feature tags to the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability addUceRegistrationOverrideShell(int subId,
+            List<String> featureTags) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "addUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.addUceRegistrationOverrideShell(subId,
+                    new ArraySet<>(featureTags));
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Remove existing feature tags to the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability removeUceRegistrationOverrideShell(int subId,
+            List<String> featureTags) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "removeUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.removeUceRegistrationOverrideShell(subId,
+                    new ArraySet<>(featureTags));
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Clear all overrides in the Set used to calculate the capabilities in PUBLISH.
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability clearUceRegistrationOverrideShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "clearUceRegistrationOverrideShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.clearUceRegistrationOverrideShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * @return current RcsContactUceCapability instance that will be used for PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public RcsContactUceCapability getLatestRcsContactUceCapabilityShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "getLatestRcsContactUceCapabilityShell");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.getLatestRcsContactUceCapabilityShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Returns the last PIDF XML sent to the network during the last PUBLISH or "none" if the
+     * device does not have an active PUBLISH.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public String getLastUcePidfXmlShell(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "uceGetLastPidfXml");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.getLastUcePidfXmlShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
 
     @Override
     public void setSignalStrengthUpdateRequest(int subId, SignalStrengthUpdateRequest request,
