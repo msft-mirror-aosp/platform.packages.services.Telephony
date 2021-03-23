@@ -159,6 +159,7 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.ProxyController;
 import com.android.internal.telephony.RIL;
+import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.RadioInterfaceCapabilityController;
 import com.android.internal.telephony.ServiceStateTracker;
 import com.android.internal.telephony.SmsController;
@@ -332,6 +333,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     /** The singleton instance. */
     private static PhoneInterfaceManager sInstance;
+    private static List<String> sThermalMitigationAllowlistedPackages = new ArrayList<>();
 
     private PhoneGlobals mApp;
     private CallManager mCM;
@@ -367,6 +369,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int MANUFACTURER_CODE_LENGTH = 8;
 
     private static final int SET_DATA_THROTTLING_MODEM_THREW_INVALID_PARAMS = -1;
+    private static final int MODEM_DOES_NOT_SUPPORT_DATA_THROTTLING_ERROR_CODE = -2;
 
     /**
      * Experiment flag to enable erase modem config on reset network, default value is false
@@ -1774,6 +1777,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
                         } else if (error == CommandException.Error.INVALID_ARGUMENTS) {
                             request.result = SET_DATA_THROTTLING_MODEM_THREW_INVALID_PARAMS;
+                        } else if (error == CommandException.Error.REQUEST_NOT_SUPPORTED) {
+                            request.result = MODEM_DOES_NOT_SUPPORT_DATA_THROTTLING_ERROR_CODE;
                         } else {
                             request.result =
                                     TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_ERROR;
@@ -6052,9 +6057,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public long getAllowedNetworkTypesForReason(int subId,
             @TelephonyManager.AllowedNetworkTypesReason int reason) {
-        TelephonyPermissions
-                .enforeceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                        mApp, subId, "getAllowedNetworkTypesForReason");
+        TelephonyPermissions.enforeceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                mApp, subId, "getAllowedNetworkTypesForReason");
         final long identity = Binder.clearCallingIdentity();
         try {
             return getPhoneFromSubId(subId).getAllowedNetworkTypes(reason);
@@ -6144,10 +6148,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return false;
         }
 
-        if (DBG) {
-            log("setAllowedNetworkTypesForReason: " + reason
-                    + " value: " + allowedNetworkTypes);
+        log("setAllowedNetworkTypesForReason: " + reason + " value: "
+                + TelephonyManager.convertNetworkTypeBitmaskToString(allowedNetworkTypes));
+
+
+        if (allowedNetworkTypes == getPhoneFromSubId(subId).getAllowedNetworkTypes(reason)) {
+            log("setAllowedNetworkTypesForReason: " + reason + "does not change value");
+            return true;
         }
+
         final long identity = Binder.clearCallingIdentity();
         try {
             Boolean success = (Boolean) sendRequest(
@@ -7223,18 +7232,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 setDataEnabledForReason(subId, TelephonyManager.DATA_ENABLED_REASON_USER,
                         getDefaultDataEnabled());
                 setNetworkSelectionModeAutomatic(subId);
-                setAllowedNetworkTypesForReason(subId,
-                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER,
-                        RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
-                setAllowedNetworkTypesForReason(subId,
-                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_CARRIER,
-                        RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
-                setAllowedNetworkTypesForReason(subId,
-                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_POWER,
-                        RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
-                setAllowedNetworkTypesForReason(subId,
-                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G,
-                        RadioAccessFamily.getRafFromNetworkType(getDefaultNetworkType(subId)));
+                Phone phone = getPhone(subId);
+                if (phone != null) {
+                    SubscriptionManager.setSubscriptionProperty(subId,
+                            SubscriptionManager.ALLOWED_NETWORK_TYPES,
+                            "user=" + RadioAccessFamily.getRafFromNetworkType(
+                                    RILConstants.PREFERRED_NETWORK_MODE));
+                    phone.loadAllowedNetworksFromSubscriptionDatabase();
+                }
                 setDataRoamingEnabled(subId, getDefaultDataRoamingEnabled(subId));
                 CarrierInfoManager.deleteAllCarrierKeysForImsiEncryption(mApp);
             }
@@ -9370,6 +9375,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private int handleDataThrottlingRequest(int subId,
             DataThrottlingRequest dataThrottlingRequest) {
+        boolean isDataThrottlingSupported = isRadioInterfaceCapabilitySupported(
+                TelephonyManager.CAPABILITY_THERMAL_MITIGATION_DATA_THROTTLING);
+        if (!isDataThrottlingSupported && dataThrottlingRequest.getDataThrottlingAction()
+                != DataThrottlingRequest.DATA_THROTTLING_ACTION_NO_DATA_THROTTLING) {
+            throw new IllegalArgumentException("modem does not support data throttling");
+        }
+
         // Ensure that radio is on. If not able to power on due to phone being unavailable, return
         // THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
         if (!setRadioPowerForThermal(subId, true)) {
@@ -9378,12 +9390,50 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         setDataEnabledForReason(subId, TelephonyManager.DATA_ENABLED_REASON_THERMAL, true);
 
-        int thermalMitigationResult =
+        if (isDataThrottlingSupported) {
+            int thermalMitigationResult =
                 (int) sendRequest(CMD_SET_DATA_THROTTLING, dataThrottlingRequest, subId);
-        if (thermalMitigationResult == SET_DATA_THROTTLING_MODEM_THREW_INVALID_PARAMS) {
-            throw new IllegalArgumentException("modem returned INVALID_ARGUMENTS");
+            if (thermalMitigationResult == SET_DATA_THROTTLING_MODEM_THREW_INVALID_PARAMS) {
+                throw new IllegalArgumentException("modem returned INVALID_ARGUMENTS");
+            } else if (thermalMitigationResult
+                    == MODEM_DOES_NOT_SUPPORT_DATA_THROTTLING_ERROR_CODE) {
+                throw new IllegalArgumentException("modem does not support data throttling");
+            }
+            return thermalMitigationResult;
         }
-        return thermalMitigationResult;
+
+        return TelephonyManager.THERMAL_MITIGATION_RESULT_SUCCESS;
+    }
+
+    private static List<String> getThermalMitigationAllowlist(Context context) {
+        if (sThermalMitigationAllowlistedPackages.isEmpty()) {
+            for (String pckg : context.getResources()
+                    .getStringArray(R.array.thermal_mitigation_allowlisted_packages)) {
+                sThermalMitigationAllowlistedPackages.add(pckg);
+            }
+        }
+
+        return sThermalMitigationAllowlistedPackages;
+    }
+
+    /**
+     * Used by shell commands to add an authorized package name for thermal mitigation.
+     * @param packageName name of package to be allowlisted
+     * @param context
+     */
+    static void addPackageToThermalMitigationAllowlist(String packageName, Context context) {
+        sThermalMitigationAllowlistedPackages = getThermalMitigationAllowlist(context);
+        sThermalMitigationAllowlistedPackages.add(packageName);
+    }
+
+    /**
+     * Used by shell commands to remove an authorized package name for thermal mitigation.
+     * @param packageName name of package to remove from allowlist
+     * @param context
+     */
+    static void removePackageFromThermalMitigationAllowlist(String packageName, Context context) {
+        sThermalMitigationAllowlistedPackages = getThermalMitigationAllowlist(context);
+        sThermalMitigationAllowlistedPackages.remove(packageName);
     }
 
     /**
@@ -9391,6 +9441,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *
      * @param subId the id of the subscription.
      * @param thermalMitigationRequest holds all necessary information to be passed down to modem.
+     * @param callingPackage the package name of the calling package.
      *
      * @return thermalMitigationResult enum as defined in android.telephony.Annotation.
      */
@@ -9398,8 +9449,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @ThermalMitigationResult
     public int sendThermalMitigationRequest(
             int subId,
-            ThermalMitigationRequest thermalMitigationRequest) throws IllegalArgumentException {
+            ThermalMitigationRequest thermalMitigationRequest,
+            String callingPackage) throws IllegalArgumentException {
         enforceModifyPermission();
+
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        if (!getThermalMitigationAllowlist(getDefaultPhone().getContext())
+                .contains(callingPackage)) {
+            throw new SecurityException("Calling package must be configured in the device config. "
+                    + "calling package: " + callingPackage);
+        }
 
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
