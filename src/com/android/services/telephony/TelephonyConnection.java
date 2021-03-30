@@ -1428,7 +1428,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
 
         newProperties = changeBitmask(newProperties, PROPERTY_HIGH_DEF_AUDIO,
                 hasHighDefAudioProperty());
-        newProperties = changeBitmask(newProperties, PROPERTY_WIFI, isWifi());
+        newProperties = changeBitmask(newProperties, PROPERTY_WIFI, isWifi() && !isCrossSimCall());
         newProperties = changeBitmask(newProperties, PROPERTY_IS_EXTERNAL_CALL,
                 isExternalConnection());
         newProperties = changeBitmask(newProperties, PROPERTY_HAS_CDMA_VOICE_PRIVACY,
@@ -1501,6 +1501,17 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         // Subclass can override this to do cleanup.
     }
 
+    public void registerForCallEvents(Phone phone) {
+        phone.registerForPreciseCallStateChanged(mHandler, MSG_PRECISE_CALL_STATE_CHANGED, null);
+        phone.registerForHandoverStateChanged(mHandler, MSG_HANDOVER_STATE_CHANGED, null);
+        phone.registerForRedialConnectionChanged(mHandler, MSG_REDIAL_CONNECTION_CHANGED, null);
+        phone.registerForRingbackTone(mHandler, MSG_RINGBACK_TONE, null);
+        phone.registerForSuppServiceNotification(mHandler, MSG_SUPP_SERVICE_NOTIFY, null);
+        phone.registerForOnHoldTone(mHandler, MSG_ON_HOLD_TONE, null);
+        phone.registerForInCallVoicePrivacyOn(mHandler, MSG_CDMA_VOICE_PRIVACY_ON, null);
+        phone.registerForInCallVoicePrivacyOff(mHandler, MSG_CDMA_VOICE_PRIVACY_OFF, null);
+    }
+
     void setOriginalConnection(com.android.internal.telephony.Connection originalConnection) {
         Log.v(this, "new TelephonyConnection, originalConnection: " + originalConnection);
         if (mOriginalConnection != null && originalConnection != null
@@ -1517,17 +1528,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         mOriginalConnectionExtras.clear();
         mOriginalConnection = originalConnection;
         mOriginalConnection.setTelecomCallId(getTelecomCallId());
-        getPhone().registerForPreciseCallStateChanged(
-                mHandler, MSG_PRECISE_CALL_STATE_CHANGED, null);
-        getPhone().registerForHandoverStateChanged(
-                mHandler, MSG_HANDOVER_STATE_CHANGED, null);
-        getPhone().registerForRedialConnectionChanged(
-                mHandler, MSG_REDIAL_CONNECTION_CHANGED, null);
-        getPhone().registerForRingbackTone(mHandler, MSG_RINGBACK_TONE, null);
-        getPhone().registerForSuppServiceNotification(mHandler, MSG_SUPP_SERVICE_NOTIFY, null);
-        getPhone().registerForOnHoldTone(mHandler, MSG_ON_HOLD_TONE, null);
-        getPhone().registerForInCallVoicePrivacyOn(mHandler, MSG_CDMA_VOICE_PRIVACY_ON, null);
-        getPhone().registerForInCallVoicePrivacyOff(mHandler, MSG_CDMA_VOICE_PRIVACY_OFF, null);
+        registerForCallEvents(getPhone());
+
         mOriginalConnection.addPostDialListener(mPostDialListener);
         mOriginalConnection.addListener(mOriginalConnectionListener);
 
@@ -1685,6 +1687,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                 Connection.AUDIO_CODEC_NONE);
         if (newCodecType != oldCodecType) {
             newExtras.putInt(Connection.EXTRA_AUDIO_CODEC, newCodecType);
+            Log.i(this, "put audio codec:" + newCodecType);
             changed = true;
         }
         if (isImsConnection()) {
@@ -1692,6 +1695,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
             float oldBitrate = newExtras.getFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, 0.0f);
             if (Math.abs(newBitrate - oldBitrate) > THRESHOLD) {
                 newExtras.putFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, newBitrate);
+                Log.i(this, "put audio bitrate:" + newBitrate);
                 changed = true;
             }
 
@@ -1700,6 +1704,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                     0.0f);
             if (Math.abs(newBandwidth - oldBandwidth) > THRESHOLD) {
                 newExtras.putFloat(Connection.EXTRA_AUDIO_CODEC_BANDWIDTH_KHZ, newBandwidth);
+                Log.i(this, "put audio bandwidth:" + newBandwidth);
                 changed = true;
             }
         } else {
@@ -1710,6 +1715,12 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         }
 
         if (changed) {
+            Log.i(this, "Audio attribute, Codec:"
+                    + newExtras.getInt(Connection.EXTRA_AUDIO_CODEC, Connection.AUDIO_CODEC_NONE)
+                    + ", Bitrate:"
+                    + newExtras.getFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, 0.0f)
+                    + ", Bandwidth:"
+                    + newExtras.getFloat(Connection.EXTRA_AUDIO_CODEC_BANDWIDTH_KHZ, 0.0f));
             putTelephonyExtras(newExtras);
         }
     }
@@ -2046,20 +2057,24 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     void clearOriginalConnection() {
         if (mOriginalConnection != null) {
             if (getPhone() != null) {
-                getPhone().unregisterForPreciseCallStateChanged(mHandler);
-                getPhone().unregisterForRingbackTone(mHandler);
-                getPhone().unregisterForHandoverStateChanged(mHandler);
-                getPhone().unregisterForRedialConnectionChanged(mHandler);
-                getPhone().unregisterForDisconnect(mHandler);
-                getPhone().unregisterForSuppServiceNotification(mHandler);
-                getPhone().unregisterForOnHoldTone(mHandler);
-                getPhone().unregisterForInCallVoicePrivacyOn(mHandler);
-                getPhone().unregisterForInCallVoicePrivacyOff(mHandler);
+                unregisterForCallEvents(getPhone());
             }
             mOriginalConnection.removePostDialListener(mPostDialListener);
             mOriginalConnection.removeListener(mOriginalConnectionListener);
             mOriginalConnection = null;
         }
+    }
+
+    public void unregisterForCallEvents(Phone phone) {
+        phone.unregisterForPreciseCallStateChanged(mHandler);
+        phone.unregisterForRingbackTone(mHandler);
+        phone.unregisterForHandoverStateChanged(mHandler);
+        phone.unregisterForRedialConnectionChanged(mHandler);
+        phone.unregisterForDisconnect(mHandler);
+        phone.unregisterForSuppServiceNotification(mHandler);
+        phone.unregisterForOnHoldTone(mHandler);
+        phone.unregisterForInCallVoicePrivacyOn(mHandler);
+        phone.unregisterForInCallVoicePrivacyOff(mHandler);
     }
 
     protected void hangup(int telephonyDisconnectCode) {
