@@ -95,7 +95,7 @@
     <string name="sum_loading_settings" msgid="434063780286688775">"Тохиргоог ачаалж байна…"</string>
     <string name="sum_hide_caller_id" msgid="131100328602371933">"Залгасан дуудлагуудад дугаарыг нууцална"</string>
     <string name="sum_show_caller_id" msgid="3571854755324664591">"Залгасан дуудлагуудад дугаарыг харуулна"</string>
-    <string name="sum_default_caller_id" msgid="1767070797135682959">"Гарах дуудлагуудад миний дугаарыг харуулахдаа операторын үндсэн тохиргоог ашиглах"</string>
+    <string name="sum_default_caller_id" msgid="1767070797135682959">"Гарах дуудлагуудад миний дугаарыг харуулахдаа операторын өгөгдмөл тохиргоог ашиглах"</string>
     <string name="labelCW" msgid="8449327023861428622">"Дуудлага хүлээлгэх"</string>
     <string name="sum_cw_enabled" msgid="3977308526187139996">"Дуудлагын дундуур өөр дуудлага ирвэл надад мэдэгдэх"</string>
     <string name="sum_cw_disabled" msgid="3658094589461768637">"Дуудлагын дундуур өөр дуудлага ирвэл надад мэдэгдэх"</string>
@@ -896,7 +896,7 @@
     <string name="radio_info_smsc_label" msgid="3749927072726033763">"SMSC:"</string>
     <string name="radio_info_smsc_update_label" msgid="5141996256097115753">"Шинэчлэх"</string>
     <string name="radio_info_smsc_refresh_label" msgid="8409923721451604560">"Сэргээх"</string>
-    <string name="radio_info_toggle_dns_check_label" msgid="1394078554927787350">"DNS шалгалтыг унтраах/асаах"</string>
+    <string name="radio_info_toggle_dns_check_label" msgid="1394078554927787350">"DNS шалгалтыг асаах/унтраах"</string>
     <string name="oem_radio_info_label" msgid="2914167475119997456">"OEM-тодорхой Мэдээлэл/Тохиргоо"</string>
     <string name="band_mode_title" msgid="7988822920724576842">"Радио мессежийн горимыг тохируулах"</string>
     <string name="band_mode_loading" msgid="795923726636735967">"Мессежийн жагсаалтыг ачаалж байна…"</string>
