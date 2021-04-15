@@ -73,6 +73,7 @@ public class RcsProvisioningMonitor {
     private static final int EVENT_DEVICE_CONFIG_OVERRIDE = 6;
     private static final int EVENT_CARRIER_CONFIG_OVERRIDE = 7;
     private static final int EVENT_RESET = 8;
+    private static final int EVENT_FEATURE_ENABLED_OVERRIDE = 9;
 
     private final PhoneGlobals mPhone;
     private final Handler mHandler;
@@ -82,6 +83,8 @@ public class RcsProvisioningMonitor {
     private Boolean mDeviceSingleRegistrationEnabledOverride;
     private final HashMap<Integer, Boolean> mCarrierSingleRegistrationEnabledOverride =
             new HashMap<>();
+    private final ConcurrentHashMap<Integer, Boolean> mImsFeatureValidationOverride =
+            new ConcurrentHashMap<>();
     private String mDmaPackageName;
     private final SparseArray<RcsFeatureListener> mRcsFeatureListeners = new SparseArray<>();
     private volatile boolean mTestModeEnabled;
@@ -536,8 +539,15 @@ public class RcsProvisioningMonitor {
      */
     public boolean isRcsVolteSingleRegistrationEnabled(int subId) {
         if (mRcsProvisioningInfos.containsKey(subId)) {
-            return mRcsProvisioningInfos.get(subId).getSingleRegistrationCapability()
-                    == ProvisioningManager.STATUS_CAPABLE;
+            if (mRcsProvisioningInfos.get(subId).getSingleRegistrationCapability()
+                    == ProvisioningManager.STATUS_CAPABLE) {
+                try {
+                    RcsConfig rcsConfig = new RcsConfig(getConfig(subId));
+                    return rcsConfig.isRcsVolteSingleRegistrationSupported();
+                } catch (IllegalArgumentException e) {
+                    logd("fail to get rcs config for sub:" + subId);
+                }
+            }
         }
         return false;
     }
@@ -626,6 +636,18 @@ public class RcsProvisioningMonitor {
     }
 
     /**
+     * override the rcs feature validation result for a subscription
+     */
+    public boolean overrideImsFeatureValidation(int subId, Boolean enabled) {
+        if (enabled == null) {
+            mImsFeatureValidationOverride.remove(subId);
+        } else {
+            mImsFeatureValidationOverride.put(subId, enabled);
+        }
+        return true;
+    }
+
+    /**
      * Returns the device config whether single registration is enabled
      */
     public boolean getDeviceSingleRegistrationEnabled() {
@@ -645,6 +667,13 @@ public class RcsProvisioningMonitor {
                     & ProvisioningManager.STATUS_CARRIER_NOT_CAPABLE) == 0;
         }
         return false;
+    }
+
+    /**
+     * Returns the rcs feature validation override value, null if it is not set.
+     */
+    public Boolean getImsFeatureValidationOverride(int subId) {
+        return mImsFeatureValidationOverride.get(subId);
     }
 
     private void onDefaultMessagingApplicationChanged() {
@@ -816,10 +845,9 @@ public class RcsProvisioningMonitor {
     }
 
     void unregisterRcsFeatureListener(RcsProvisioningInfo info) {
-        int slotId = SubscriptionManager.getSlotIndex(info.getSubId());
-        RcsFeatureListener cb = mRcsFeatureListeners.get(slotId);
-        if (cb != null) {
-            cb.removeRcsProvisioningInfo(info);
+        // make sure the info to be removed in any case, even the slotId changed or invalid.
+        for (int i  = 0; i < mRcsFeatureListeners.size(); i++) {
+            mRcsFeatureListeners.valueAt(i).removeRcsProvisioningInfo(info);
         }
     }
 
