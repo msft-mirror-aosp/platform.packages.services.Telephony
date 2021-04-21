@@ -321,13 +321,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                 @Override
                                 public void onReceiveResult(int resultCode, Bundle resultData) {
                                     unbindIfBound(mContext, conn, phoneId);
+                                    removeMessages(EVENT_FETCH_DEFAULT_TIMEOUT,
+                                            getMessageToken(phoneId));
                                     // If new service connection has been created, this is stale.
                                     if (mServiceConnection[phoneId] != conn) {
                                         loge("Received response for stale request.");
                                         return;
                                     }
-                                    removeMessages(EVENT_FETCH_DEFAULT_TIMEOUT,
-                                            getMessageToken(phoneId));
                                     if (resultCode == RESULT_ERROR || resultData == null) {
                                         // On error, abort config fetching.
                                         loge("Failed to get carrier config");
@@ -451,13 +451,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                 @Override
                                 public void onReceiveResult(int resultCode, Bundle resultData) {
                                     unbindIfBound(mContext, conn, phoneId);
+                                    removeMessages(EVENT_FETCH_CARRIER_TIMEOUT,
+                                            getMessageToken(phoneId));
                                     // If new service connection has been created, this is stale.
                                     if (mServiceConnection[phoneId] != conn) {
                                         loge("Received response for stale request.");
                                         return;
                                     }
-                                    removeMessages(EVENT_FETCH_CARRIER_TIMEOUT,
-                                            getMessageToken(phoneId));
                                     if (resultCode == RESULT_ERROR || resultData == null) {
                                         // On error, abort config fetching.
                                         loge("Failed to get carrier config from carrier app: "
@@ -470,7 +470,15 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                             resultData.getParcelable(KEY_CONFIG_BUNDLE);
                                     saveConfigToXml(getCarrierPackageForPhoneId(phoneId), "",
                                             phoneId, carrierId, config);
-                                    mConfigFromCarrierApp[phoneId] = config;
+                                    if (config != null) {
+                                        mConfigFromCarrierApp[phoneId] = config;
+                                    } else {
+                                        logdWithLocalLog("Config from carrier app is null "
+                                                + "for phoneId " + phoneId);
+                                        // Put a stub bundle in place so that the rest of the logic
+                                        // continues smoothly.
+                                        mConfigFromCarrierApp[phoneId] = new PersistableBundle();
+                                    }
                                     sendMessage(
                                             obtainMessage(
                                                     EVENT_FETCH_CARRIER_DONE, phoneId, -1));
@@ -1195,6 +1203,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         int phoneId = SubscriptionManager.getPhoneId(subscriptionId);
         PersistableBundle retConfig = CarrierConfigManager.getDefaultConfig();
         if (SubscriptionManager.isValidPhoneId(phoneId)) {
+            logd("getConfigForSubIdWithFeature: subscriptionId=" + subscriptionId
+                    + ", phoneId=" + phoneId);
             PersistableBundle config = mConfigFromDefaultApp[phoneId];
             if (config != null) {
                 retConfig.putAll(config);

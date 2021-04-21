@@ -108,7 +108,7 @@ import android.telephony.UiccSlotInfo;
 import android.telephony.UssdResponse;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.data.ApnSetting;
-import android.telephony.data.SlicingConfig;
+import android.telephony.data.NetworkSlicingConfig;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.gba.GbaAuthRequest;
 import android.telephony.gba.UaSecurityProtocolIdentifier;
@@ -1645,8 +1645,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     if (ar.exception == null && ar.result != null) {
                         request.result = ar.result;
                     } else {
-                        request.result = new IllegalArgumentException(
-                                "Failed to retrieve system selection channels");
+                        request.result = new IllegalStateException(
+                                "Failed to retrieve system selecton channels");
                         if (ar.result == null) {
                             loge("getSystemSelectionChannels: Empty response");
                         } else {
@@ -1937,24 +1937,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     request = (MainThreadRequest) ar.userObj;
                     ResultReceiver result = (ResultReceiver) request.argument;
 
-                    SlicingConfig slicingConfig = null;
+                    NetworkSlicingConfig slicingConfig = null;
                     Bundle bundle = new Bundle();
                     int resultCode = 0;
                     if (ar.exception != null) {
                         Log.e(LOG_TAG, "Exception retrieving slicing configuration="
                                 + ar.exception);
-                        resultCode = TelephonyManager.SlicingException.ERROR_MODEM_ERROR;
+                        resultCode = TelephonyManager.NetworkSlicingException.ERROR_MODEM_ERROR;
                     } else if (ar.result == null) {
                         Log.w(LOG_TAG, "Timeout Waiting for slicing configuration!");
-                        resultCode = TelephonyManager.SlicingException.ERROR_TIMEOUT;
+                        resultCode = TelephonyManager.NetworkSlicingException.ERROR_TIMEOUT;
                     } else {
                         // use the result as returned
-                        resultCode = TelephonyManager.SlicingException.SUCCESS;
-                        slicingConfig = (SlicingConfig) ar.result;
+                        resultCode = TelephonyManager.NetworkSlicingException.SUCCESS;
+                        slicingConfig = (NetworkSlicingConfig) ar.result;
                     }
 
                     if (slicingConfig == null) {
-                        slicingConfig = new SlicingConfig();
+                        slicingConfig = new NetworkSlicingConfig();
                     }
                     bundle.putParcelable(TelephonyManager.KEY_SLICING_CONFIG_HANDLE, slicingConfig);
                     result.send(resultCode, bundle);
@@ -4867,8 +4867,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public int getDataNetworkType(String callingPackage, String callingFeatureId) {
-        return getDataNetworkTypeForSubscriber(getDefaultSubscription(), callingPackage,
-                callingFeatureId);
+        return getDataNetworkTypeForSubscriber(mSubscriptionController.getDefaultDataSubId(),
+                callingPackage, callingFeatureId);
     }
 
     /**
@@ -6341,7 +6341,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "setAllowedNetworkTypesForReason");
         if (!TelephonyManager.isValidAllowedNetworkTypesReason(reason)) {
-            Rlog.e(LOG_TAG, "Invalid allowed network type reason: " + reason);
+            loge("setAllowedNetworkTypesForReason: Invalid allowed network type reason: " + reason);
+            return false;
+        }
+        if (!SubscriptionManager.isUsableSubscriptionId(subId)) {
+            loge("setAllowedNetworkTypesForReason: Invalid subscriptionId:" + subId);
             return false;
         }
 
@@ -6560,8 +6564,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim, int uid,
             Phone phone) {
-        if (uid == Process.SYSTEM_UID || uid == Process.PHONE_UID) {
-            // Skip the check if it's one of these special uids
+        if (uid == Process.PHONE_UID) {
+            // Skip the check if it's the phone UID (system UID removed in b/184713596)
+            // TODO (b/184954344): Check for system/phone UID at call site instead of here
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
         }
 
@@ -9304,9 +9309,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
-            List<RadioAccessSpecifier> specifiers =
-                    (List<RadioAccessSpecifier>) sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS,
-                    null, subId, workSource);
+            Object result = sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS, null, subId, workSource);
+            if (result instanceof IllegalStateException) {
+                throw (IllegalStateException) result;
+            }
+            List<RadioAccessSpecifier> specifiers = (List<RadioAccessSpecifier>) result;
             if (DBG) log("getSystemSelectionChannels: " + specifiers);
             return specifiers;
         } finally {
