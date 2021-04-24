@@ -689,7 +689,7 @@
     <string name="change_pin_enter_new_pin_header" msgid="4739465616733486118">"Ezarri PIN kode berria"</string>
     <string name="change_pin_enter_new_pin_hint" msgid="2326038476516364210">"<xliff:g id="MIN">%1$d</xliff:g> eta <xliff:g id="MAX">%2$d</xliff:g> digituren artean izan behar ditu PIN kodeak."</string>
     <string name="change_pin_confirm_pin_header" msgid="2606303906320705726">"Berretsi PIN kodea"</string>
-    <string name="change_pin_confirm_pins_dont_match" msgid="305164501222587215">"Ez datoz bat PIN kodeak"</string>
+    <string name="change_pin_confirm_pins_dont_match" msgid="305164501222587215">"PINak ez datoz bat"</string>
     <string name="change_pin_succeeded" msgid="2504705600693014403">"Eguneratu da erantzungailuaren PIN kodea"</string>
     <string name="change_pin_system_error" msgid="7772788809875146873">"Ezin da ezarri PIN kodea"</string>
     <string name="mobile_data_status_roaming_turned_off_subtext" msgid="6840673347416227054">"Desaktibatuta daude ibiltaritzako datuak"</string>
@@ -863,7 +863,7 @@
     <string name="radioInfo_display_asu" msgid="2247752203249646956">"asu"</string>
     <string name="radioInfo_lac" msgid="3892986460272607013">"LAC"</string>
     <string name="radioInfo_cid" msgid="1423185536264406705">"CID"</string>
-    <string name="radio_info_subid" msgid="6839966868621703203">"Uneko azpiIDa:"</string>
+    <string name="radio_info_subid" msgid="6839966868621703203">"Oraingo azpiIDa:"</string>
     <string name="radio_info_dds" msgid="1122593144425697126">"Datu-konexioetarako SIM lehenetsiaren azpiIDa:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Deskargatzeko banda-zabalera (Kb/s):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Kargen banda-zabalera (Kb/s):"</string>
@@ -876,7 +876,7 @@
     <string name="radio_info_imei_label" msgid="8947899706930120368">"IMEI:"</string>
     <string name="radio_info_call_redirect_label" msgid="4526480903023362276">"Dei-desbideratzea:"</string>
     <string name="radio_info_ppp_resets_label" msgid="9131901102339077661">"PPP berrezarpen kopurua abiarazi ezkero:"</string>
-    <string name="radio_info_current_network_label" msgid="3052098695239642450">"Uneko sarea:"</string>
+    <string name="radio_info_current_network_label" msgid="3052098695239642450">"Oraingo sarea:"</string>
     <string name="radio_info_ppp_received_label" msgid="5753592451640644889">"Jasotako datuak:"</string>
     <string name="radio_info_gsm_service_label" msgid="6443348321714241328">"Ahots-deien zerbitzua:"</string>
     <string name="radio_info_signal_strength_label" msgid="5545444702102543260">"Seinalearen indarra:"</string>
