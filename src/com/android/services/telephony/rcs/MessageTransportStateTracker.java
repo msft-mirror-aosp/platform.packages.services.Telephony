@@ -21,6 +21,7 @@ import android.os.RemoteException;
 import android.telephony.ims.DelegateMessageCallback;
 import android.telephony.ims.DelegateRegistrationState;
 import android.telephony.ims.FeatureTagState;
+import android.telephony.ims.SipDelegateConfiguration;
 import android.telephony.ims.SipDelegateImsConfiguration;
 import android.telephony.ims.SipDelegateManager;
 import android.telephony.ims.SipMessage;
@@ -328,6 +329,11 @@ public class MessageTransportStateTracker implements DelegateBinderStateManager.
         // Not needed for this Tracker
     }
 
+    @Override
+    public void onConfigurationChanged(SipDelegateConfiguration config) {
+        // Not needed for this Tracker
+    }
+
     /**
      * Open the transport and allow SIP messages to be sent/received on the delegate specified.
      * @param delegate The delegate connection to send SIP messages to on the ImsService.
@@ -352,6 +358,13 @@ public class MessageTransportStateTracker implements DelegateBinderStateManager.
      */
     public ISipDelegate getDelegateConnection() {
         return mSipDelegateConnection;
+    }
+
+    /**
+     * @return The remote application's message callback.
+     */
+    public ISipDelegateMessageCallback getAppMessageCallback() {
+        return mAppCallback;
     }
 
     /**

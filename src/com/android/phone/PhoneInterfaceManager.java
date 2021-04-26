@@ -355,6 +355,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private ImsResolver mImsResolver;
     private UserManager mUserManager;
     private AppOpsManager mAppOps;
+    private PackageManager mPm;
     private MainThreadHandler mMainThreadHandler;
     private SubscriptionController mSubscriptionController;
     private SharedPreferences mTelephonySharedPreferences;
@@ -2165,6 +2166,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mImsResolver = PhoneGlobals.getInstance().getImsResolver();
         mUserManager = (UserManager) app.getSystemService(Context.USER_SERVICE);
         mAppOps = (AppOpsManager)app.getSystemService(Context.APP_OPS_SERVICE);
+        mPm = app.getSystemService(PackageManager.class);
         mMainThreadHandler = new MainThreadHandler();
         mSubscriptionController = SubscriptionController.getInstance();
         mTelephonySharedPreferences =
@@ -3102,6 +3104,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return null;
         }
         int subId = phone.getSubId();
+        enforceCallingPackage(callingPackage, Binder.getCallingUid(), "getImeiForSlot");
         if (!TelephonyPermissions.checkCallingOrSelfReadDeviceIdentifiers(mApp, subId,
                 callingPackage, callingFeatureId, "getImeiForSlot")) {
             return null;
@@ -3245,6 +3248,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     //
     // Internal helper methods.
     //
+
+    /**
+     * Make sure the caller is the calling package itself
+     *
+     * @throws SecurityException if the caller is not the calling package
+     */
+    private void enforceCallingPackage(String callingPackage, int callingUid, String message) {
+        int packageUid = -1;
+        try {
+            packageUid = mPm.getPackageUid(callingPackage, 0);
+        } catch (PackageManager.NameNotFoundException e) {
+            // packageUid is -1
+        }
+        if (packageUid != callingUid) {
+            throw new SecurityException(message + ": Package " + callingPackage
+                    + " does not belong to " + callingUid);
+        }
+    }
 
     /**
      * Make sure the caller has the MODIFY_PHONE_STATE permission.
@@ -4488,7 +4509,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void setImsProvisioningStatusForCapability(int subId, int capability, int tech,
             boolean isProvisioned) {
         if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
-                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE) {
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_NR
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM) {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
         checkModifyPhoneStatePermission(subId, "setImsProvisioningStatusForCapability");
@@ -4496,6 +4519,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
             if (!isImsProvisioningRequired(subId, capability, true)) {
+                return;
+            }
+            if (tech == ImsRegistrationImplBase.REGISTRATION_TECH_NR
+                    || tech == ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM) {
+                loge("setImsProvisioningStatusForCapability: called for technology that does "
+                        + "not support provisioning - " + tech);
                 return;
             }
 
@@ -4525,7 +4554,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     }
                     cacheMmTelCapabilityProvisioning(subId, capability, tech, isProvisioned);
                     try {
-                        ims.changeMmTelCapability(capability, tech, isProvisioned);
+                        ims.changeMmTelCapability(isProvisioned, capability, tech);
                     } catch (com.android.ims.ImsException e) {
                         loge("setImsProvisioningStatusForCapability: couldn't change UT capability"
                                 + ", Exception" + e.getMessage());
@@ -4547,7 +4576,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public boolean getImsProvisioningStatusForCapability(int subId, int capability, int tech) {
         if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
-                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE) {
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_NR
+                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM) {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
         enforceReadPrivilegedPermission("getProvisioningStatusForCapability");
@@ -4555,6 +4586,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
             if (!isImsProvisioningRequired(subId, capability, true)) {
+                return true;
+            }
+
+            if (tech == ImsRegistrationImplBase.REGISTRATION_TECH_NR
+                    || tech == ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM) {
+                loge("getImsProvisioningStatusForCapability: called for technology that does "
+                        + "not support provisioning - " + tech);
                 return true;
             }
 
@@ -6664,6 +6702,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int checkCarrierPrivilegesForPackage(int subId, String pkgName) {
+        enforceReadPrivilegedPermission("checkCarrierPrivilegesForPackage");
         if (TextUtils.isEmpty(pkgName)) {
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS;
         }
@@ -6681,6 +6720,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int checkCarrierPrivilegesForPackageAnyPhone(String pkgName) {
+        enforceReadPrivilegedPermission("checkCarrierPrivilegesForPackageAnyPhone");
         if (TextUtils.isEmpty(pkgName))
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS;
         int result = TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED;
@@ -6704,6 +6744,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public List<String> getCarrierPackageNamesForIntentAndPhone(Intent intent, int phoneId) {
+        enforceReadPrivilegedPermission("getCarrierPackageNamesForIntentAndPhone");
         if (!SubscriptionManager.isValidPhoneId(phoneId)) {
             loge("phoneId " + phoneId + " is not valid.");
             return null;
@@ -6718,6 +6759,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public List<String> getPackagesWithCarrierPrivileges(int phoneId) {
+        enforceReadPrivilegedPermission("getPackagesWithCarrierPrivileges");
         PackageManager pm = mApp.getPackageManager();
         List<String> privilegedPackages = new ArrayList<>();
         List<PackageInfo> packages = null;
