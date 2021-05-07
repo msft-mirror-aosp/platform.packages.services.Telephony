@@ -31,11 +31,11 @@ import android.os.Message;
 import android.os.Messenger;
 import android.os.PersistableBundle;
 import android.telecom.CallAudioState;
+import android.telecom.CallDiagnostics;
 import android.telecom.CallScreeningService;
 import android.telecom.Conference;
 import android.telecom.Connection;
 import android.telecom.ConnectionService;
-import android.telecom.DiagnosticCall;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.StatusHints;
@@ -140,6 +140,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     private static final int MSG_REDIAL_CONNECTION_CHANGED = 20;
     private static final int MSG_REJECT = 21;
     private static final int MSG_DTMF_DONE = 22;
+    private static final int MSG_MEDIA_ATTRIBUTES_CHANGED = 23;
 
     private static final String JAPAN_COUNTRY_CODE_WITH_PLUS_SIGN = "+81";
     private static final String JAPAN_ISO_COUNTRY_CODE = "JP";
@@ -253,6 +254,10 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                 case MSG_SET_AUDIO_QUALITY:
                     int audioQuality = (int) msg.obj;
                     setAudioQuality(audioQuality);
+                    break;
+
+                case MSG_MEDIA_ATTRIBUTES_CHANGED:
+                    refreshCodec();
                     break;
 
                 case MSG_SET_CONFERENCE_PARTICIPANTS:
@@ -597,6 +602,12 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         public void onAudioQualityChanged(int audioQuality) {
             mHandler.obtainMessage(MSG_SET_AUDIO_QUALITY, audioQuality).sendToTarget();
         }
+
+        @Override
+        public void onMediaAttributesChanged() {
+            mHandler.obtainMessage(MSG_MEDIA_ATTRIBUTES_CHANGED).sendToTarget();
+        }
+
         /**
          * Handles a change in the state of conference participant(s), as reported by the
          * {@link com.android.internal.telephony.Connection}.
@@ -1678,7 +1689,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                 Connection.AUDIO_CODEC_NONE);
         if (newCodecType != oldCodecType) {
             newExtras.putInt(Connection.EXTRA_AUDIO_CODEC, newCodecType);
-            Log.i(this, "put audio codec:" + newCodecType);
+            Log.i(this, "refreshCodec: codec changed; old=%d, new=%d", oldCodecType, newCodecType);
             changed = true;
         }
         if (isImsConnection()) {
@@ -1686,7 +1697,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
             float oldBitrate = newExtras.getFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, 0.0f);
             if (Math.abs(newBitrate - oldBitrate) > THRESHOLD) {
                 newExtras.putFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, newBitrate);
-                Log.i(this, "put audio bitrate:" + newBitrate);
+                Log.i(this, "refreshCodec: bitrate changed; old=%f, new=%f", oldBitrate,
+                        newBitrate);
                 changed = true;
             }
 
@@ -1695,7 +1707,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                     0.0f);
             if (Math.abs(newBandwidth - oldBandwidth) > THRESHOLD) {
                 newExtras.putFloat(Connection.EXTRA_AUDIO_CODEC_BANDWIDTH_KHZ, newBandwidth);
-                Log.i(this, "put audio bandwidth:" + newBandwidth);
+                Log.i(this, "refreshCodec: bandwidth changed; old=%f, new=%f", oldBandwidth,
+                        newBandwidth);
                 changed = true;
             }
         } else {
@@ -1706,7 +1719,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         }
 
         if (changed) {
-            Log.i(this, "Audio attribute, Codec:"
+            Log.i(this, "refreshCodec: Codec:"
                     + newExtras.getInt(Connection.EXTRA_AUDIO_CODEC, Connection.AUDIO_CODEC_NONE)
                     + ", Bitrate:"
                     + newExtras.getFloat(Connection.EXTRA_AUDIO_CODEC_BITRATE_KBPS, 0.0f)
@@ -3336,6 +3349,9 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         }
         if (!isImsConnection()) {
             Log.i(this, "maybeConfigureDeviceToDeviceCommunication: not an IMS connection.");
+            if (mCommunicator != null) {
+                mCommunicator = null;
+            }
             return;
         }
         if (mTreatAsEmergencyCall || mIsNetworkIdentifiedEmergencyCall) {
@@ -3423,19 +3439,19 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
 
             Integer dcMsgValue;
             switch (msg.getType()) {
-                case DiagnosticCall.MESSAGE_CALL_AUDIO_CODEC:
+                case CallDiagnostics.MESSAGE_CALL_AUDIO_CODEC:
                     dcMsgValue = MessageTypeAndValueHelper.CODEC_TO_DC_CODEC.getValue(
                             msg.getValue());
                     break;
-                case DiagnosticCall.MESSAGE_CALL_NETWORK_TYPE:
+                case CallDiagnostics.MESSAGE_CALL_NETWORK_TYPE:
                     dcMsgValue = MessageTypeAndValueHelper.RAT_TYPE_TO_DC_NETWORK_TYPE.getValue(
                             msg.getValue());
                     break;
-                case DiagnosticCall.MESSAGE_DEVICE_BATTERY_STATE:
+                case CallDiagnostics.MESSAGE_DEVICE_BATTERY_STATE:
                     dcMsgValue = MessageTypeAndValueHelper.BATTERY_STATE_TO_DC_BATTERY_STATE
                             .getValue(msg.getValue());
                     break;
-                case DiagnosticCall.MESSAGE_DEVICE_NETWORK_COVERAGE:
+                case CallDiagnostics.MESSAGE_DEVICE_NETWORK_COVERAGE:
                     dcMsgValue = MessageTypeAndValueHelper.COVERAGE_TO_DC_COVERAGE
                             .getValue(msg.getValue());
                     break;
@@ -3663,7 +3679,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     }
 
     /**
-     * Handles a device to device message which a {@link DiagnosticCall} wishes to send.
+     * Handles a device to device message which a {@link CallDiagnostics} wishes to send.
      * @param extras the call event extras bundle.
      */
     private void handleOutgoingDeviceToDeviceMessage(Bundle extras) {
@@ -3672,19 +3688,19 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
 
         Integer internalMessageValue;
         switch (messageType) {
-            case DiagnosticCall.MESSAGE_CALL_AUDIO_CODEC:
+            case CallDiagnostics.MESSAGE_CALL_AUDIO_CODEC:
                 internalMessageValue = MessageTypeAndValueHelper.CODEC_TO_DC_CODEC.getKey(
                         messageValue);
                 break;
-            case DiagnosticCall.MESSAGE_CALL_NETWORK_TYPE:
+            case CallDiagnostics.MESSAGE_CALL_NETWORK_TYPE:
                 internalMessageValue = MessageTypeAndValueHelper.RAT_TYPE_TO_DC_NETWORK_TYPE.getKey(
                         messageValue);
                 break;
-            case DiagnosticCall.MESSAGE_DEVICE_BATTERY_STATE:
+            case CallDiagnostics.MESSAGE_DEVICE_BATTERY_STATE:
                 internalMessageValue = MessageTypeAndValueHelper.BATTERY_STATE_TO_DC_BATTERY_STATE
                         .getKey(messageValue);
                 break;
-            case DiagnosticCall.MESSAGE_DEVICE_NETWORK_COVERAGE:
+            case CallDiagnostics.MESSAGE_DEVICE_NETWORK_COVERAGE:
                 internalMessageValue = MessageTypeAndValueHelper.COVERAGE_TO_DC_COVERAGE
                         .getKey(messageValue);
                 break;
