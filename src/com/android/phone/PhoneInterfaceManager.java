@@ -4345,8 +4345,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void setImsProvisioningStatusForCapability(int subId, int capability, int tech,
             boolean isProvisioned) {
-        if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
-                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE) {
+        if (tech < ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                || tech > ImsRegistrationImplBase.REGISTRATION_TECH_NR) {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
         checkModifyPhoneStatePermission(subId, "setImsProvisioningStatusForCapability");
@@ -4354,6 +4354,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
             if (!isImsProvisioningRequired(subId, capability, true)) {
+                return;
+            }
+            if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                    && tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN) {
+                loge("setImsProvisioningStatusForCapability: called for technology that does "
+                        + "not support provisioning - " + tech);
                 return;
             }
 
@@ -4383,7 +4389,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     }
                     cacheMmTelCapabilityProvisioning(subId, capability, tech, isProvisioned);
                     try {
-                        ims.changeMmTelCapability(capability, tech, isProvisioned);
+                        ims.changeMmTelCapability(isProvisioned, capability, tech);
                     } catch (com.android.ims.ImsException e) {
                         loge("setImsProvisioningStatusForCapability: couldn't change UT capability"
                                 + ", Exception" + e.getMessage());
@@ -4404,8 +4410,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public boolean getImsProvisioningStatusForCapability(int subId, int capability, int tech) {
-        if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN
-                && tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE) {
+        if (tech < ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                || tech > ImsRegistrationImplBase.REGISTRATION_TECH_NR) {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
         enforceReadPrivilegedPermission("getProvisioningStatusForCapability");
@@ -4413,6 +4419,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             // TODO: Refactor to remove ImsManager dependence and query through ImsPhone directly.
             if (!isImsProvisioningRequired(subId, capability, true)) {
+                return true;
+            }
+
+            if (tech != ImsRegistrationImplBase.REGISTRATION_TECH_LTE
+                    && tech != ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN) {
+                loge("getImsProvisioningStatusForCapability: called for technology that does "
+                        + "not support provisioning - " + tech);
                 return true;
             }
 
@@ -4587,7 +4600,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + subId + "' for key:" + key);
                 return ImsConfigImplBase.CONFIG_RESULT_UNKNOWN;
             }
-            return ImsManager.getInstance(mApp, slotId).getConfigInterface().getConfigInt(key);
+            return ImsManager.getInstance(mApp, slotId).getConfigInt(key);
         } catch (com.android.ims.ImsException e) {
             Log.w(LOG_TAG, "getImsProvisioningInt: ImsService is not available for subscription '"
                     + subId + "' for key:" + key);
@@ -4612,7 +4625,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + subId + "' for key:" + key);
                 return ProvisioningManager.STRING_QUERY_RESULT_ERROR_GENERIC;
             }
-            return ImsManager.getInstance(mApp, slotId).getConfigInterface().getConfigString(key);
+            return ImsManager.getInstance(mApp, slotId).getConfigString(key);
         } catch (com.android.ims.ImsException e) {
             Log.w(LOG_TAG, "getImsProvisioningString: ImsService is not available for sub '"
                     + subId + "' for key:" + key);
@@ -4638,10 +4651,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + subId + "' for key:" + key);
                 return ImsConfigImplBase.CONFIG_RESULT_FAILED;
             }
-            return ImsManager.getInstance(mApp, slotId).getConfigInterface().setConfig(key, value);
-        } catch (com.android.ims.ImsException e) {
+            return ImsManager.getInstance(mApp, slotId).setConfig(key, value);
+        } catch (com.android.ims.ImsException | RemoteException e) {
             Log.w(LOG_TAG, "setImsProvisioningInt: ImsService unavailable for sub '" + subId
-                    + "' for key:" + key);
+                    + "' for key:" + key, e);
             return ImsConfigImplBase.CONFIG_RESULT_FAILED;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -4664,10 +4677,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + subId + "' for key:" + key);
                 return ImsConfigImplBase.CONFIG_RESULT_FAILED;
             }
-            return ImsManager.getInstance(mApp, slotId).getConfigInterface().setConfig(key, value);
-        } catch (com.android.ims.ImsException e) {
+            return ImsManager.getInstance(mApp, slotId).setConfig(key, value);
+        } catch (com.android.ims.ImsException | RemoteException e) {
             Log.w(LOG_TAG, "setImsProvisioningString: ImsService unavailable for sub '" + subId
-                    + "' for key:" + key);
+                    + "' for key:" + key, e);
             return ImsConfigImplBase.CONFIG_RESULT_FAILED;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -4725,8 +4738,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public int getDataNetworkType(String callingPackage, String callingFeatureId) {
-        return getDataNetworkTypeForSubscriber(getDefaultSubscription(), callingPackage,
-                callingFeatureId);
+        return getDataNetworkTypeForSubscriber(mSubscriptionController.getDefaultDataSubId(),
+                callingPackage, callingFeatureId);
     }
 
     /**
@@ -5770,6 +5783,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setCallingUid(Binder.getCallingUid())
                                 .setMethod("getCellNetworkScanResults")
                                 .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
                                 .build());
         switch (locationResult) {
             case DENIED_HARD:
@@ -7449,6 +7464,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setMethod("getServiceStateForSubscriber")
                                 .setLogAsInfo(true)
                                 .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
                                 .build());
 
         LocationAccessPolicy.LocationPermissionResult coarseLocationResult =
@@ -7461,6 +7478,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                 .setMethod("getServiceStateForSubscriber")
                                 .setLogAsInfo(true)
                                 .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForFine(Integer.MAX_VALUE)
+                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
                                 .build());
         // We don't care about hard or soft here -- all we need to know is how much info to scrub.
         boolean hasFinePermission =
@@ -10115,6 +10134,23 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mApp.imsRcsController.getLastUcePidfXmlShell(subId);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Remove UCE requests cannot be sent to the network status.
+     */
+    // Used for SHELL command only right now.
+    @Override
+    public boolean removeUceRequestDisallowedStatus(int subId) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "uceRemoveDisallowedStatus");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.removeUceRequestDisallowedStatus(subId);
         } catch (ImsException e) {
             throw new ServiceSpecificException(e.getCode(), e.getMessage());
         } finally {
