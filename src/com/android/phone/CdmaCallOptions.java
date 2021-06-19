@@ -19,19 +19,19 @@ package com.android.phone;
 import android.os.Bundle;
 import android.os.PersistableBundle;
 import android.preference.Preference;
-import android.preference.PreferenceActivity;
 import android.preference.PreferenceScreen;
 import android.telephony.CarrierConfigManager;
 import android.view.MenuItem;
 
 import com.android.internal.telephony.PhoneConstants;
 
-public class CdmaCallOptions extends PreferenceActivity {
+public class CdmaCallOptions extends TimeConsumingPreferenceActivity {
     private static final String LOG_TAG = "CdmaCallOptions";
     private final boolean DBG = (PhoneGlobals.DBG_LEVEL >= 2);
 
     private static final String BUTTON_VP_KEY = "button_voice_privacy_key";
-    private CdmaVoicePrivacySwitchPreference mButtonVoicePrivacy;
+    private static final String CALL_FORWARDING_KEY = "call_forwarding_key";
+    private static final String CALL_WAITING_KEY = "call_waiting_key";
 
     @Override
     protected void onCreate(Bundle icicle) {
@@ -43,8 +43,9 @@ public class CdmaCallOptions extends PreferenceActivity {
         subInfoHelper.setActionBarTitle(
                 getActionBar(), getResources(), R.string.labelCdmaMore_with_label);
 
-        mButtonVoicePrivacy = (CdmaVoicePrivacySwitchPreference) findPreference(BUTTON_VP_KEY);
-        mButtonVoicePrivacy.setPhone(subInfoHelper.getPhone());
+        CdmaVoicePrivacySwitchPreference buttonVoicePrivacy =
+                (CdmaVoicePrivacySwitchPreference) findPreference(BUTTON_VP_KEY);
+        buttonVoicePrivacy.setPhone(subInfoHelper.getPhone());
         PersistableBundle carrierConfig;
         if (subInfoHelper.hasSubId()) {
             carrierConfig = PhoneGlobals.getInstance().getCarrierConfigForSubId(
@@ -54,8 +55,25 @@ public class CdmaCallOptions extends PreferenceActivity {
         }
         if (subInfoHelper.getPhone().getPhoneType() != PhoneConstants.PHONE_TYPE_CDMA
                 || carrierConfig.getBoolean(CarrierConfigManager.KEY_VOICE_PRIVACY_DISABLE_UI_BOOL)) {
-            // disable the entire screen
-            getPreferenceScreen().setEnabled(false);
+            buttonVoicePrivacy.setEnabled(false);
+        }
+
+        Preference callForwardingPref = getPreferenceScreen().findPreference(CALL_FORWARDING_KEY);
+        if (carrierConfig != null && carrierConfig.getBoolean(
+                CarrierConfigManager.KEY_CALL_FORWARDING_VISIBILITY_BOOL)) {
+            callForwardingPref.setIntent(
+                    subInfoHelper.getIntent(CdmaCallForwardOptions.class));
+        } else {
+            getPreferenceScreen().removePreference(callForwardingPref);
+        }
+
+        CdmaCallWaitingPreference callWaitingPref = (CdmaCallWaitingPreference)getPreferenceScreen()
+                                                     .findPreference(CALL_WAITING_KEY);
+        if (carrierConfig != null && carrierConfig.getBoolean(
+                CarrierConfigManager.KEY_ADDITIONAL_SETTINGS_CALL_WAITING_VISIBILITY_BOOL)) {
+            callWaitingPref.init(this, subInfoHelper.getPhone());
+        } else {
+            getPreferenceScreen().removePreference(callWaitingPref);
         }
     }
 
@@ -76,5 +94,4 @@ public class CdmaCallOptions extends PreferenceActivity {
         }
         return false;
     }
-
 }
