@@ -168,6 +168,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     private static final int EVENT_BIND_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT = 21;
     // Fetching config timed out from the default app for no SIM config.
     private static final int EVENT_FETCH_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT = 22;
+    // NOTE: any new EVENT_* values must be added to method eventToString().
 
     private static final int BIND_TIMEOUT_MILLIS = 30000;
 
@@ -210,7 +211,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         @Override
         public void handleMessage(Message msg) {
             final int phoneId = msg.arg1;
-            logdWithLocalLog("mHandler: " + msg.what + " phoneId: " + phoneId);
+            logdWithLocalLog("mHandler: " + eventToString(msg.what) + " phoneId: " + phoneId);
             if (!SubscriptionManager.isValidPhoneId(phoneId)
                     && msg.what != EVENT_MULTI_SIM_CONFIG_CHANGED) {
                 return;
@@ -293,7 +294,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                         } else {
                             // Put a stub bundle in place so that the rest of the logic continues
                             // smoothly.
-                            mConfigFromDefaultApp[phoneId] = PersistableBundle.EMPTY;
+                            mConfigFromDefaultApp[phoneId] = new PersistableBundle();
                             // Send broadcast if bind fails.
                             notifySubscriptionInfoUpdater(phoneId);
                             // TODO: We *must* call unbindService even if bindService returns false.
@@ -320,13 +321,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                 @Override
                                 public void onReceiveResult(int resultCode, Bundle resultData) {
                                     unbindIfBound(mContext, conn, phoneId);
+                                    removeMessages(EVENT_FETCH_DEFAULT_TIMEOUT,
+                                            getMessageToken(phoneId));
                                     // If new service connection has been created, this is stale.
                                     if (mServiceConnection[phoneId] != conn) {
                                         loge("Received response for stale request.");
                                         return;
                                     }
-                                    removeMessages(EVENT_FETCH_DEFAULT_TIMEOUT,
-                                            getMessageToken(phoneId));
                                     if (resultCode == RESULT_ERROR || resultData == null) {
                                         // On error, abort config fetching.
                                         loge("Failed to get carrier config");
@@ -378,7 +379,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                         broadcastConfigChangedIntent(phoneId);
                     }
                     // Put a stub bundle in place so that the rest of the logic continues smoothly.
-                    mConfigFromDefaultApp[phoneId] = PersistableBundle.EMPTY;
+                    mConfigFromDefaultApp[phoneId] = new PersistableBundle();
                     notifySubscriptionInfoUpdater(phoneId);
                     break;
                 }
@@ -425,7 +426,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                         } else {
                             // Put a stub bundle in place so that the rest of the logic continues
                             // smoothly.
-                            mConfigFromCarrierApp[phoneId] = PersistableBundle.EMPTY;
+                            mConfigFromCarrierApp[phoneId] = new PersistableBundle();
                             // Send broadcast if bind fails.
                             broadcastConfigChangedIntent(phoneId);
                             loge("Bind to carrier app: " + carrierPackageName + " fails");
@@ -450,13 +451,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                                 @Override
                                 public void onReceiveResult(int resultCode, Bundle resultData) {
                                     unbindIfBound(mContext, conn, phoneId);
+                                    removeMessages(EVENT_FETCH_CARRIER_TIMEOUT,
+                                            getMessageToken(phoneId));
                                     // If new service connection has been created, this is stale.
                                     if (mServiceConnection[phoneId] != conn) {
                                         loge("Received response for stale request.");
                                         return;
                                     }
-                                    removeMessages(EVENT_FETCH_CARRIER_TIMEOUT,
-                                            getMessageToken(phoneId));
                                     if (resultCode == RESULT_ERROR || resultData == null) {
                                         // On error, abort config fetching.
                                         loge("Failed to get carrier config from carrier app: "
@@ -510,7 +511,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                         broadcastConfigChangedIntent(phoneId);
                     }
                     // Put a stub bundle in place so that the rest of the logic continues smoothly.
-                    mConfigFromCarrierApp[phoneId] = PersistableBundle.EMPTY;
+                    mConfigFromCarrierApp[phoneId] = new PersistableBundle();
                     notifySubscriptionInfoUpdater(phoneId);
                     break;
                 }
@@ -698,16 +699,13 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         mConfigFromCarrierApp = new PersistableBundle[numPhones];
         mPersistentOverrideConfigs = new PersistableBundle[numPhones];
         mOverrideConfigs = new PersistableBundle[numPhones];
-        mNoSimConfig = PersistableBundle.EMPTY;
+        mNoSimConfig = new PersistableBundle();
         mServiceConnection = new CarrierServiceConnection[numPhones];
         mServiceBound = new boolean[numPhones];
         mHasSentConfigChange = new boolean[numPhones];
         mFromSystemUnlocked = new boolean[numPhones];
         mServiceConnectionForNoSimConfig = new CarrierServiceConnection[numPhones];
         mServiceBoundForNoSimConfig = new boolean[numPhones];
-        // Make this service available through ServiceManager.
-        TelephonyFrameworkInitializer
-                .getTelephonyServiceManager().getCarrierConfigServiceRegisterer().register(this);
         logd("CarrierConfigLoader has started");
         mSubscriptionInfoUpdater = subscriptionInfoUpdater;
         mHandler.sendEmptyMessage(EVENT_CHECK_SYSTEM_UPDATE);
@@ -723,6 +721,9 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             if (sInstance == null) {
                 sInstance = new CarrierConfigLoader(context,
                         PhoneFactory.getSubscriptionInfoUpdater(), Looper.myLooper());
+                // Make this service available through ServiceManager.
+                TelephonyFrameworkInitializer.getTelephonyServiceManager()
+                        .getCarrierConfigServiceRegisterer().register(sInstance);
             } else {
                 Log.wtf(LOG_TAG, "init() called multiple times!  sInstance = " + sInstance);
             }
@@ -768,7 +769,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         }
 
         if (configToSend == null) {
-            configToSend = PersistableBundle.EMPTY;
+            configToSend = new PersistableBundle();
         }
 
         // mOverrideConfigs is for testing. And it will override current configs.
@@ -1188,7 +1189,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             String callingFeatureId) {
         if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(mContext, subscriptionId,
                 callingPackage, callingFeatureId, "getCarrierConfig")) {
-            return PersistableBundle.EMPTY;
+            return new PersistableBundle();
         }
 
         int phoneId = SubscriptionManager.getPhoneId(subscriptionId);
@@ -1266,7 +1267,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     private void overrideConfig(@NonNull PersistableBundle[] currentOverrides, int phoneId,
             @Nullable PersistableBundle overrides) {
         if (overrides == null) {
-            currentOverrides[phoneId] = PersistableBundle.EMPTY;
+            currentOverrides[phoneId] = new PersistableBundle();
         } else if (currentOverrides[phoneId] == null) {
             currentOverrides[phoneId] = overrides;
         } else {
@@ -1650,6 +1651,56 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     }
                     break;
             }
+        }
+    }
+
+    // Get readable string for the message code supported in this class.
+    private static String eventToString(int code) {
+        switch (code) {
+            case EVENT_CLEAR_CONFIG:
+                return "EVENT_CLEAR_CONFIG";
+            case EVENT_CONNECTED_TO_DEFAULT:
+                return "EVENT_CONNECTED_TO_DEFAULT";
+            case EVENT_CONNECTED_TO_CARRIER:
+                return "EVENT_CONNECTED_TO_CARRIER";
+            case EVENT_FETCH_DEFAULT_DONE:
+                return "EVENT_FETCH_DEFAULT_DONE";
+            case EVENT_FETCH_CARRIER_DONE:
+                return "EVENT_FETCH_CARRIER_DONE";
+            case EVENT_DO_FETCH_DEFAULT:
+                return "EVENT_DO_FETCH_DEFAULT";
+            case EVENT_DO_FETCH_CARRIER:
+                return "EVENT_DO_FETCH_CARRIER";
+            case EVENT_PACKAGE_CHANGED:
+                return "EVENT_PACKAGE_CHANGED";
+            case EVENT_BIND_DEFAULT_TIMEOUT:
+                return "EVENT_BIND_DEFAULT_TIMEOUT";
+            case EVENT_BIND_CARRIER_TIMEOUT:
+                return "EVENT_BIND_CARRIER_TIMEOUT";
+            case EVENT_CHECK_SYSTEM_UPDATE:
+                return "EVENT_CHECK_SYSTEM_UPDATE";
+            case EVENT_SYSTEM_UNLOCKED:
+                return "EVENT_SYSTEM_UNLOCKED";
+            case EVENT_FETCH_DEFAULT_TIMEOUT:
+                return "EVENT_FETCH_DEFAULT_TIMEOUT";
+            case EVENT_FETCH_CARRIER_TIMEOUT:
+                return "EVENT_FETCH_CARRIER_TIMEOUT";
+            case EVENT_SUBSCRIPTION_INFO_UPDATED:
+                return "EVENT_SUBSCRIPTION_INFO_UPDATED";
+            case EVENT_MULTI_SIM_CONFIG_CHANGED:
+                return "EVENT_MULTI_SIM_CONFIG_CHANGED";
+            case EVENT_DO_FETCH_DEFAULT_FOR_NO_SIM_CONFIG:
+                return "EVENT_DO_FETCH_DEFAULT_FOR_NO_SIM_CONFIG";
+            case EVENT_FETCH_DEFAULT_FOR_NO_SIM_CONFIG_DONE:
+                return "EVENT_FETCH_DEFAULT_FOR_NO_SIM_CONFIG_DONE";
+            case EVENT_CONNECTED_TO_DEFAULT_FOR_NO_SIM_CONFIG:
+                return "EVENT_CONNECTED_TO_DEFAULT_FOR_NO_SIM_CONFIG";
+            case EVENT_BIND_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT:
+                return "EVENT_BIND_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT";
+            case EVENT_FETCH_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT:
+                return "EVENT_FETCH_DEFAULT_FOR_NO_SIM_CONFIG_TIMEOUT";
+            default:
+                return "UNKNOWN(" + code + ")";
         }
     }
 
