@@ -537,19 +537,12 @@ public class RcsProvisioningMonitor {
     /**
      * Returns whether Rcs Volte single registration is enabled for the sub.
      */
-    public boolean isRcsVolteSingleRegistrationEnabled(int subId) {
+    public Boolean isRcsVolteSingleRegistrationEnabled(int subId) {
         if (mRcsProvisioningInfos.containsKey(subId)) {
-            if (mRcsProvisioningInfos.get(subId).getSingleRegistrationCapability()
-                    == ProvisioningManager.STATUS_CAPABLE) {
-                try {
-                    RcsConfig rcsConfig = new RcsConfig(getConfig(subId));
-                    return rcsConfig.isRcsVolteSingleRegistrationSupported();
-                } catch (IllegalArgumentException e) {
-                    logd("fail to get rcs config for sub:" + subId);
-                }
-            }
+            return mRcsProvisioningInfos.get(subId).getSingleRegistrationCapability()
+                    == ProvisioningManager.STATUS_CAPABLE;
         }
-        return false;
+        return null;
     }
 
     /**
@@ -820,11 +813,6 @@ public class RcsProvisioningMonitor {
         }
     }
 
-    private IImsConfig getIImsConfig(int subId, int feature) {
-        return mPhone.getImsResolver().getImsConfig(
-                SubscriptionManager.getSlotIndex(subId), feature);
-    }
-
     private String getDmaPackageName() {
         try {
             return CollectionUtils.firstOrNull(mRoleManager.getRoleHolders(RoleManager.ROLE_SMS));
@@ -845,10 +833,9 @@ public class RcsProvisioningMonitor {
     }
 
     void unregisterRcsFeatureListener(RcsProvisioningInfo info) {
-        int slotId = SubscriptionManager.getSlotIndex(info.getSubId());
-        RcsFeatureListener cb = mRcsFeatureListeners.get(slotId);
-        if (cb != null) {
-            cb.removeRcsProvisioningInfo(info);
+        // make sure the info to be removed in any case, even the slotId changed or invalid.
+        for (int i  = 0; i < mRcsFeatureListeners.size(); i++) {
+            mRcsFeatureListeners.valueAt(i).removeRcsProvisioningInfo(info);
         }
     }
 
