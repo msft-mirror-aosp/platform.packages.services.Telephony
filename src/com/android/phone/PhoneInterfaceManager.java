@@ -18,6 +18,8 @@ package com.android.phone;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
+import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_CDMA;
+import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_GSM;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_IMS;
 import static com.android.internal.telephony.PhoneConstants.SUBSCRIPTION_KEY;
 
@@ -142,6 +144,7 @@ import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.GbaManager;
+import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.HalVersion;
 import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.ICallForwardingInfoCallback;
@@ -1618,8 +1621,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     if (ar.exception == null && ar.result != null) {
                         request.result = ar.result;
                     } else {
-                        request.result = new IllegalArgumentException(
-                                "Failed to retrieve system selection channels");
+                        request.result = new IllegalStateException(
+                                "Failed to retrieve system selecton channels");
                         if (ar.result == null) {
                             loge("getSystemSelectionChannels: Empty response");
                         } else {
@@ -6429,8 +6432,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim, int uid,
             Phone phone) {
-        if (uid == Process.SYSTEM_UID || uid == Process.PHONE_UID) {
-            // Skip the check if it's one of these special uids
+        if (uid == Process.PHONE_UID) {
+            // Skip the check if it's the phone UID (system UID removed in b/184713596)
+            // TODO (b/184954344): Check for system/phone UID at call site instead of here
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
         }
 
@@ -8591,6 +8595,31 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
+     * Start emergency callback mode for GsmCdmaPhone for testing.
+     */
+    @Override
+    public void startEmergencyCallbackMode() {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "startEmergencyCallbackMode");
+        enforceModifyPermission();
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            for (Phone phone : PhoneFactory.getPhones()) {
+                Rlog.d(LOG_TAG, "startEmergencyCallbackMode phone type: " + phone.getPhoneType());
+                if (phone != null && ((phone.getPhoneType() == PHONE_TYPE_GSM)
+                        || (phone.getPhoneType() == PHONE_TYPE_CDMA))) {
+                    GsmCdmaPhone gsmCdmaPhone = (GsmCdmaPhone) phone;
+                    gsmCdmaPhone.obtainMessage(
+                            GsmCdmaPhone.EVENT_EMERGENCY_CALLBACK_MODE_ENTER).sendToTarget();
+                    Rlog.d(LOG_TAG, "startEmergencyCallbackMode: triggered");
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
      * Update emergency number list for test mode.
      */
     @Override
@@ -9043,9 +9072,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
-            List<RadioAccessSpecifier> specifiers =
-                    (List<RadioAccessSpecifier>) sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS,
-                    null, subId, workSource);
+            Object result = sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS, null, subId, workSource);
+            if (result instanceof IllegalStateException) {
+                throw (IllegalStateException) result;
+            }
+            List<RadioAccessSpecifier> specifiers = (List<RadioAccessSpecifier>) result;
             if (DBG) log("getSystemSelectionChannels: " + specifiers);
             return specifiers;
         } finally {
@@ -9467,7 +9498,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 throw new IllegalArgumentException("modem returned INVALID_ARGUMENTS");
             } else if (thermalMitigationResult
                     == MODEM_DOES_NOT_SUPPORT_DATA_THROTTLING_ERROR_CODE) {
-                throw new IllegalArgumentException("modem does not support data throttling");
+                log("Modem likely does not support data throttling on secondary carrier. Data " +
+                        "throttling action = " + dataThrottlingRequest.getDataThrottlingAction());
+                return TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_ERROR;
             }
             return thermalMitigationResult;
         }
@@ -9734,9 +9767,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             RcsProvisioningMonitor rpm = RcsProvisioningMonitor.getInstance();
             if (rpm != null) {
-                return rpm.isRcsVolteSingleRegistrationEnabled(subId);
+                Boolean isCapable = rpm.isRcsVolteSingleRegistrationEnabled(subId);
+                if (isCapable != null) {
+                    return isCapable;
+                }
             }
-            return false;
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
+                    "service is temporarily unavailable.");
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
