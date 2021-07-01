@@ -134,6 +134,7 @@ import android.util.Pair;
 import com.android.ims.ImsManager;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.ims.rcs.uce.eab.EabUtil;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.CallForwardInfo;
 import com.android.internal.telephony.CallManager;
 import com.android.internal.telephony.CallStateException;
@@ -7303,13 +7304,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         getDefaultDataEnabled());
                 setNetworkSelectionModeAutomatic(subId);
                 Phone phone = getPhone(subId);
-                if (phone != null) {
-                    SubscriptionManager.setSubscriptionProperty(subId,
-                            SubscriptionManager.ALLOWED_NETWORK_TYPES,
-                            "user=" + RadioAccessFamily.getRafFromNetworkType(
-                                    RILConstants.PREFERRED_NETWORK_MODE));
-                    phone.loadAllowedNetworksFromSubscriptionDatabase();
-                }
+                cleanUpAllowedNetworkTypes(phone, subId);
                 setDataRoamingEnabled(subId, getDefaultDataRoamingEnabled(subId));
                 CarrierInfoManager.deleteAllCarrierKeysForImsiEncryption(mApp);
             }
@@ -7333,6 +7328,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    @VisibleForTesting
+    void cleanUpAllowedNetworkTypes(Phone phone, int subId) {
+        if (phone == null || !SubscriptionManager.isUsableSubscriptionId(subId)) {
+            return;
+        }
+        long defaultNetworkType = RadioAccessFamily.getRafFromNetworkType(
+                RILConstants.PREFERRED_NETWORK_MODE);
+        SubscriptionManager.setSubscriptionProperty(subId,
+                SubscriptionManager.ALLOWED_NETWORK_TYPES,
+                "user=" + defaultNetworkType);
+        phone.loadAllowedNetworksFromSubscriptionDatabase();
+        phone.setAllowedNetworkTypes(TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER,
+                defaultNetworkType, null);
     }
 
     private void cleanUpSmsRawTable(Context context) {
@@ -9519,6 +9529,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         return sThermalMitigationAllowlistedPackages;
     }
 
+    private boolean isAnyPhoneInEmergencyState() {
+        TelecomManager tm = mApp.getSystemService(TelecomManager.class);
+        if (tm.isInEmergencyCall()) {
+            Log.e(LOG_TAG , "Phone state is not valid. One of the phones is in an emergency call");
+            return true;
+        }
+        for (Phone phone : PhoneFactory.getPhones()) {
+            if (phone.isInEmergencySmsMode() || phone.isInEcm()) {
+                Log.e(LOG_TAG, "Phone state is not valid. isInEmergencySmsMode = "
+                    + phone.isInEmergencySmsMode() + " isInEmergencyCallbackMode = "
+                    + phone.isInEcm());
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Used by shell commands to add an authorized package name for thermal mitigation.
      * @param packageName name of package to be allowlisted
@@ -9601,8 +9629,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     TelecomAccountRegistry registry = TelecomAccountRegistry.getInstance(null);
                     if (registry != null) {
-                        TelephonyConnectionService service =
-                                registry.getTelephonyConnectionService();
                         Phone phone = getPhone(subId);
                         if (phone == null) {
                             thermalMitigationResult =
@@ -9610,19 +9636,20 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             break;
                         }
 
-                        if (PhoneConstantConversions.convertCallState(phone.getState())
-                                != TelephonyManager.CALL_STATE_IDLE
-                                || phone.isInEmergencySmsMode() || phone.isInEcm()
-                                || (service != null && service.isEmergencyCallPending())) {
-                            String errorMessage = "Phone state is not valid. call state = "
-                                    + PhoneConstantConversions.convertCallState(phone.getState())
-                                    + " isInEmergencySmsMode = " + phone.isInEmergencySmsMode()
-                                    + " isInEmergencyCallbackMode = " + phone.isInEcm();
-                            errorMessage += service == null
-                                    ? " TelephonyConnectionService is null"
-                                    : " isEmergencyCallPending = "
-                                            + service.isEmergencyCallPending();
-                            Log.e(LOG_TAG, errorMessage);
+                        TelephonyConnectionService service =
+                                registry.getTelephonyConnectionService();
+                        if (service == null) {
+                            Log.e(LOG_TAG, "TelephonyConnectionService is null");
+                            thermalMitigationResult =
+                                    TelephonyManager.THERMAL_MITIGATION_RESULT_INVALID_STATE;
+                            break;
+
+                        } else if (service.isEmergencyCallPending()) {
+                            Log.e(LOG_TAG, "An emergency call is pending");
+                            thermalMitigationResult =
+                                    TelephonyManager.THERMAL_MITIGATION_RESULT_INVALID_STATE;
+                            break;
+                        } else if (isAnyPhoneInEmergencyState()) {
                             thermalMitigationResult =
                                     TelephonyManager.THERMAL_MITIGATION_RESULT_INVALID_STATE;
                             break;
