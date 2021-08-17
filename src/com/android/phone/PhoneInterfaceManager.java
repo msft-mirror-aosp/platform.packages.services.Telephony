@@ -6214,7 +6214,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "setAllowedNetworkTypesForReason");
         if (!TelephonyManager.isValidAllowedNetworkTypesReason(reason)) {
-            Rlog.e(LOG_TAG, "Invalid allowed network type reason: " + reason);
+            loge("setAllowedNetworkTypesForReason: Invalid allowed network type reason: " + reason);
+            return false;
+        }
+        if (!SubscriptionManager.isUsableSubscriptionId(subId)) {
+            loge("setAllowedNetworkTypesForReason: Invalid subscriptionId:" + subId);
             return false;
         }
 
@@ -8857,7 +8861,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             loge("isMultiSimSupportedInternal: no static configuration available");
             return TelephonyManager.MULTISIM_NOT_SUPPORTED_BY_HARDWARE;
         }
-        if (staticCapability.logicalModemList.size() < 2) {
+        if (staticCapability.getLogicalModemList().size() < 2) {
             loge("isMultiSimSupportedInternal: maximum number of modem is < 2");
             return TelephonyManager.MULTISIM_NOT_SUPPORTED_BY_HARDWARE;
         }
@@ -9466,22 +9470,28 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Attempts to set the radio power state for thermal reason. This does not guarantee that the
+     * Attempts to set the radio power state for all phones for thermal reason.
+     * This does not guarantee that the
      * requested radio power state will actually be set. See {@link
      * PhoneInternalInterface#setRadioPowerForReason} for more details.
      *
-     * @param subId the subscription ID of the phone requesting to set the radio power state.
      * @param enable {@code true} if trying to turn radio on.
      * @return {@code true} if phone setRadioPowerForReason was called. Otherwise, returns {@code
      * false}.
      */
-    private boolean setRadioPowerForThermal(int subId, boolean enable) {
-        Phone phone = getPhone(subId);
-        if (phone != null) {
-            phone.setRadioPowerForReason(enable, Phone.RADIO_POWER_REASON_THERMAL);
-            return true;
+    private boolean setRadioPowerForThermal(boolean enable) {
+        boolean isPhoneAvailable = false;
+        for (int i = 0; i < TelephonyManager.getDefault().getActiveModemCount(); i++) {
+            Phone phone = PhoneFactory.getPhone(i);
+            if (phone != null) {
+                phone.setRadioPowerForReason(enable, Phone.RADIO_POWER_REASON_THERMAL);
+                isPhoneAvailable = true;
+            }
         }
-        return false;
+
+        // return true if successfully informed the phone object about the thermal radio power
+        // request.
+        return isPhoneAvailable;
     }
 
     private int handleDataThrottlingRequest(int subId,
@@ -9495,7 +9505,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         // Ensure that radio is on. If not able to power on due to phone being unavailable, return
         // THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-        if (!setRadioPowerForThermal(subId, true)) {
+        if (!setRadioPowerForThermal(true)) {
             return TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
         }
 
@@ -9611,7 +9621,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     // Ensure that radio is on. If not able to power on due to phone being
                     // unavailable, return THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-                    if (!setRadioPowerForThermal(subId, true)) {
+                    if (!setRadioPowerForThermal(true)) {
                         thermalMitigationResult =
                                 TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
                         break;
@@ -9656,7 +9666,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     // Turn radio off. If not able to power off due to phone being unavailable,
                     // return THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-                    if (!setRadioPowerForThermal(subId, false)) {
+                    if (!setRadioPowerForThermal(false)) {
                         thermalMitigationResult =
                                 TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
                         break;
@@ -10333,6 +10343,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return (int) sendRequest(CMD_PREPARE_UNATTENDED_REBOOT, null);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Gets the current phone capability.
+     *
+     * Requires carrier privileges or READ_PRECISE_PHONE_STATE permission.
+     * @return the PhoneCapability which describes the data connection capability of modem.
+     * It's used to evaluate possible phone config change, for example from single
+     * SIM device to multi-SIM device.
+     */
+    @Override
+    public PhoneCapability getPhoneCapability() {
+        enforceReadPrivilegedPermission("getPhoneCapability");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mPhoneConfigurationManager.getCurrentPhoneCapability();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
