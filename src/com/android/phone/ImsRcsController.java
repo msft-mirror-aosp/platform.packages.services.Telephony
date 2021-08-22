@@ -94,7 +94,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
         mApp = app;
         TelephonyFrameworkInitializer
                 .getTelephonyServiceManager().getTelephonyImsServiceRegisterer().register(this);
-        mImsResolver = mApp.getImsResolver();
+        mImsResolver = ImsResolver.getInstance();
     }
 
     /**
@@ -419,6 +419,19 @@ public class ImsRcsController extends IImsRcsController.Stub {
             return false;
         }
         return uceCtrlManager.removeUceRequestDisallowedStatus();
+    }
+
+    /**
+     * Set the timeout for contact capabilities request.
+     */
+    // Used for SHELL command only right now.
+    public boolean setCapabilitiesRequestTimeout(int subId, long timeoutAfter) throws ImsException {
+        UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
+                UceControllerManager.class);
+        if (uceCtrlManager == null) {
+            return false;
+        }
+        return uceCtrlManager.setCapabilitiesRequestTimeout(timeoutAfter);
     }
 
     @Override

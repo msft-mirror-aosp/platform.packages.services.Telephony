@@ -16,6 +16,9 @@
 
 package com.android.phone;
 
+import static com.android.internal.telephony.IccProvider.STR_NEW_NUMBER;
+import static com.android.internal.telephony.IccProvider.STR_NEW_TAG;
+
 import android.Manifest;
 import android.annotation.TestApi;
 import android.content.ContentProvider;
@@ -302,8 +305,10 @@ public class SimPhonebookProvider extends ContentProvider {
 
         MatrixCursor result = new MatrixCursor(projection);
         try {
-            addEfToCursor(
-                    result, getActiveSubscriptionInfo(args.subscriptionId), args.efType);
+            SubscriptionInfo info = getActiveSubscriptionInfo(args.subscriptionId);
+            if (info != null) {
+                addEfToCursor(result, info, args.efType);
+            }
         } catch (RemoteException e) {
             // Return an empty cursor. If service to access it is throwing remote
             // exceptions then it's basically the same as not having a SIM.
@@ -662,8 +667,11 @@ public class SimPhonebookProvider extends ContentProvider {
     private boolean updateRecord(PhonebookArgs args, AdnRecord existingRecord, String pin2,
             String newName, String newPhone) {
         try {
+            ContentValues values = new ContentValues();
+            values.put(STR_NEW_TAG, newName);
+            values.put(STR_NEW_NUMBER, newPhone);
             return mIccPhoneBookSupplier.get().updateAdnRecordsInEfByIndexForSubscriber(
-                    args.subscriptionId, existingRecord.getEfid(), newName, newPhone,
+                    args.subscriptionId, existingRecord.getEfid(), values,
                     existingRecord.getRecId(),
                     pin2);
         } catch (RemoteException e) {
@@ -728,6 +736,7 @@ public class SimPhonebookProvider extends ContentProvider {
         }
     }
 
+    @Nullable
     private SubscriptionInfo getActiveSubscriptionInfo(int subId) {
         // Getting the SubscriptionInfo requires READ_PHONE_STATE.
         CallingIdentity identity = clearCallingIdentity();
