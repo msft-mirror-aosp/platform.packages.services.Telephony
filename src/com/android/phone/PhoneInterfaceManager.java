@@ -18,6 +18,8 @@ package com.android.phone;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
+import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_CDMA;
+import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_GSM;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_IMS;
 import static com.android.internal.telephony.PhoneConstants.SUBSCRIPTION_KEY;
 
@@ -132,6 +134,7 @@ import android.util.Pair;
 import com.android.ims.ImsManager;
 import com.android.ims.internal.IImsServiceFeatureCallback;
 import com.android.ims.rcs.uce.eab.EabUtil;
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.CallForwardInfo;
 import com.android.internal.telephony.CallManager;
 import com.android.internal.telephony.CallStateException;
@@ -142,6 +145,7 @@ import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.GbaManager;
+import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.HalVersion;
 import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.ICallForwardingInfoCallback;
@@ -1618,8 +1622,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     if (ar.exception == null && ar.result != null) {
                         request.result = ar.result;
                     } else {
-                        request.result = new IllegalArgumentException(
-                                "Failed to retrieve system selection channels");
+                        request.result = new IllegalStateException(
+                                "Failed to retrieve system selecton channels");
                         if (ar.result == null) {
                             loge("getSystemSelectionChannels: Empty response");
                         } else {
@@ -2093,7 +2097,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private PhoneInterfaceManager(PhoneGlobals app) {
         mApp = app;
         mCM = PhoneGlobals.getInstance().mCM;
-        mImsResolver = PhoneGlobals.getInstance().getImsResolver();
+        mImsResolver = ImsResolver.getInstance();
         mUserManager = (UserManager) app.getSystemService(Context.USER_SERVICE);
         mAppOps = (AppOpsManager)app.getSystemService(Context.APP_OPS_SERVICE);
         mMainThreadHandler = new MainThreadHandler();
@@ -6210,7 +6214,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "setAllowedNetworkTypesForReason");
         if (!TelephonyManager.isValidAllowedNetworkTypesReason(reason)) {
-            Rlog.e(LOG_TAG, "Invalid allowed network type reason: " + reason);
+            loge("setAllowedNetworkTypesForReason: Invalid allowed network type reason: " + reason);
+            return false;
+        }
+        if (!SubscriptionManager.isUsableSubscriptionId(subId)) {
+            loge("setAllowedNetworkTypesForReason: Invalid subscriptionId:" + subId);
             return false;
         }
 
@@ -6429,8 +6437,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private int getCarrierPrivilegeStatusFromCarrierConfigRules(int privilegeFromSim, int uid,
             Phone phone) {
-        if (uid == Process.SYSTEM_UID || uid == Process.PHONE_UID) {
-            // Skip the check if it's one of these special uids
+        if (uid == Process.PHONE_UID) {
+            // Skip the check if it's the phone UID (system UID removed in b/184713596)
+            // TODO (b/184954344): Check for system/phone UID at call site instead of here
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
         }
 
@@ -7299,13 +7308,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         getDefaultDataEnabled());
                 setNetworkSelectionModeAutomatic(subId);
                 Phone phone = getPhone(subId);
-                if (phone != null) {
-                    SubscriptionManager.setSubscriptionProperty(subId,
-                            SubscriptionManager.ALLOWED_NETWORK_TYPES,
-                            "user=" + RadioAccessFamily.getRafFromNetworkType(
-                                    RILConstants.PREFERRED_NETWORK_MODE));
-                    phone.loadAllowedNetworksFromSubscriptionDatabase();
-                }
+                cleanUpAllowedNetworkTypes(phone, subId);
                 setDataRoamingEnabled(subId, getDefaultDataRoamingEnabled(subId));
                 CarrierInfoManager.deleteAllCarrierKeysForImsiEncryption(mApp);
             }
@@ -7329,6 +7332,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    @VisibleForTesting
+    void cleanUpAllowedNetworkTypes(Phone phone, int subId) {
+        if (phone == null || !SubscriptionManager.isUsableSubscriptionId(subId)) {
+            return;
+        }
+        long defaultNetworkType = RadioAccessFamily.getRafFromNetworkType(
+                RILConstants.PREFERRED_NETWORK_MODE);
+        SubscriptionManager.setSubscriptionProperty(subId,
+                SubscriptionManager.ALLOWED_NETWORK_TYPES,
+                "user=" + defaultNetworkType);
+        phone.loadAllowedNetworksFromSubscriptionDatabase();
+        phone.setAllowedNetworkTypes(TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER,
+                defaultNetworkType, null);
     }
 
     private void cleanUpSmsRawTable(Context context) {
@@ -8591,6 +8609,31 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
+     * Start emergency callback mode for GsmCdmaPhone for testing.
+     */
+    @Override
+    public void startEmergencyCallbackMode() {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
+                "startEmergencyCallbackMode");
+        enforceModifyPermission();
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            for (Phone phone : PhoneFactory.getPhones()) {
+                Rlog.d(LOG_TAG, "startEmergencyCallbackMode phone type: " + phone.getPhoneType());
+                if (phone != null && ((phone.getPhoneType() == PHONE_TYPE_GSM)
+                        || (phone.getPhoneType() == PHONE_TYPE_CDMA))) {
+                    GsmCdmaPhone gsmCdmaPhone = (GsmCdmaPhone) phone;
+                    gsmCdmaPhone.obtainMessage(
+                            GsmCdmaPhone.EVENT_EMERGENCY_CALLBACK_MODE_ENTER).sendToTarget();
+                    Rlog.d(LOG_TAG, "startEmergencyCallbackMode: triggered");
+                }
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
      * Update emergency number list for test mode.
      */
     @Override
@@ -8818,7 +8861,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             loge("isMultiSimSupportedInternal: no static configuration available");
             return TelephonyManager.MULTISIM_NOT_SUPPORTED_BY_HARDWARE;
         }
-        if (staticCapability.logicalModemList.size() < 2) {
+        if (staticCapability.getLogicalModemList().size() < 2) {
             loge("isMultiSimSupportedInternal: maximum number of modem is < 2");
             return TelephonyManager.MULTISIM_NOT_SUPPORTED_BY_HARDWARE;
         }
@@ -9043,9 +9086,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
-            List<RadioAccessSpecifier> specifiers =
-                    (List<RadioAccessSpecifier>) sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS,
-                    null, subId, workSource);
+            Object result = sendRequest(CMD_GET_SYSTEM_SELECTION_CHANNELS, null, subId, workSource);
+            if (result instanceof IllegalStateException) {
+                throw (IllegalStateException) result;
+            }
+            List<RadioAccessSpecifier> specifiers = (List<RadioAccessSpecifier>) result;
             if (DBG) log("getSystemSelectionChannels: " + specifiers);
             return specifiers;
         } finally {
@@ -9425,22 +9470,28 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Attempts to set the radio power state for thermal reason. This does not guarantee that the
+     * Attempts to set the radio power state for all phones for thermal reason.
+     * This does not guarantee that the
      * requested radio power state will actually be set. See {@link
      * PhoneInternalInterface#setRadioPowerForReason} for more details.
      *
-     * @param subId the subscription ID of the phone requesting to set the radio power state.
      * @param enable {@code true} if trying to turn radio on.
      * @return {@code true} if phone setRadioPowerForReason was called. Otherwise, returns {@code
      * false}.
      */
-    private boolean setRadioPowerForThermal(int subId, boolean enable) {
-        Phone phone = getPhone(subId);
-        if (phone != null) {
-            phone.setRadioPowerForReason(enable, Phone.RADIO_POWER_REASON_THERMAL);
-            return true;
+    private boolean setRadioPowerForThermal(boolean enable) {
+        boolean isPhoneAvailable = false;
+        for (int i = 0; i < TelephonyManager.getDefault().getActiveModemCount(); i++) {
+            Phone phone = PhoneFactory.getPhone(i);
+            if (phone != null) {
+                phone.setRadioPowerForReason(enable, Phone.RADIO_POWER_REASON_THERMAL);
+                isPhoneAvailable = true;
+            }
         }
-        return false;
+
+        // return true if successfully informed the phone object about the thermal radio power
+        // request.
+        return isPhoneAvailable;
     }
 
     private int handleDataThrottlingRequest(int subId,
@@ -9454,7 +9505,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         // Ensure that radio is on. If not able to power on due to phone being unavailable, return
         // THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-        if (!setRadioPowerForThermal(subId, true)) {
+        if (!setRadioPowerForThermal(true)) {
             return TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
         }
 
@@ -9467,7 +9518,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 throw new IllegalArgumentException("modem returned INVALID_ARGUMENTS");
             } else if (thermalMitigationResult
                     == MODEM_DOES_NOT_SUPPORT_DATA_THROTTLING_ERROR_CODE) {
-                throw new IllegalArgumentException("modem does not support data throttling");
+                log("Modem likely does not support data throttling on secondary carrier. Data " +
+                        "throttling action = " + dataThrottlingRequest.getDataThrottlingAction());
+                return TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_ERROR;
             }
             return thermalMitigationResult;
         }
@@ -9484,6 +9537,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
 
         return sThermalMitigationAllowlistedPackages;
+    }
+
+    private boolean isAnyPhoneInEmergencyState() {
+        TelecomManager tm = mApp.getSystemService(TelecomManager.class);
+        if (tm.isInEmergencyCall()) {
+            Log.e(LOG_TAG , "Phone state is not valid. One of the phones is in an emergency call");
+            return true;
+        }
+        for (Phone phone : PhoneFactory.getPhones()) {
+            if (phone.isInEmergencySmsMode() || phone.isInEcm()) {
+                Log.e(LOG_TAG, "Phone state is not valid. isInEmergencySmsMode = "
+                    + phone.isInEmergencySmsMode() + " isInEmergencyCallbackMode = "
+                    + phone.isInEcm());
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -9550,7 +9621,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     // Ensure that radio is on. If not able to power on due to phone being
                     // unavailable, return THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-                    if (!setRadioPowerForThermal(subId, true)) {
+                    if (!setRadioPowerForThermal(true)) {
                         thermalMitigationResult =
                                 TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
                         break;
@@ -9568,8 +9639,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     TelecomAccountRegistry registry = TelecomAccountRegistry.getInstance(null);
                     if (registry != null) {
-                        TelephonyConnectionService service =
-                                registry.getTelephonyConnectionService();
                         Phone phone = getPhone(subId);
                         if (phone == null) {
                             thermalMitigationResult =
@@ -9577,19 +9646,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             break;
                         }
 
-                        if (PhoneConstantConversions.convertCallState(phone.getState())
-                                != TelephonyManager.CALL_STATE_IDLE
-                                || phone.isInEmergencySmsMode() || phone.isInEcm()
-                                || (service != null && service.isEmergencyCallPending())) {
-                            String errorMessage = "Phone state is not valid. call state = "
-                                    + PhoneConstantConversions.convertCallState(phone.getState())
-                                    + " isInEmergencySmsMode = " + phone.isInEmergencySmsMode()
-                                    + " isInEmergencyCallbackMode = " + phone.isInEcm();
-                            errorMessage += service == null
-                                    ? " TelephonyConnectionService is null"
-                                    : " isEmergencyCallPending = "
-                                            + service.isEmergencyCallPending();
-                            Log.e(LOG_TAG, errorMessage);
+                        TelephonyConnectionService service =
+                                registry.getTelephonyConnectionService();
+                        if (service != null && service.isEmergencyCallPending()) {
+                            Log.e(LOG_TAG, "An emergency call is pending");
+                            thermalMitigationResult =
+                                    TelephonyManager.THERMAL_MITIGATION_RESULT_INVALID_STATE;
+                            break;
+                        } else if (isAnyPhoneInEmergencyState()) {
                             thermalMitigationResult =
                                     TelephonyManager.THERMAL_MITIGATION_RESULT_INVALID_STATE;
                             break;
@@ -9602,7 +9666,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                     // Turn radio off. If not able to power off due to phone being unavailable,
                     // return THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE.
-                    if (!setRadioPowerForThermal(subId, false)) {
+                    if (!setRadioPowerForThermal(false)) {
                         thermalMitigationResult =
                                 TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
                         break;
@@ -9734,9 +9798,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             RcsProvisioningMonitor rpm = RcsProvisioningMonitor.getInstance();
             if (rpm != null) {
-                return rpm.isRcsVolteSingleRegistrationEnabled(subId);
+                Boolean isCapable = rpm.isRcsVolteSingleRegistrationEnabled(subId);
+                if (isCapable != null) {
+                    return isCapable;
+                }
             }
-            return false;
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
+                    "service is temporarily unavailable.");
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -10158,6 +10226,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
+    /**
+     * Remove UCE requests cannot be sent to the network status.
+     */
+    // Used for SHELL command only.
+    @Override
+    public boolean setCapabilitiesRequestTimeout(int subId, long timeoutAfterMs) {
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setCapRequestTimeout");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mApp.imsRcsController.setCapabilitiesRequestTimeout(subId, timeoutAfterMs);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode(), e.getMessage());
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
 
     @Override
     public void setSignalStrengthUpdateRequest(int subId, SignalStrengthUpdateRequest request,
@@ -10259,6 +10343,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return (int) sendRequest(CMD_PREPARE_UNATTENDED_REBOOT, null);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Gets the current phone capability.
+     *
+     * Requires carrier privileges or READ_PRECISE_PHONE_STATE permission.
+     * @return the PhoneCapability which describes the data connection capability of modem.
+     * It's used to evaluate possible phone config change, for example from single
+     * SIM device to multi-SIM device.
+     */
+    @Override
+    public PhoneCapability getPhoneCapability() {
+        enforceReadPrivilegedPermission("getPhoneCapability");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mPhoneConfigurationManager.getCurrentPhoneCapability();
         } finally {
             Binder.restoreCallingIdentity(identity);
         }

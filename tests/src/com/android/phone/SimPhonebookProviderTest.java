@@ -28,6 +28,7 @@ import static com.google.common.truth.Truth.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -51,6 +52,7 @@ import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.provider.ProviderTestRule;
 
 import com.android.internal.telephony.IIccPhoneBook;
+import com.android.internal.telephony.uicc.AdnCapacity;
 import com.android.internal.telephony.uicc.AdnRecord;
 import com.android.internal.telephony.uicc.IccConstants;
 
@@ -229,6 +231,19 @@ public final class SimPhonebookProviderTest {
             assertThat(Objects.requireNonNull(cursor).getColumnNames()).asList()
                     .containsExactlyElementsIn(
                             SimPhonebookProvider.ELEMENTARY_FILES_ALL_COLUMNS);
+        }
+    }
+
+    @Test
+    public void query_elementaryFilesItem_nonExistentSubscriptionId_returnsEmptyCursor() {
+        setupSimsWithSubscriptionIds(1);
+        mIccPhoneBook.makeAllEfsSupported(1);
+
+        // Subscription ID 2 does not exist
+        Uri nonExistentElementaryFileItemUri = ElementaryFiles.getItemUri(2, EF_ADN);
+
+        try (Cursor cursor = mResolver.query(nonExistentElementaryFileItemUri, null, null, null)) {
+            assertThat(Objects.requireNonNull(cursor)).hasCount(0);
         }
     }
 
@@ -1147,6 +1162,10 @@ public final class SimPhonebookProviderTest {
     public void subscriptionsChange_callsNotifyChange() {
         // Clear invocations that happened in setUp
         Mockito.reset(mMockSubscriptionManager);
+        // Stubbing this prevents the spied instance from calling the listener when it is added
+        // which may cause flakiness.
+        doNothing().when(mMockSubscriptionManager)
+                .addOnSubscriptionsChangedListener(any(), any());
         setupSimsWithSubscriptionIds(1);
         mIccPhoneBook.makeAllEfsSupported(1);
         SimPhonebookProvider.ContentNotifier mockNotifier = mock(
@@ -1158,9 +1177,20 @@ public final class SimPhonebookProviderTest {
                 mResolver, mMockSubscriptionManager, mIccPhoneBook, mockNotifier);
         verify(mMockSubscriptionManager).addOnSubscriptionsChangedListener(
                 any(), listenerCaptor.capture());
+
+        // Fake the initial call that is made by SubscriptionManager when a listener is registered
+        // with addOnSubscriptionsChangedListener
         listenerCaptor.getValue().onSubscriptionsChanged();
+
+        // First subscription change
         setupSimsWithSubscriptionIds(1, 2);
         listenerCaptor.getValue().onSubscriptionsChanged();
+
+        // Second subscription change
+        setupSimsWithSubscriptionIds(1);
+        listenerCaptor.getValue().onSubscriptionsChanged();
+
+        // Listener is called but subscriptions didn't change so this won't notify
         listenerCaptor.getValue().onSubscriptionsChanged();
 
         verify(mockNotifier, times(2)).notifyChange(eq(SimPhonebookContract.AUTHORITY_URI));
@@ -1394,15 +1424,18 @@ public final class SimPhonebookProviderTest {
         }
 
         @Override
-        public boolean updateAdnRecordsInEfBySearch(int efid, String oldTag, String oldPhoneNumber,
-                String newTag, String newPhoneNumber, String pin2) {
-            return updateAdnRecordsInEfBySearchForSubscriber(
-                    mDefaultSubscriptionId, efid,
-                    oldTag, oldPhoneNumber, newTag, newPhoneNumber, pin2);
+        public boolean updateAdnRecordsInEfBySearchForSubscriber(int subId, int efid,
+                ContentValues values, String pin2) {
+            final String oldTag = values.getAsString(IccProvider.STR_TAG);
+            final String oldPhoneNumber = values.getAsString(IccProvider.STR_NUMBER);
+            final String newTag = values.getAsString(IccProvider.STR_NEW_TAG);
+            final String newPhoneNumber = values.getAsString(IccProvider.STR_NEW_NUMBER);
+            return updateAdnRecordsInEfBySearchForSubscriber(subId, efid, oldTag, oldPhoneNumber,
+                    newTag, newPhoneNumber, pin2);
+
         }
 
-        @Override
-        public boolean updateAdnRecordsInEfBySearchForSubscriber(int subId, int efid, String oldTag,
+        private boolean updateAdnRecordsInEfBySearchForSubscriber(int subId, int efid, String oldTag,
                 String oldPhoneNumber, String newTag, String newPhoneNumber, String pin2) {
             if (!oldTag.isEmpty() || !oldPhoneNumber.isEmpty()) {
                 throw new IllegalArgumentException(
@@ -1413,14 +1446,16 @@ public final class SimPhonebookProviderTest {
         }
 
         @Override
-        public boolean updateAdnRecordsInEfByIndex(int efid, String newTag, String newPhoneNumber,
-                int index, String pin2) {
-            return updateAdnRecordsInEfByIndexForSubscriber(mDefaultSubscriptionId,
-                    efid, newTag, newPhoneNumber, index, pin2);
+        public boolean updateAdnRecordsInEfByIndexForSubscriber(int subId, int efid,
+                ContentValues values, int index, String pin2) {
+            final String newTag = values.getAsString(IccProvider.STR_NEW_TAG);
+            final String newPhoneNumber = values.getAsString(IccProvider.STR_NEW_NUMBER);
+            return updateAdnRecordsInEfByIndexForSubscriber(subId, efid, newTag, newPhoneNumber,
+                    index, pin2);
+
         }
 
-        @Override
-        public boolean updateAdnRecordsInEfByIndexForSubscriber(int subId, int efid, String newTag,
+        private boolean updateAdnRecordsInEfByIndexForSubscriber(int subId, int efid, String newTag,
                 String newPhoneNumber, int index, String pin2) {
             AdnRecord[] records = mRecords.computeIfAbsent(Pair.create(subId, efid), unused ->
                     createEmptyRecords(efid, 100));
@@ -1442,6 +1477,11 @@ public final class SimPhonebookProviderTest {
             }
             int count = mRecords.get(key).length;
             return new int[]{recordSize, recordSize * count, count};
+        }
+
+        @Override
+        public AdnCapacity getAdnRecordsCapacityForSubscriber(int subId) {
+            return new AdnCapacity(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
     }
 
