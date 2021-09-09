@@ -1220,29 +1220,31 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         ResultReceiver result = (ResultReceiver) request.argument;
                         Bundle bundle = new Bundle();
                         bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY,
-                                new ModemActivityInfo(0, 0, 0, new int[0], 0));
+                                new ModemActivityInfo(0, 0, 0,
+                                        new int[ModemActivityInfo.getNumTxPowerLevels()], 0));
                         result.send(0, bundle);
                     }
                     break;
 
-                case EVENT_GET_MODEM_ACTIVITY_INFO_DONE:
+                case EVENT_GET_MODEM_ACTIVITY_INFO_DONE: {
                     ar = (AsyncResult) msg.obj;
                     request = (MainThreadRequest) ar.userObj;
                     ResultReceiver result = (ResultReceiver) request.argument;
 
-                    ModemActivityInfo ret = new ModemActivityInfo(0, 0, 0, new int[0], 0);
+                    ModemActivityInfo ret = null;
+                    int error = 0;
                     if (ar.exception == null && ar.result != null) {
                         // Update the last modem activity info and the result of the request.
                         ModemActivityInfo info = (ModemActivityInfo) ar.result;
                         if (isModemActivityInfoValid(info)) {
-                            int[] mergedTxTimeMs = new int[ModemActivityInfo.TX_POWER_LEVELS];
+                            int[] mergedTxTimeMs = new int[ModemActivityInfo.getNumTxPowerLevels()];
                             int[] txTimeMs = info.getTransmitTimeMillis();
                             int[] lastModemTxTimeMs = mLastModemActivityInfo
                                     .getTransmitTimeMillis();
                             for (int i = 0; i < mergedTxTimeMs.length; i++) {
                                 mergedTxTimeMs[i] = txTimeMs[i] + lastModemTxTimeMs[i];
                             }
-                            mLastModemActivityInfo.setTimestamp(info.getTimestamp());
+                            mLastModemActivityInfo.setTimestamp(info.getTimestampMillis());
                             mLastModemActivityInfo.setSleepTimeMillis(info.getSleepTimeMillis()
                                     + mLastModemActivityInfo.getSleepTimeMillis());
                             mLastModemActivityInfo.setIdleTimeMillis(info.getIdleTimeMillis()
@@ -1252,7 +1254,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     info.getReceiveTimeMillis()
                                             + mLastModemActivityInfo.getReceiveTimeMillis());
                         }
-                        ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestamp(),
+                        ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestampMillis(),
                                 mLastModemActivityInfo.getSleepTimeMillis(),
                                 mLastModemActivityInfo.getIdleTimeMillis(),
                                 mLastModemActivityInfo.getTransmitTimeMillis(),
@@ -1260,18 +1262,29 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     } else {
                         if (ar.result == null) {
                             loge("queryModemActivityInfo: Empty response");
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_INVALID_INFO_RECEIVED;
                         } else if (ar.exception instanceof CommandException) {
                             loge("queryModemActivityInfo: CommandException: " +
                                     ar.exception);
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_MODEM_RESPONSE_ERROR;
                         } else {
                             loge("queryModemActivityInfo: Unknown exception");
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_UNKNOWN;
                         }
                     }
                     Bundle bundle = new Bundle();
-                    bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
+                    if (ret != null) {
+                        bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
+                    } else {
+                        bundle.putInt(TelephonyManager.EXCEPTION_RESULT_KEY, error);
+                    }
                     result.send(0, bundle);
                     notifyRequester(request);
                     break;
+                }
 
                 case CMD_SET_ALLOWED_CARRIERS:
                     request = (MainThreadRequest) msg.obj;
@@ -7417,7 +7430,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     private final ModemActivityInfo mLastModemActivityInfo =
-            new ModemActivityInfo(0, 0, 0, new int[0], 0);
+            new ModemActivityInfo(0, 0, 0, new int[ModemActivityInfo.getNumTxPowerLevels()], 0);
 
     /**
      * Responds to the ResultReceiver with the {@link android.telephony.ModemActivityInfo} object
@@ -7447,12 +7460,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return false;
         }
         int activityDurationMs =
-            (int) (info.getTimestamp() - mLastModemActivityInfo.getTimestamp());
-        int totalTxTimeMs = 0;
-        int[] txTimeMs = info.getTransmitTimeMillis();
-        for (int i = 0; i < info.getTransmitPowerInfo().size(); i++) {
-            totalTxTimeMs += txTimeMs[i];
-        }
+                (int) (info.getTimestampMillis() - mLastModemActivityInfo.getTimestampMillis());
+        int totalTxTimeMs = Arrays.stream(info.getTransmitTimeMillis()).sum();
+
         return (info.isValid()
             && (info.getSleepTimeMillis() <= activityDurationMs)
             && (info.getIdleTimeMillis() <= activityDurationMs)
