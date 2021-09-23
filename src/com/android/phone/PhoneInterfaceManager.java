@@ -106,6 +106,7 @@ import android.telephony.UiccSlotInfo;
 import android.telephony.UssdResponse;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.data.ApnSetting;
+import android.telephony.data.SlicingConfig;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.gba.GbaAuthRequest;
 import android.telephony.gba.UaSecurityProtocolIdentifier;
@@ -182,6 +183,7 @@ import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
 import com.android.internal.telephony.uicc.IccRecords;
 import com.android.internal.telephony.uicc.IccUtils;
+import com.android.internal.telephony.uicc.PinStorage;
 import com.android.internal.telephony.uicc.SIMRecords;
 import com.android.internal.telephony.uicc.UiccCard;
 import com.android.internal.telephony.uicc.UiccCardApplication;
@@ -329,6 +331,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int CMD_SET_ALLOWED_NETWORK_TYPES_FOR_REASON = 107;
     private static final int EVENT_SET_ALLOWED_NETWORK_TYPES_FOR_REASON_DONE = 108;
     private static final int CMD_PREPARE_UNATTENDED_REBOOT = 109;
+    private static final int CMD_GET_SLICING_CONFIG = 110;
+    private static final int EVENT_GET_SLICING_CONFIG_DONE = 111;
 
     // Parameters of select command.
     private static final int SELECT_COMMAND = 0xA4;
@@ -1220,29 +1224,31 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         ResultReceiver result = (ResultReceiver) request.argument;
                         Bundle bundle = new Bundle();
                         bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY,
-                                new ModemActivityInfo(0, 0, 0, new int[0], 0));
+                                new ModemActivityInfo(0, 0, 0,
+                                        new int[ModemActivityInfo.getNumTxPowerLevels()], 0));
                         result.send(0, bundle);
                     }
                     break;
 
-                case EVENT_GET_MODEM_ACTIVITY_INFO_DONE:
+                case EVENT_GET_MODEM_ACTIVITY_INFO_DONE: {
                     ar = (AsyncResult) msg.obj;
                     request = (MainThreadRequest) ar.userObj;
                     ResultReceiver result = (ResultReceiver) request.argument;
 
-                    ModemActivityInfo ret = new ModemActivityInfo(0, 0, 0, new int[0], 0);
+                    ModemActivityInfo ret = null;
+                    int error = 0;
                     if (ar.exception == null && ar.result != null) {
                         // Update the last modem activity info and the result of the request.
                         ModemActivityInfo info = (ModemActivityInfo) ar.result;
                         if (isModemActivityInfoValid(info)) {
-                            int[] mergedTxTimeMs = new int[ModemActivityInfo.TX_POWER_LEVELS];
+                            int[] mergedTxTimeMs = new int[ModemActivityInfo.getNumTxPowerLevels()];
                             int[] txTimeMs = info.getTransmitTimeMillis();
                             int[] lastModemTxTimeMs = mLastModemActivityInfo
                                     .getTransmitTimeMillis();
                             for (int i = 0; i < mergedTxTimeMs.length; i++) {
                                 mergedTxTimeMs[i] = txTimeMs[i] + lastModemTxTimeMs[i];
                             }
-                            mLastModemActivityInfo.setTimestamp(info.getTimestamp());
+                            mLastModemActivityInfo.setTimestamp(info.getTimestampMillis());
                             mLastModemActivityInfo.setSleepTimeMillis(info.getSleepTimeMillis()
                                     + mLastModemActivityInfo.getSleepTimeMillis());
                             mLastModemActivityInfo.setIdleTimeMillis(info.getIdleTimeMillis()
@@ -1252,7 +1258,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     info.getReceiveTimeMillis()
                                             + mLastModemActivityInfo.getReceiveTimeMillis());
                         }
-                        ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestamp(),
+                        ret = new ModemActivityInfo(mLastModemActivityInfo.getTimestampMillis(),
                                 mLastModemActivityInfo.getSleepTimeMillis(),
                                 mLastModemActivityInfo.getIdleTimeMillis(),
                                 mLastModemActivityInfo.getTransmitTimeMillis(),
@@ -1260,18 +1266,29 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     } else {
                         if (ar.result == null) {
                             loge("queryModemActivityInfo: Empty response");
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_INVALID_INFO_RECEIVED;
                         } else if (ar.exception instanceof CommandException) {
                             loge("queryModemActivityInfo: CommandException: " +
                                     ar.exception);
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_MODEM_RESPONSE_ERROR;
                         } else {
                             loge("queryModemActivityInfo: Unknown exception");
+                            error = TelephonyManager.ModemActivityInfoException
+                                    .ERROR_UNKNOWN;
                         }
                     }
                     Bundle bundle = new Bundle();
-                    bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
+                    if (ret != null) {
+                        bundle.putParcelable(TelephonyManager.MODEM_ACTIVITY_RESULT_KEY, ret);
+                    } else {
+                        bundle.putInt(TelephonyManager.EXCEPTION_RESULT_KEY, error);
+                    }
                     result.send(0, bundle);
                     notifyRequester(request);
                     break;
+                }
 
                 case CMD_SET_ALLOWED_CARRIERS:
                     request = (MainThreadRequest) msg.obj;
@@ -1700,8 +1717,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         // If the operation is successful, update the PIN storage
                         Pair<String, String> passwords = (Pair<String, String>) request.argument;
                         int phoneId = getPhoneFromRequest(request).getPhoneId();
-                        UiccController.getInstance().getPinStorage()
-                                .storePin(passwords.second, phoneId);
+                        PinStorage pinStorage = UiccController.getInstance().getPinStorage();
+                        pinStorage.storePin(passwords.second, phoneId,
+                                pinStorage.getIccid(phoneId));
                     } else {
                         request.result = msg.arg1;
                     }
@@ -1725,8 +1743,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         Pair<Boolean, String> enabled = (Pair<Boolean, String>) request.argument;
                         int phoneId = getPhoneFromRequest(request).getPhoneId();
                         if (enabled.first) {
-                            UiccController.getInstance().getPinStorage()
-                                    .storePin(enabled.second, phoneId);
+                            PinStorage pinStorage = UiccController.getInstance().getPinStorage();
+                            pinStorage.storePin(enabled.second, phoneId,
+                                    pinStorage.getIccid(phoneId));
                         } else {
                             UiccController.getInstance().getPinStorage().clearPin(phoneId);
                         }
@@ -1893,6 +1912,42 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     ar = (AsyncResult) msg.obj;
                     request = (MainThreadRequest) ar.userObj;
                     request.result = ar.exception != null ? ar.exception : true;
+                    notifyRequester(request);
+                    break;
+                }
+
+                case CMD_GET_SLICING_CONFIG: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_GET_SLICING_CONFIG_DONE, request);
+                    request.phone.getSlicingConfig(onCompleted);
+                    break;
+                }
+                case EVENT_GET_SLICING_CONFIG_DONE: {
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    ResultReceiver result = (ResultReceiver) request.argument;
+
+                    SlicingConfig slicingConfig = null;
+                    Bundle bundle = new Bundle();
+                    int resultCode = 0;
+                    if (ar.exception != null) {
+                        Log.e(LOG_TAG, "Exception retrieving slicing configuration="
+                                + ar.exception);
+                        resultCode = TelephonyManager.SlicingException.ERROR_MODEM_ERROR;
+                    } else if (ar.result == null) {
+                        Log.w(LOG_TAG, "Timeout Waiting for slicing configuration!");
+                        resultCode = TelephonyManager.SlicingException.ERROR_TIMEOUT;
+                    } else {
+                        // use the result as returned
+                        resultCode = TelephonyManager.SlicingException.SUCCESS;
+                        slicingConfig = (SlicingConfig) ar.result;
+                    }
+
+                    if (slicingConfig == null) {
+                        slicingConfig = new SlicingConfig();
+                    }
+                    bundle.putParcelable(TelephonyManager.KEY_SLICING_CONFIG_HANDLE, slicingConfig);
+                    result.send(resultCode, bundle);
                     notifyRequester(request);
                     break;
                 }
@@ -2392,7 +2447,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             resultArray[1] = mRetryCount;
 
             if (mResult == PhoneConstants.PIN_RESULT_SUCCESS && pin.length() > 0) {
-                UiccController.getInstance().getPinStorage().storePin(pin, mPhoneId);
+                PinStorage pinStorage = UiccController.getInstance().getPinStorage();
+                pinStorage.storePin(pin, mPhoneId, pinStorage.getIccid(mPhoneId));
             }
 
             return resultArray;
@@ -7417,7 +7473,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     private final ModemActivityInfo mLastModemActivityInfo =
-            new ModemActivityInfo(0, 0, 0, new int[0], 0);
+            new ModemActivityInfo(0, 0, 0, new int[ModemActivityInfo.getNumTxPowerLevels()], 0);
 
     /**
      * Responds to the ResultReceiver with the {@link android.telephony.ModemActivityInfo} object
@@ -7447,12 +7503,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return false;
         }
         int activityDurationMs =
-            (int) (info.getTimestamp() - mLastModemActivityInfo.getTimestamp());
-        int totalTxTimeMs = 0;
-        int[] txTimeMs = info.getTransmitTimeMillis();
-        for (int i = 0; i < info.getTransmitPowerInfo().size(); i++) {
-            totalTxTimeMs += txTimeMs[i];
-        }
+                (int) (info.getTimestampMillis() - mLastModemActivityInfo.getTimestampMillis());
+        int totalTxTimeMs = Arrays.stream(info.getTransmitTimeMillis()).sum();
+
         return (info.isValid()
             && (info.getSleepTimeMillis() <= activityDurationMs)
             && (info.getIdleTimeMillis() <= activityDurationMs)
@@ -10362,6 +10415,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mPhoneConfigurationManager.getCurrentPhoneCapability();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Request to get the current slicing configuration including URSP rules and
+     * NSSAIs (configured, allowed and rejected).
+     *
+     * Requires carrier privileges or READ_PRIVILEGED_PHONE_STATE permission.
+     */
+    @Override
+    public void getSlicingConfig(ResultReceiver callback) {
+        enforceReadPrivilegedPermission("getSlicingConfig");
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getDefaultPhone();
+            sendRequestAsync(CMD_GET_SLICING_CONFIG, callback, phone, null);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
