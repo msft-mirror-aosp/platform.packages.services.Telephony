@@ -180,16 +180,16 @@ public final class SimPhonebookProviderTest {
     public void query_entityFiles_multiSim_returnsCursorWithRowForEachSimEf() {
         setupSimsWithSubscriptionIds(2, 3, 7);
 
-        mIccPhoneBook.setRecordsSize(2, IccConstants.EF_ADN, 10, 25);
-        mIccPhoneBook.setRecordsSize(2, IccConstants.EF_FDN, 5, 20);
-        mIccPhoneBook.setRecordsSize(2, IccConstants.EF_SDN, 15, 20);
-        mIccPhoneBook.setRecordsSize(3, IccConstants.EF_ADN, 100, 30);
+        mIccPhoneBook.setupEfWithSizes(2, IccConstants.EF_ADN, 10, 25);
+        mIccPhoneBook.setupEfWithSizes(2, IccConstants.EF_FDN, 5, 20);
+        mIccPhoneBook.setupEfWithSizes(2, IccConstants.EF_SDN, 15, 20);
+        mIccPhoneBook.setupEfWithSizes(3, IccConstants.EF_ADN, 100, 30);
         // These Will be omitted from results because zero size indicates the EF is not supported.
-        mIccPhoneBook.setRecordsSize(3, IccConstants.EF_FDN, 0, 0);
-        mIccPhoneBook.setRecordsSize(3, IccConstants.EF_SDN, 0, 0);
-        mIccPhoneBook.setRecordsSize(7, IccConstants.EF_ADN, 0, 0);
-        mIccPhoneBook.setRecordsSize(7, IccConstants.EF_FDN, 0, 0);
-        mIccPhoneBook.setRecordsSize(7, IccConstants.EF_SDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(3, IccConstants.EF_FDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(3, IccConstants.EF_SDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(7, IccConstants.EF_ADN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(7, IccConstants.EF_FDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(7, IccConstants.EF_SDN, 0, 0);
 
         String[] projection = {
                 ElementaryFiles.SLOT_INDEX, ElementaryFiles.SUBSCRIPTION_ID,
@@ -211,12 +211,41 @@ public final class SimPhonebookProviderTest {
     public void query_entityFiles_simWithZeroSizes_returnsEmptyCursor() {
         setupSimsWithSubscriptionIds(1);
 
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 0, 0);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_FDN, 0, 0);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_SDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_FDN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_SDN, 0, 0);
 
         try (Cursor cursor = mResolver.query(ElementaryFiles.CONTENT_URI, null, null, null)) {
             assertThat(cursor).hasCount(0);
+        }
+    }
+
+    /**
+     * USIM cards support more than 255 records by having multiple files for one EF type but
+     * IIccPhoneBook.getAdnRecordsSizeForSubscriber returns the size for a single file and so is
+     * inaccurate for such SIMs.
+     *
+     * <p>See b/201385523#comment4 and b/201685690
+     */
+    @Test
+    public void query_entityFiles_adnRecordCountExceedsSize_returnsAdnRecordCountAsMaxRecords() {
+        setupSimsWithSubscriptionIds(1);
+
+        // There are 400 records returned by getAdnRecordsInEfForSubscriber but the count returned
+        // by getAdnRecordsSizeForSubscriber is only 200.
+        AdnRecord[] records = mIccPhoneBook.createEmptyRecords(IccConstants.EF_ADN, 400);
+        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 200, 20);
+        mIccPhoneBook.setRecords(1, IccConstants.EF_ADN, records);
+
+        String[] projection = {
+                ElementaryFiles.SUBSCRIPTION_ID, ElementaryFiles.EF_TYPE,
+                ElementaryFiles.MAX_RECORDS
+        };
+        try (Cursor cursor = mResolver.query(
+                ElementaryFiles.CONTENT_URI, projection, null, null)) {
+            assertThat(cursor).hasCount(1);
+            assertThat(cursor)
+                    .atRow(0).hasRowValues(1, ElementaryFiles.EF_ADN, 400);
         }
     }
 
@@ -548,7 +577,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void query_adnRecords_zeroSizeEf_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 0, 0);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 0, 0);
 
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> mResolver.query(SimRecords.getContentUri(1, EF_ADN), null, null, null));
@@ -617,9 +646,9 @@ public final class SimPhonebookProviderTest {
     @Test
     public void query_itemUriEmptyRecord_returnsEmptyCursor() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 30);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_FDN, 1, 30);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_SDN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_FDN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_SDN, 1, 30);
 
         try (Cursor adnItem = mResolver.query(SimRecords.getItemUri(1, ElementaryFiles.EF_ADN, 1),
                 null, null, null);
@@ -637,9 +666,9 @@ public final class SimPhonebookProviderTest {
     @Test
     public void query_itemUriIndexExceedsMax_returnsEmptyCursor() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 30);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_FDN, 1, 30);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_SDN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_FDN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_SDN, 1, 30);
 
         try (Cursor adnItem = mResolver.query(SimRecords.getItemUri(1, ElementaryFiles.EF_ADN, 2),
                 null, null, null);
@@ -740,7 +769,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_efFull_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 30);
         mIccPhoneBook.addRecord(1, IccConstants.EF_ADN, "Existing", "8005550101");
 
         ContentValues values = new ContentValues();
@@ -842,7 +871,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_phoneNumberOmitted_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 25);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 25);
 
         ContentValues values = new ContentValues();
         values.put(SimRecords.NAME, "Name");
@@ -855,7 +884,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_nameTooLong_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 25);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 25);
 
         ContentValues values = new ContentValues();
         // Name is limited to 11 characters when the max record size is 25
@@ -878,7 +907,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_phoneNumberTooLong_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 25);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 25);
 
         ContentValues values = new ContentValues();
         values.put(SimRecords.NAME, "Name");
@@ -894,7 +923,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_numberWithInvalidCharacters_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 32);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 32);
 
         ContentValues values = new ContentValues();
         values.put(SimRecords.NAME, "Name");
@@ -914,7 +943,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void insert_unsupportedColumn_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 25);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 25);
 
         ContentValues values = new ContentValues();
         values.put(SimRecords.NAME, "Name");
@@ -1006,7 +1035,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void update_indexExceedingMax_returnsZero() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 30);
 
         ContentValues values = new ContentValues();
         values.put(SimRecords.NAME, "name");
@@ -1045,7 +1074,7 @@ public final class SimPhonebookProviderTest {
     public void delete_indexExceedingMax_returnsZero() {
         setupSimsWithSubscriptionIds(1);
         mIccPhoneBook.makeAllEfsSupported(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 30);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 30);
 
         int result = mResolver.delete(SimRecords.getItemUri(1, ElementaryFiles.EF_ADN, 2), null);
 
@@ -1066,7 +1095,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void update_nameOrNumberTooLong_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 25);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 25);
         mIccPhoneBook.addRecord(1, IccConstants.EF_ADN, "Initial", "8005550101");
 
         ContentValues values = new ContentValues();
@@ -1096,7 +1125,7 @@ public final class SimPhonebookProviderTest {
     @Test
     public void update_numberWithInvalidCharacters_throwsCorrectException() {
         setupSimsWithSubscriptionIds(1);
-        mIccPhoneBook.setRecordsSize(1, IccConstants.EF_ADN, 1, 32);
+        mIccPhoneBook.setupEfWithSizes(1, IccConstants.EF_ADN, 1, 32);
         mIccPhoneBook.addRecord(1, IccConstants.EF_ADN, "Initial", "8005550101");
 
         ContentValues values = new ContentValues();
@@ -1308,7 +1337,7 @@ public final class SimPhonebookProviderTest {
         // The key for both maps is the (subscription ID, efid)
         private Map<Pair<Integer, Integer>, AdnRecord[]> mRecords = new HashMap<>();
         // The value is the single record size
-        private Map<Pair<Integer, Integer>, Integer> mRecordSizes = new HashMap<>();
+        private Map<Pair<Integer, Integer>, int[]> mRecordSizes = new HashMap<>();
 
         private int mDefaultSubscriptionId = 101;
 
@@ -1316,7 +1345,7 @@ public final class SimPhonebookProviderTest {
             // Assume that if records are being added then the test wants it to be a valid
             // elementary file so set sizes as well.
             if (!mRecordSizes.containsKey(key)) {
-                setRecordsSize(key.first, key.second,
+                setupEfWithSizes(key.first, key.second,
                         Math.max(record.getRecId(), DEFAULT_RECORDS_COUNT), DEFAULT_RECORD_SIZE);
             }
             mRecords.get(key)[record.getRecId() - 1] = record;
@@ -1386,18 +1415,33 @@ public final class SimPhonebookProviderTest {
          * subscription IDs.
          */
         public void makeAllEfsSupported(int subscriptionId) {
-            setRecordsSize(subscriptionId, IccConstants.EF_ADN, DEFAULT_RECORDS_COUNT,
+            setupEfWithSizes(subscriptionId, IccConstants.EF_ADN, DEFAULT_RECORDS_COUNT,
                     DEFAULT_RECORD_SIZE);
-            setRecordsSize(subscriptionId, IccConstants.EF_FDN, DEFAULT_RECORDS_COUNT,
+            setupEfWithSizes(subscriptionId, IccConstants.EF_FDN, DEFAULT_RECORDS_COUNT,
                     DEFAULT_RECORD_SIZE);
-            setRecordsSize(subscriptionId, IccConstants.EF_SDN, DEFAULT_RECORDS_COUNT,
+            setupEfWithSizes(subscriptionId, IccConstants.EF_SDN, DEFAULT_RECORDS_COUNT,
                     DEFAULT_RECORD_SIZE);
+        }
+
+        public void setRecords(int subscriptionId, int efid, AdnRecord[] records) {
+            mRecords.put(Pair.create(subscriptionId, efid), records);
         }
 
         public void setRecordsSize(int subscriptionId, int efid, int maxRecordCount,
                 int maxRecordSize) {
+            setRecordsSize(Pair.create(subscriptionId, efid), maxRecordCount, maxRecordSize);
+        }
+
+        private void setRecordsSize(Pair<Integer, Integer> key, int maxRecordCount,
+                int maxRecordSize) {
+            int[] sizes = { maxRecordSize, maxRecordSize * maxRecordCount, maxRecordCount };
+            mRecordSizes.put(key, sizes);
+        }
+
+        public void setupEfWithSizes(int subscriptionId, int efid, int maxRecordCount,
+                int maxRecordSize) {
             Pair<Integer, Integer> key = Pair.create(subscriptionId, efid);
-            mRecordSizes.put(key, maxRecordSize);
+            setRecordsSize(key, maxRecordCount, maxRecordSize);
             AdnRecord[] records = mRecords.computeIfAbsent(key, unused ->
                     createEmptyRecords(efid, maxRecordCount));
             if (records.length < maxRecordCount) {
@@ -1405,7 +1449,7 @@ public final class SimPhonebookProviderTest {
             }
         }
 
-        private AdnRecord[] createEmptyRecords(int efid, int count) {
+        AdnRecord[] createEmptyRecords(int efid, int count) {
             AdnRecord[] records = new AdnRecord[count];
             for (int i = 0; i < records.length; i++) {
                 if (records[i] == null) {
@@ -1483,12 +1527,11 @@ public final class SimPhonebookProviderTest {
         @Override
         public int[] getAdnRecordsSizeForSubscriber(int subId, int efid) {
             Pair<Integer, Integer> key = Pair.create(subId, efid);
-            Integer recordSize = mRecordSizes.get(key);
-            if (recordSize == null) {
+            int[] recordsSize = mRecordSizes.get(key);
+            if (recordsSize == null) {
                 return new int[]{0, 0, 0};
             }
-            int count = mRecords.get(key).length;
-            return new int[]{recordSize, recordSize * count, count};
+            return recordsSize;
         }
 
         @Override
