@@ -341,6 +341,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int CMD_GET_SLICING_CONFIG = 110;
     private static final int EVENT_GET_SLICING_CONFIG_DONE = 111;
     private static final int CMD_ERASE_DATA_SHARED_PREFERENCES = 112;
+    private static final int CMD_ENABLE_VONR = 113;
+    private static final int EVENT_ENABLE_VONR_DONE = 114;
+    private static final int CMD_IS_VONR_ENABLED = 115;
+    private static final int EVENT_IS_VONR_ENABLED_DONE = 116;
 
     // Parameters of select command.
     private static final int SELECT_COMMAND = 0xA4;
@@ -834,7 +838,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     } else {
                         // request.result must be set to something non-null
                         // for the calling thread to unblock
-                        if (request.result != null) {
+                        if (ar.result != null) {
                             request.result = ar.result;
                         } else {
                             request.result = false;
@@ -846,6 +850,46 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     + ar.exception);
                         } else {
                             loge("isNRDualConnectivityEnabled: Unknown exception");
+                        }
+                    }
+                    notifyRequester(request);
+                    break;
+
+                case CMD_IS_VONR_ENABLED: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_IS_VONR_ENABLED_DONE,
+                            request);
+                    Phone phone = getPhoneFromRequest(request);
+                    if (phone != null) {
+                        phone.isVoNrEnabled(onCompleted, request.workSource);
+                    } else {
+                        loge("isVoNrEnabled: No phone object");
+                        request.result = false;
+                        notifyRequester(request);
+                    }
+                    break;
+                }
+
+                case EVENT_IS_VONR_ENABLED_DONE:
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    if (ar.exception == null && ar.result != null) {
+                        request.result = ar.result;
+                    } else {
+                        // request.result must be set to something non-null
+                        // for the calling thread to unblock
+                        if (ar.result != null) {
+                            request.result = ar.result;
+                        } else {
+                            request.result = false;
+                        }
+                        if (ar.result == null) {
+                            loge("isVoNrEnabled: Empty response");
+                        } else if (ar.exception instanceof CommandException) {
+                            loge("isVoNrEnabled: CommandException: "
+                                    + ar.exception);
+                        } else {
+                            loge("isVoNrEnabled: Unknown exception");
                         }
                     }
                     notifyRequester(request);
@@ -893,6 +937,49 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     + ar.exception);
                         } else {
                             loge("enableNrDualConnectivity" + ": Unknown exception");
+                        }
+                    }
+                    notifyRequester(request);
+                    break;
+                }
+
+                case CMD_ENABLE_VONR: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_ENABLE_VONR_DONE, request);
+                    Phone phone = getPhoneFromRequest(request);
+                    if (phone != null) {
+                        phone.setVoNrEnabled((boolean) request.argument, onCompleted,
+                                request.workSource);
+                    } else {
+                        loge("setVoNrEnabled: No phone object");
+                        request.result =
+                                TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+                        notifyRequester(request);
+                    }
+                    break;
+                }
+
+                case EVENT_ENABLE_VONR_DONE: {
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    if (ar.exception == null) {
+                        request.result = TelephonyManager.ENABLE_VONR_SUCCESS;
+                    } else {
+                        request.result = TelephonyManager.ENABLE_VONR_RADIO_ERROR;
+                        if (ar.exception instanceof CommandException) {
+                            CommandException.Error error =
+                                    ((CommandException) (ar.exception)).getCommandError();
+                            if (error == CommandException.Error.RADIO_NOT_AVAILABLE) {
+                                request.result = TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+                            } else if (error == CommandException.Error.REQUEST_NOT_SUPPORTED) {
+                                request.result = TelephonyManager.ENABLE_VONR_REQUEST_NOT_SUPPORTED;
+                            } else {
+                                request.result = TelephonyManager.ENABLE_VONR_RADIO_ERROR;
+                            }
+                            loge("setVoNrEnabled" + ": CommandException: "
+                                    + ar.exception);
+                        } else {
+                            loge("setVoNrEnabled" + ": Unknown exception");
                         }
                     }
                     notifyRequester(request);
@@ -3291,17 +3378,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     private void enforceModifyPermission() {
         mApp.enforceCallingOrSelfPermission(android.Manifest.permission.MODIFY_PHONE_STATE, null);
-    }
-
-    /**
-     * Make sure the caller is system.
-     *
-     * @throws SecurityException if the caller is not system.
-     */
-    private static void enforceSystemCaller() {
-        if (Binder.getCallingUid() != Process.SYSTEM_UID) {
-            throw new SecurityException("Caller must be system");
-        }
     }
 
     private void enforceActiveEmergencySessionPermission() {
@@ -6480,34 +6556,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Enable or disable always reporting signal strength changes from radio.
-     *
-     * @param isEnable {@code true} for enabling; {@code false} for disabling.
-     */
-    @Override
-    public void setAlwaysReportSignalStrength(int subId, boolean isEnable) {
-        enforceModifyPermission();
-        enforceSystemCaller();
-
-        final long identity = Binder.clearCallingIdentity();
-        final Phone phone = getPhone(subId);
-        try {
-            if (phone != null) {
-                if (DBG) {
-                    log("setAlwaysReportSignalStrength: subId=" + subId
-                            + " isEnable=" + isEnable);
-                }
-                phone.setAlwaysReportSignalStrength(isEnable);
-            } else {
-                loge("setAlwaysReportSignalStrength: no phone found for subId="
-                        + subId);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
-    /**
      * Get the user enabled state of Mobile Data.
      *
      * TODO: remove and use isUserDataEnabled.
@@ -8193,6 +8241,53 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             phone.carrierActionSetRadioEnabled(enabled);
         } catch (Exception e) {
             Log.e(LOG_TAG, "carrierAction: SetRadioEnabled fails. Exception ex=" + e);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Enable or disable Voice over NR (VoNR)
+     * @param subId the subscription ID that this action applies to.
+     * @param enabled enable or disable VoNR.
+     * @return operation result.
+     */
+    @Override
+    public int setVoNrEnabled(int subId, boolean enabled) {
+        enforceModifyPermission();
+        final Phone phone = getPhone(subId);
+
+        final long identity = Binder.clearCallingIdentity();
+        if (phone == null) {
+            loge("setVoNrEnabled fails with no phone object for subId: " + subId);
+            return TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+        }
+
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
+        try {
+            int result = (int) sendRequest(CMD_ENABLE_VONR, enabled, subId,
+                    workSource);
+            if (DBG) log("setVoNrEnabled result: " + result);
+            return result;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Is voice over NR enabled
+     * @return true if VoNR is enabled else false
+     */
+    @Override
+    public boolean isVoNrEnabled(int subId) {
+        enforceReadPrivilegedPermission("isVoNrEnabled");
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            boolean isEnabled = (boolean) sendRequest(CMD_IS_VONR_ENABLED,
+                    null, subId, workSource);
+            if (DBG) log("isVoNrEnabled: " + isEnabled);
+            return isEnabled;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -10643,7 +10738,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mApp.getSystemService(AppOpsManager.class)
                 .checkPackage(callingUid, callingPackage);
 
-        validateSignalStrengthUpdateRequest(request, callingUid);
+        validateSignalStrengthUpdateRequest(mApp, request, callingUid);
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -10682,19 +10777,19 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    private static void validateSignalStrengthUpdateRequest(SignalStrengthUpdateRequest request,
-            int callingUid) {
+    private static void validateSignalStrengthUpdateRequest(Context context,
+            SignalStrengthUpdateRequest request, int callingUid) {
         if (callingUid == Process.PHONE_UID || callingUid == Process.SYSTEM_UID) {
             // phone/system process do not have further restriction on request
             return;
         }
 
         // Applications has restrictions on how to use the request:
-        // Only system caller can set mIsSystemThresholdReportingRequestedWhileIdle
+        // Non-system callers need permission to set mIsSystemThresholdReportingRequestedWhileIdle
         if (request.isSystemThresholdReportingRequestedWhileIdle()) {
-            // This is not system caller which has been checked above
-            throw new IllegalArgumentException(
-                    "Only system can set isSystemThresholdReportingRequestedWhileIdle");
+            context.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.LISTEN_ALWAYS_REPORTED_SIGNAL_STRENGTH,
+                    "validateSignalStrengthUpdateRequest");
         }
 
         for (SignalThresholdInfo info : request.getSignalThresholdInfos()) {
