@@ -152,6 +152,7 @@ import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.HalVersion;
 import com.android.internal.telephony.IBooleanConsumer;
 import com.android.internal.telephony.ICallForwardingInfoCallback;
+import com.android.internal.telephony.IImsStateCallback;
 import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.ITelephony;
@@ -189,6 +190,7 @@ import com.android.internal.telephony.uicc.SIMRecords;
 import com.android.internal.telephony.uicc.UiccCard;
 import com.android.internal.telephony.uicc.UiccCardApplication;
 import com.android.internal.telephony.uicc.UiccController;
+import com.android.internal.telephony.uicc.UiccPort;
 import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.telephony.uicc.UiccSlot;
 import com.android.internal.telephony.util.LocaleUtils;
@@ -341,6 +343,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private static final int CMD_GET_SLICING_CONFIG = 110;
     private static final int EVENT_GET_SLICING_CONFIG_DONE = 111;
     private static final int CMD_ERASE_DATA_SHARED_PREFERENCES = 112;
+    private static final int CMD_ENABLE_VONR = 113;
+    private static final int EVENT_ENABLE_VONR_DONE = 114;
+    private static final int CMD_IS_VONR_ENABLED = 115;
+    private static final int EVENT_IS_VONR_ENABLED_DONE = 116;
 
     // Parameters of select command.
     private static final int SELECT_COMMAND = 0xA4;
@@ -499,7 +505,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             MainThreadRequest request;
             Message onCompleted;
             AsyncResult ar;
-            UiccCard uiccCard;
+            UiccPort uiccPort;
             IccAPDUArgument iccArgument;
             final Phone defaultPhone = getDefaultPhone();
 
@@ -549,15 +555,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 case CMD_TRANSMIT_APDU_LOGICAL_CHANNEL:
                     request = (MainThreadRequest) msg.obj;
                     iccArgument = (IccAPDUArgument) request.argument;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
                         loge("iccTransmitApduLogicalChannel: No UICC");
                         request.result = new IccIoResult(0x6F, 0, (byte[])null);
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_TRANSMIT_APDU_LOGICAL_CHANNEL_DONE,
                             request);
-                        uiccCard.iccTransmitApduLogicalChannel(
+                        uiccPort.iccTransmitApduLogicalChannel(
                             iccArgument.channel, iccArgument.cla, iccArgument.command,
                             iccArgument.p1, iccArgument.p2, iccArgument.p3, iccArgument.data,
                             onCompleted);
@@ -586,15 +592,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 case CMD_TRANSMIT_APDU_BASIC_CHANNEL:
                     request = (MainThreadRequest) msg.obj;
                     iccArgument = (IccAPDUArgument) request.argument;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
                         loge("iccTransmitApduBasicChannel: No UICC");
                         request.result = new IccIoResult(0x6F, 0, (byte[])null);
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_TRANSMIT_APDU_BASIC_CHANNEL_DONE,
                             request);
-                        uiccCard.iccTransmitApduBasicChannel(
+                        uiccPort.iccTransmitApduBasicChannel(
                             iccArgument.cla, iccArgument.command, iccArgument.p1, iccArgument.p2,
                             iccArgument.p3, iccArgument.data, onCompleted);
                     }
@@ -622,15 +628,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 case CMD_EXCHANGE_SIM_IO:
                     request = (MainThreadRequest) msg.obj;
                     iccArgument = (IccAPDUArgument) request.argument;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
                         loge("iccExchangeSimIO: No UICC");
                         request.result = new IccIoResult(0x6F, 0, (byte[])null);
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_EXCHANGE_SIM_IO_DONE,
                                 request);
-                        uiccCard.iccExchangeSimIO(iccArgument.cla, /* fileID */
+                        uiccPort.iccExchangeSimIO(iccArgument.cla, /* fileID */
                                 iccArgument.command, iccArgument.p1, iccArgument.p2, iccArgument.p3,
                                 iccArgument.data, onCompleted);
                     }
@@ -649,14 +655,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                 case CMD_SEND_ENVELOPE:
                     request = (MainThreadRequest) msg.obj;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
                         loge("sendEnvelopeWithStatus: No UICC");
                         request.result = new IccIoResult(0x6F, 0, (byte[])null);
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_SEND_ENVELOPE_DONE, request);
-                        uiccCard.sendEnvelopeWithStatus((String)request.argument, onCompleted);
+                        uiccPort.sendEnvelopeWithStatus((String)request.argument, onCompleted);
                     }
                     break;
 
@@ -681,16 +687,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                 case CMD_OPEN_CHANNEL:
                     request = (MainThreadRequest) msg.obj;
-                    uiccCard = getUiccCardFromRequest(request);
+                    uiccPort = getUiccPortFromRequest(request);
                     Pair<String, Integer> openChannelArgs = (Pair<String, Integer>) request.argument;
-                    if (uiccCard == null) {
+                    if (uiccPort == null) {
                         loge("iccOpenLogicalChannel: No UICC");
                         request.result = new IccOpenLogicalChannelResponse(-1,
                             IccOpenLogicalChannelResponse.STATUS_MISSING_RESOURCE, null);
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_OPEN_CHANNEL_DONE, request);
-                        uiccCard.iccOpenLogicalChannel(openChannelArgs.first,
+                        uiccPort.iccOpenLogicalChannel(openChannelArgs.first,
                                 openChannelArgs.second, onCompleted);
                     }
                     break;
@@ -738,14 +744,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                 case CMD_CLOSE_CHANNEL:
                     request = (MainThreadRequest) msg.obj;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
                         loge("iccCloseLogicalChannel: No UICC");
                         request.result = false;
                         notifyRequester(request);
                     } else {
                         onCompleted = obtainMessage(EVENT_CLOSE_CHANNEL_DONE, request);
-                        uiccCard.iccCloseLogicalChannel((Integer) request.argument, onCompleted);
+                        uiccPort.iccCloseLogicalChannel((Integer) request.argument, onCompleted);
                     }
                     break;
 
@@ -834,7 +840,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     } else {
                         // request.result must be set to something non-null
                         // for the calling thread to unblock
-                        if (request.result != null) {
+                        if (ar.result != null) {
                             request.result = ar.result;
                         } else {
                             request.result = false;
@@ -846,6 +852,46 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     + ar.exception);
                         } else {
                             loge("isNRDualConnectivityEnabled: Unknown exception");
+                        }
+                    }
+                    notifyRequester(request);
+                    break;
+
+                case CMD_IS_VONR_ENABLED: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_IS_VONR_ENABLED_DONE,
+                            request);
+                    Phone phone = getPhoneFromRequest(request);
+                    if (phone != null) {
+                        phone.isVoNrEnabled(onCompleted, request.workSource);
+                    } else {
+                        loge("isVoNrEnabled: No phone object");
+                        request.result = false;
+                        notifyRequester(request);
+                    }
+                    break;
+                }
+
+                case EVENT_IS_VONR_ENABLED_DONE:
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    if (ar.exception == null && ar.result != null) {
+                        request.result = ar.result;
+                    } else {
+                        // request.result must be set to something non-null
+                        // for the calling thread to unblock
+                        if (ar.result != null) {
+                            request.result = ar.result;
+                        } else {
+                            request.result = false;
+                        }
+                        if (ar.result == null) {
+                            loge("isVoNrEnabled: Empty response");
+                        } else if (ar.exception instanceof CommandException) {
+                            loge("isVoNrEnabled: CommandException: "
+                                    + ar.exception);
+                        } else {
+                            loge("isVoNrEnabled: Unknown exception");
                         }
                     }
                     notifyRequester(request);
@@ -893,6 +939,49 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     + ar.exception);
                         } else {
                             loge("enableNrDualConnectivity" + ": Unknown exception");
+                        }
+                    }
+                    notifyRequester(request);
+                    break;
+                }
+
+                case CMD_ENABLE_VONR: {
+                    request = (MainThreadRequest) msg.obj;
+                    onCompleted = obtainMessage(EVENT_ENABLE_VONR_DONE, request);
+                    Phone phone = getPhoneFromRequest(request);
+                    if (phone != null) {
+                        phone.setVoNrEnabled((boolean) request.argument, onCompleted,
+                                request.workSource);
+                    } else {
+                        loge("setVoNrEnabled: No phone object");
+                        request.result =
+                                TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+                        notifyRequester(request);
+                    }
+                    break;
+                }
+
+                case EVENT_ENABLE_VONR_DONE: {
+                    ar = (AsyncResult) msg.obj;
+                    request = (MainThreadRequest) ar.userObj;
+                    if (ar.exception == null) {
+                        request.result = TelephonyManager.ENABLE_VONR_SUCCESS;
+                    } else {
+                        request.result = TelephonyManager.ENABLE_VONR_RADIO_ERROR;
+                        if (ar.exception instanceof CommandException) {
+                            CommandException.Error error =
+                                    ((CommandException) (ar.exception)).getCommandError();
+                            if (error == CommandException.Error.RADIO_NOT_AVAILABLE) {
+                                request.result = TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+                            } else if (error == CommandException.Error.REQUEST_NOT_SUPPORTED) {
+                                request.result = TelephonyManager.ENABLE_VONR_REQUEST_NOT_SUPPORTED;
+                            } else {
+                                request.result = TelephonyManager.ENABLE_VONR_RADIO_ERROR;
+                            }
+                            loge("setVoNrEnabled" + ": CommandException: "
+                                    + ar.exception);
+                        } else {
+                            loge("setVoNrEnabled" + ": Unknown exception");
                         }
                     }
                     notifyRequester(request);
@@ -1376,16 +1465,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                 case CMD_GET_FORBIDDEN_PLMNS:
                     request = (MainThreadRequest) msg.obj;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
-                        loge("getForbiddenPlmns() UiccCard is null");
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
+                        loge("getForbiddenPlmns() UiccPort is null");
                         request.result = new IllegalArgumentException(
-                                "getForbiddenPlmns() UiccCard is null");
+                                "getForbiddenPlmns() UiccPort is null");
                         notifyRequester(request);
                         break;
                     }
                     Integer appType = (Integer) request.argument;
-                    UiccCardApplication uiccApp = uiccCard.getApplicationByType(appType);
+                    UiccCardApplication uiccApp = uiccPort.getApplicationByType(appType);
                     if (uiccApp == null) {
                         loge("getForbiddenPlmns() no app with specified type -- "
                                 + appType);
@@ -1681,9 +1770,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     break;
                 case CMD_SET_FORBIDDEN_PLMNS:
                     request = (MainThreadRequest) msg.obj;
-                    uiccCard = getUiccCardFromRequest(request);
-                    if (uiccCard == null) {
-                        loge("setForbiddenPlmns: UiccCard is null");
+                    uiccPort = getUiccPortFromRequest(request);
+                    if (uiccPort == null) {
+                        loge("setForbiddenPlmns: UiccPort is null");
                         request.result = -1;
                         notifyRequester(request);
                         break;
@@ -1692,7 +1781,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             (Pair<Integer, List<String>>) request.argument;
                     appType = setFplmnsArgs.first;
                     List<String> fplmns = setFplmnsArgs.second;
-                    uiccApp = uiccCard.getApplicationByType(appType);
+                    uiccApp = uiccPort.getApplicationByType(appType);
                     if (uiccApp == null) {
                         loge("setForbiddenPlmns: no app with specified type -- " + appType);
                         request.result = -1;
@@ -2210,10 +2299,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 ? getDefaultPhone() : getPhone(subId);
     }
 
-    private UiccCard getUiccCardFromRequest(MainThreadRequest request) {
+    private UiccPort getUiccPortFromRequest(MainThreadRequest request) {
         Phone phone = getPhoneFromRequest(request);
         return phone == null ? null :
-                UiccController.getInstance().getUiccCard(phone.getPhoneId());
+                UiccController.getInstance().getUiccPort(phone.getPhoneId());
     }
 
     // returns phone associated with the subId.
@@ -6678,14 +6767,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             loge("getCarrierPrivilegeStatus: Invalid subId");
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS;
         }
-        UiccCard card = UiccController.getInstance().getUiccCard(phone.getPhoneId());
-        if (card == null) {
+        UiccPort port = UiccController.getInstance().getUiccPort(phone.getPhoneId());
+        if (port == null) {
             loge("getCarrierPrivilegeStatus: No UICC");
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED;
         }
 
         return getCarrierPrivilegeStatusFromCarrierConfigRules(
-            card.getCarrierPrivilegeStatusForCurrentTransaction(
+            port.getCarrierPrivilegeStatusForCurrentTransaction(
                 phone.getContext().getPackageManager()), Binder.getCallingUid(), phone);
     }
 
@@ -6716,13 +6805,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
 
         int phoneId = SubscriptionManager.getPhoneId(subId);
-        UiccCard card = UiccController.getInstance().getUiccCard(phoneId);
-        if (card == null) {
+        UiccPort port = UiccController.getInstance().getUiccPort(phoneId);
+        if (port == null) {
             loge("checkCarrierPrivilegesForPackage: No UICC on subId " + subId);
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED;
         }
         return getCarrierPrivilegeStatusFromCarrierConfigRules(
-            card.getCarrierPrivilegeStatus(mApp.getPackageManager(), pkgName),
+            port.getCarrierPrivilegeStatus(mApp.getPackageManager(), pkgName),
             getPhone(phoneId), pkgName);
     }
 
@@ -6733,14 +6822,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return TelephonyManager.CARRIER_PRIVILEGE_STATUS_NO_ACCESS;
         int result = TelephonyManager.CARRIER_PRIVILEGE_STATUS_RULES_NOT_LOADED;
         for (int i = 0; i < TelephonyManager.getDefault().getPhoneCount(); i++) {
-            UiccCard card = UiccController.getInstance().getUiccCard(i);
-            if (card == null) {
+            UiccPort port = UiccController.getInstance().getUiccPort(i);
+            if (port == null) {
               // No UICC in that slot.
               continue;
             }
 
             result = getCarrierPrivilegeStatusFromCarrierConfigRules(
-                card.getCarrierPrivilegeStatus(mApp.getPackageManager(), pkgName),
+                port.getCarrierPrivilegeStatus(mApp.getPackageManager(), pkgName),
                 getPhone(i), pkgName);
             if (result == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
                 break;
@@ -6757,12 +6846,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             loge("phoneId " + phoneId + " is not valid.");
             return null;
         }
-        UiccCard card = UiccController.getInstance().getUiccCard(phoneId);
-        if (card == null) {
+        UiccPort port = UiccController.getInstance().getUiccPort(phoneId);
+        if (port == null) {
             loge("getCarrierPackageNamesForIntentAndPhone: No UICC");
             return null ;
         }
-        return card.getCarrierPackageNamesForIntent(mApp.getPackageManager(), intent);
+        return port.getCarrierPackageNamesForIntent(mApp.getPackageManager(), intent);
     }
 
     @Override
@@ -6771,10 +6860,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         PackageManager pm = mApp.getPackageManager();
         List<String> privilegedPackages = new ArrayList<>();
         List<PackageInfo> packages = null;
-        UiccCard card = UiccController.getInstance().getUiccCard(phoneId);
+        UiccPort port = UiccController.getInstance().getUiccPort(phoneId);
         // has UICC in that slot.
-        if (card != null) {
-            if (card.hasCarrierPrivilegeRules()) {
+        if (port != null) {
+            if (port.hasCarrierPrivilegeRules()) {
                 if (packages == null) {
                     // Only check packages in user 0 for now
                     packages = pm.getInstalledPackagesAsUser(
@@ -6787,7 +6876,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     PackageInfo pkgInfo = packages.get(p);
                     if (pkgInfo != null && pkgInfo.packageName != null
                             && getCarrierPrivilegeStatusFromCarrierConfigRules(
-                                    card.getCarrierPrivilegeStatus(pkgInfo),
+                                    port.getCarrierPrivilegeStatus(pkgInfo),
                                     getPhone(phoneId), pkgInfo.packageName)
                             == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
                         privilegedPackages.add(pkgInfo.packageName);
@@ -6817,11 +6906,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private String getIccId(int subId) {
         final Phone phone = getPhone(subId);
-        UiccCard card = phone == null ? null : phone.getUiccCard();
-        if (card == null) {
+        UiccPort port = phone == null ? null : phone.getUiccPort();
+        if (port == null) {
             return null;
         }
-        String iccId = card.getIccId();
+        String iccId = port.getIccId();
         if (TextUtils.isEmpty(iccId)) {
             return null;
         }
@@ -7992,7 +8081,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             }
             String aid = null;
             try {
-                aid = UiccController.getInstance().getUiccCard(phone.getPhoneId())
+                aid = UiccController.getInstance().getUiccPort(phone.getPhoneId())
                         .getApplicationByType(appType).getAid();
             } catch (Exception e) {
                 Log.e(LOG_TAG, "Not getting aid. Exception ex=" + e);
@@ -8154,6 +8243,53 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             phone.carrierActionSetRadioEnabled(enabled);
         } catch (Exception e) {
             Log.e(LOG_TAG, "carrierAction: SetRadioEnabled fails. Exception ex=" + e);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Enable or disable Voice over NR (VoNR)
+     * @param subId the subscription ID that this action applies to.
+     * @param enabled enable or disable VoNR.
+     * @return operation result.
+     */
+    @Override
+    public int setVoNrEnabled(int subId, boolean enabled) {
+        enforceModifyPermission();
+        final Phone phone = getPhone(subId);
+
+        final long identity = Binder.clearCallingIdentity();
+        if (phone == null) {
+            loge("setVoNrEnabled fails with no phone object for subId: " + subId);
+            return TelephonyManager.ENABLE_VONR_RADIO_NOT_AVAILABLE;
+        }
+
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
+        try {
+            int result = (int) sendRequest(CMD_ENABLE_VONR, enabled, subId,
+                    workSource);
+            if (DBG) log("setVoNrEnabled result: " + result);
+            return result;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Is voice over NR enabled
+     * @return true if VoNR is enabled else false
+     */
+    @Override
+    public boolean isVoNrEnabled(int subId) {
+        enforceReadPrivilegedPermission("isVoNrEnabled");
+        WorkSource workSource = getWorkSource(Binder.getCallingUid());
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            boolean isEnabled = (boolean) sendRequest(CMD_IS_VONR_ENABLED,
+                    null, subId, workSource);
+            if (DBG) log("isVoNrEnabled: " + isEnabled);
+            return isEnabled;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -8522,6 +8658,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         return isAllowed;
     }
 
+    private boolean haveCarrierPrivilegeAccess(UiccCard card, String callingPackage) {
+        // TODO once MEP API refactoring CL is merged, loop port list from UiccCardInfo,
+        //  and if find the matching UiccPort by UiccController.getUiccPortForSlot(slot, portIdx)
+        //  Update each UiccPort object based on privilege access
+        UiccPort[] uiccPorts = card.getUiccPortList();
+        for (UiccPort port : uiccPorts) {
+            UiccProfile profile = port.getUiccProfile();
+            if (profile == null ||
+                    profile.getCarrierPrivilegeStatus(mApp.getPackageManager(), callingPackage)
+                    != TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     @Override
     public List<UiccCardInfo> getUiccCardsInfo(String callingPackage) {
         // Verify that tha callingPackage belongs to the calling UID
@@ -8555,14 +8707,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 // For an inactive eUICC, the UiccCard will be null even though the UiccCardInfo
                 // is available
                 UiccCard card = uiccController.getUiccCardForSlot(cardInfo.getSlotIndex());
-                if (card == null || card.getUiccProfile() == null) {
-                    // assume no access if the card or profile is unavailable
+                // TODO remove card.getUiccPortList().length once MEP API refactoring CL is merged
+                //  Get UiccPortInfo from CardInfo and process further based on each UiccPort
+                if (card == null || card.getUiccPortList().length == 0) {
+                    // assume no access if the card or ports are unavailable
                     filteredInfos.add(cardInfo.getUnprivileged());
                     continue;
                 }
-                UiccProfile profile = card.getUiccProfile();
-                if (profile.getCarrierPrivilegeStatus(mApp.getPackageManager(), callingPackage)
-                        == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
+
+                if (haveCarrierPrivilegeAccess(card, callingPackage)) {
                     filteredInfos.add(cardInfo);
                 } else {
                     filteredInfos.add(cardInfo.getUnprivileged());
@@ -8683,11 +8836,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone == null) {
                 return;
             }
-            UiccCard uiccCard = phone.getUiccCard();
-            if (uiccCard == null) {
+            UiccPort uiccPort = phone.getUiccPort();
+            if (uiccPort == null) {
                 return;
             }
-            UiccProfile uiccProfile = uiccCard.getUiccProfile();
+            UiccProfile uiccProfile = uiccPort.getUiccProfile();
             if (uiccProfile == null) {
                 return;
             }
@@ -9194,11 +9347,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            UiccCard uiccCard = phone.getUiccCard();
-            if (uiccCard == null) {
+            UiccPort uiccPort = phone.getUiccPort();
+            if (uiccPort == null) {
                 return false;
             }
-            UiccProfile uiccProfile = uiccCard.getUiccProfile();
+            UiccProfile uiccProfile = uiccPort.getUiccProfile();
             if (uiccProfile == null) {
                 return false;
             }
@@ -10733,6 +10886,75 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             sendRequestAsync(CMD_GET_SLICING_CONFIG, callback, phone, null);
         } finally {
             Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Register an IMS connection state callback
+     */
+    @Override
+    public void registerImsStateCallback(int subId, int feature, IImsStateCallback cb,
+            String callingPackage) {
+        if (feature == ImsFeature.FEATURE_MMTEL) {
+            // ImsMmTelManager
+            // The following also checks READ_PRIVILEGED_PHONE_STATE.
+            TelephonyPermissions
+                    .enforceCallingOrSelfReadPrecisePhoneStatePermissionOrCarrierPrivilege(
+                            mApp, subId, "registerImsStateCallback");
+        } else if (feature == ImsFeature.FEATURE_RCS) {
+            // ImsRcsManager or SipDelegateManager
+            TelephonyPermissions.enforceAnyPermissionGrantedOrCarrierPrivileges(mApp, subId,
+                    Binder.getCallingUid(), "registerImsStateCallback",
+                    Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+                    Manifest.permission.READ_PRECISE_PHONE_STATE,
+                    Manifest.permission.ACCESS_RCS_USER_CAPABILITY_EXCHANGE,
+                    Manifest.permission.PERFORM_IMS_SINGLE_REGISTRATION);
+        }
+
+        if (!ImsManager.isImsSupportedOnDevice(mApp)) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+
+        if (subId == SubscriptionManager.DEFAULT_SUBSCRIPTION_ID) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_INVALID_SUBSCRIPTION);
+        }
+
+        ImsStateCallbackController controller = ImsStateCallbackController.getInstance();
+        if (controller == null) {
+            throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                    "IMS not available on device.");
+        }
+
+        if (callingPackage == null) {
+            callingPackage = getCurrentPackageName();
+        }
+
+        final long token = Binder.clearCallingIdentity();
+        try {
+            int slotId = getSlotIndexOrException(subId);
+            controller.registerImsStateCallback(subId, feature, cb, callingPackage);
+        } catch (ImsException e) {
+            throw new ServiceSpecificException(e.getCode());
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * Unregister an IMS connection state callback
+     */
+    @Override
+    public void unregisterImsStateCallback(IImsStateCallback cb) {
+        final long token = Binder.clearCallingIdentity();
+        ImsStateCallbackController controller = ImsStateCallbackController.getInstance();
+        if (controller == null) {
+            return;
+        }
+        try {
+            controller.unregisterImsStateCallback(cb);
+        } finally {
+            Binder.restoreCallingIdentity(token);
         }
     }
 }
