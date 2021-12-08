@@ -22,6 +22,7 @@ import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_CDMA;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_GSM;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_IMS;
 import static com.android.internal.telephony.PhoneConstants.SUBSCRIPTION_KEY;
+import static com.android.internal.telephony.TelephonyStatsLog.RCS_CLIENT_PROVISIONING_STATS__EVENT__CLIENT_PARAMS_SENT;
 
 import android.Manifest;
 import android.Manifest.permission;
@@ -181,6 +182,7 @@ import com.android.internal.telephony.euicc.EuiccConnector;
 import com.android.internal.telephony.ims.ImsResolver;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
+import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
@@ -5037,10 +5039,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public int getDataNetworkTypeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getDataNetworkTypeForSubscriber")) {
-            return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        String functionName = "getDataNetworkTypeForSubscriber";
+        if (!TelephonyPermissions.checkCallingOrSelfReadNonDangerousPhoneStateNoThrow(
+                mApp, functionName)) {
+            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
+                    mApp, subId, callingPackage, callingFeatureId, functionName)) {
+                return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+            }
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -5062,10 +5067,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public int getVoiceNetworkTypeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getDataNetworkTypeForSubscriber")) {
-            return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        String functionName = "getVoiceNetworkTypeForSubscriber";
+        if (!TelephonyPermissions.checkCallingOrSelfReadNonDangerousPhoneStateNoThrow(
+                mApp, functionName)) {
+            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
+                    mApp, subId, callingPackage, callingFeatureId, functionName)) {
+                return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+            }
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6578,18 +6586,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * There are other factors deciding whether mobile data is actually enabled, but they are
      * not considered here. See {@link #isDataEnabled(int)} for more details.
      *
-     * Accepts either ACCESS_NETWORK_STATE, MODIFY_PHONE_STATE or carrier privileges.
+     * Accepts either READ_BASIC_PHONE_STATE, ACCESS_NETWORK_STATE, MODIFY_PHONE_STATE
+     * or carrier privileges.
      *
      * @return {@code true} if data is enabled else {@code false}
      */
     @Override
     public boolean isUserDataEnabled(int subId) {
+        String functionName = "isUserDataEnabled";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(permission.READ_BASIC_PHONE_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(permission.ACCESS_NETWORK_STATE, functionName);
+            }
         } catch (Exception e) {
             TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                    mApp, subId, "isUserDataEnabled");
+                    mApp, subId, functionName);
+
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6619,17 +6634,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean isDataEnabled(int subId) {
+        String functionName = "isDataEnabled";
         try {
             try {
                 mApp.enforceCallingOrSelfPermission(
                         android.Manifest.permission.ACCESS_NETWORK_STATE,
-                        null);
+                        functionName);
             } catch (Exception e) {
-                mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
-                        "isDataEnabled");
+                try {
+                    mApp.enforceCallingOrSelfPermission(
+                            android.Manifest.permission.READ_PHONE_STATE,
+                            functionName);
+                } catch (Exception e2) {
+                    mApp.enforceCallingOrSelfPermission(
+                            permission.READ_BASIC_PHONE_STATE, functionName);
+                }
             }
         } catch (Exception e) {
-            enforceReadPrivilegedPermission("isDataEnabled");
+            enforceReadPrivilegedPermission(functionName);
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6659,12 +6681,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public boolean isDataEnabledForReason(int subId,
             @TelephonyManager.DataEnabledReason int reason) {
+        String functionName = "isDataEnabledForReason";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.ACCESS_NETWORK_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(permission.READ_BASIC_PHONE_STATE,
+                        functionName);
+            }
         } catch (Exception e) {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
-                    "isDataEnabledForReason");
+            try {
+                mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
+                        functionName);
+            } catch (Exception e2) {
+                TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
+                        mApp, subId, functionName);
+            }
         }
 
 
@@ -8584,6 +8618,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *
      * <p>Requires one of the following permissions:
      * {@link android.Manifest.permission#ACCESS_NETWORK_STATE},
+     * {@link android.Manifest.permission#READ_BASIC_PHONE_STATE},
      * {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling app has carrier
      * privileges.
      *
@@ -8593,12 +8628,19 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean isDataRoamingEnabled(int subId) {
+        String functionName = "isDataRoamingEnabled";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.ACCESS_NETWORK_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(
+                        permission.READ_BASIC_PHONE_STATE, functionName);
+            }
         } catch (Exception e) {
             TelephonyPermissions.enforceCallingOrSelfReadPhoneStatePermissionOrCarrierPrivilege(
-                    mApp, subId, "isDataRoamingEnabled");
+                    mApp, subId, functionName);
         }
 
         boolean isEnabled = false;
@@ -10355,6 +10397,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             } else {
                 configBinder.setRcsClientConfiguration(rcc);
             }
+
+            RcsStats.getInstance().onRcsClientProvisioningStats(subId,
+                    RCS_CLIENT_PROVISIONING_STATS__EVENT__CLIENT_PARAMS_SENT);
         } catch (RemoteException e) {
             Rlog.e(LOG_TAG, "fail to setRcsClientConfiguration " + e.getMessage());
             throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
@@ -10955,6 +11000,56 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             controller.unregisterImsStateCallback(cb);
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+    }
+
+    /**
+     * @return {@CellIdentity} last known cell identity {@CellIdentity}.
+     *
+     * Require {@link android.Manifest.permission#ACCESS_FINE_LOCATION} and
+     * com.android.phone.permission.ACCESS_LAST_KNOWN_CELL_ID, otherwise throws
+     * SecurityException.
+     * If there is current registered network this value will be same as the registered cell
+     * identity. If the device goes out of service the previous cell identity is cached and
+     * will be returned. If the cache age of the Cell identity is more than 24 hours
+     * it will be cleared and null will be returned.
+     *
+     */
+    @Override
+    public @Nullable CellIdentity getLastKnownCellIdentity(int subId, String callingPackage,
+            String callingFeatureId) {
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        LocationAccessPolicy.LocationPermissionResult fineLocationResult =
+                LocationAccessPolicy.checkLocationPermission(mApp,
+                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                .setCallingPackage(callingPackage)
+                                .setCallingFeatureId(callingFeatureId)
+                                .setCallingPid(Binder.getCallingPid())
+                                .setCallingUid(Binder.getCallingUid())
+                                .setMethod("getLastKnownCellIdentity")
+                                .setLogAsInfo(true)
+                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
+                                .build());
+
+        boolean hasFinePermission =
+                fineLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
+        if (!hasFinePermission
+                || !TelephonyPermissions.checkLastKnownCellIdAccessPermission(mApp)) {
+            throw new SecurityException("getLastKnownCellIdentity need ACCESS_FINE_LOCATION "
+                    + "and BIND_CONNECTION_SERVICE permission.");
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) return null;
+            ServiceStateTracker sst = phone.getServiceStateTracker();
+            if (sst == null) return null;
+            return sst.getLastKnownCellIdentity();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
     }
 }
