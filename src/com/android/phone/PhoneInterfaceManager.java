@@ -27,10 +27,13 @@ import android.Manifest;
 import android.Manifest.permission;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.app.AppOpsManager;
 import android.app.PendingIntent;
 import android.app.compat.CompatChanges;
 import android.app.role.RoleManager;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -104,7 +107,9 @@ import android.telephony.TelephonyManager;
 import android.telephony.TelephonyScanManager;
 import android.telephony.ThermalMitigationRequest;
 import android.telephony.UiccCardInfo;
+import android.telephony.UiccPortInfo;
 import android.telephony.UiccSlotInfo;
+import android.telephony.UiccSlotMapping;
 import android.telephony.UssdResponse;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.data.ApnSetting;
@@ -216,6 +221,7 @@ import java.io.InputStream;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -402,6 +408,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             "reset_network_erase_modem_config_enabled";
 
     private static final int SET_NETWORK_SELECTION_MODE_AUTOMATIC_TIMEOUT_MS = 2000; // 2 seconds
+    /**
+     * With support for MEP(multiple enabled profile) in Android T, a SIM card can have more than
+     * one ICCID active at the same time.
+     * Apps should use below API signatures if targeting SDK is T and beyond.
+     *
+     * @hide
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.TIRAMISU)
+    public static final long GET_API_SIGNATURES_FROM_UICC_PORT_INFO = 202110963L;
 
     /**
      * A request object to use for transmitting data to an ICC.
@@ -1147,7 +1163,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     request.argument).first;
                     request.phone.setCallForwardingOption(
                             callForwardingInfoToSet.isEnabled()
-                                    ? CommandsInterface.CF_ACTION_ENABLE
+                                    ? CommandsInterface.CF_ACTION_REGISTRATION
                                     : CommandsInterface.CF_ACTION_DISABLE,
                             callForwardingInfoToSet.getReason(),
                             callForwardingInfoToSet.getNumber(),
@@ -3038,6 +3054,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @SuppressWarnings("unchecked")
     public List<NeighboringCellInfo> getNeighboringCellInfo(String callingPackage,
             String callingFeatureId) {
+        try {
+            mApp.getSystemService(AppOpsManager.class)
+                    .checkPackage(Binder.getCallingUid(), callingPackage);
+        } catch (SecurityException e) {
+            EventLog.writeEvent(0x534e4554, "190619791", Binder.getCallingUid());
+            throw e;
+        }
+
         final int targetSdk = TelephonyPermissions.getTargetSdk(mApp, callingPackage);
         if (targetSdk >= android.os.Build.VERSION_CODES.Q) {
             throw new SecurityException(
@@ -3229,6 +3253,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public String getMeidForSlot(int slotIndex, String callingPackage, String callingFeatureId) {
+        try {
+            mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        } catch (SecurityException se) {
+            EventLog.writeEvent(0x534e4554, "186530496", Binder.getCallingUid());
+            throw new SecurityException("Package " + callingPackage + " does not belong to "
+                    + Binder.getCallingUid());
+        }
         Phone phone = PhoneFactory.getPhone(slotIndex);
         if (phone == null) {
             return null;
@@ -4999,6 +5030,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public int getNetworkTypeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
+        try {
+            mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        } catch (SecurityException se) {
+            EventLog.writeEvent(0x534e4554, "186776740", Binder.getCallingUid());
+            throw new SecurityException("Package " + callingPackage + " does not belong to "
+                    + Binder.getCallingUid());
+        }
         final int targetSdk = TelephonyPermissions.getTargetSdk(mApp, callingPackage);
         if (targetSdk > android.os.Build.VERSION_CODES.Q) {
             return getDataNetworkTypeForSubscriber(subId, callingPackage, callingFeatureId);
@@ -5037,10 +5075,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public int getDataNetworkTypeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getDataNetworkTypeForSubscriber")) {
-            return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        String functionName = "getDataNetworkTypeForSubscriber";
+        if (!TelephonyPermissions.checkCallingOrSelfReadNonDangerousPhoneStateNoThrow(
+                mApp, functionName)) {
+            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
+                    mApp, subId, callingPackage, callingFeatureId, functionName)) {
+                return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+            }
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -5062,10 +5103,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public int getVoiceNetworkTypeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getDataNetworkTypeForSubscriber")) {
-            return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+        String functionName = "getVoiceNetworkTypeForSubscriber";
+        if (!TelephonyPermissions.checkCallingOrSelfReadNonDangerousPhoneStateNoThrow(
+                mApp, functionName)) {
+            if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
+                    mApp, subId, callingPackage, callingFeatureId, functionName)) {
+                return TelephonyManager.NETWORK_TYPE_UNKNOWN;
+            }
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6293,28 +6337,35 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * Starts a new network scan and returns the id of this scan.
      *
      * @param subId id of the subscription
+     * @param renounceFineLocationAccess Set this to true if the caller would not like to receive
+     * location related information which will be sent if the caller already possess
+     * {@android.Manifest.permission.ACCESS_FINE_LOCATION} and do not renounce the permission
      * @param request contains the radio access networks with bands/channels to scan
      * @param messenger callback messenger for scan results or errors
      * @param binder for the purpose of auto clean when the user thread crashes
      * @return the id of the requested scan which can be used to stop the scan.
      */
     @Override
-    public int requestNetworkScan(int subId, NetworkScanRequest request, Messenger messenger,
+    public int requestNetworkScan(int subId, boolean renounceFineLocationAccess,
+            NetworkScanRequest request, Messenger messenger,
             IBinder binder, String callingPackage, String callingFeatureId) {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "requestNetworkScan");
         LocationAccessPolicy.LocationPermissionResult locationResult =
-                LocationAccessPolicy.checkLocationPermission(mApp,
-                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
-                                .setCallingPackage(callingPackage)
-                                .setCallingFeatureId(callingFeatureId)
-                                .setCallingPid(Binder.getCallingPid())
-                                .setCallingUid(Binder.getCallingUid())
-                                .setMethod("requestNetworkScan")
-                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
-                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
-                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
-                                .build());
+                LocationAccessPolicy.LocationPermissionResult.DENIED_HARD;
+        if (!renounceFineLocationAccess) {
+            locationResult = LocationAccessPolicy.checkLocationPermission(mApp,
+                            new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                    .setCallingPackage(callingPackage)
+                                    .setCallingFeatureId(callingFeatureId)
+                                    .setCallingPid(Binder.getCallingPid())
+                                    .setCallingUid(Binder.getCallingUid())
+                                    .setMethod("requestNetworkScan")
+                                    .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                    .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                    .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
+                                    .build());
+        }
         if (locationResult != LocationAccessPolicy.LocationPermissionResult.ALLOWED) {
             SecurityException e = checkNetworkRequestForSanitizedLocationAccess(
                     request, subId, callingPackage);
@@ -6332,7 +6383,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mNetworkScanRequestTracker.startNetworkScan(
-                    request, messenger, binder, getPhone(subId),
+                    renounceFineLocationAccess, request, messenger, binder, getPhone(subId),
                     callingUid, callingPid, callingPackage);
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -6578,18 +6629,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * There are other factors deciding whether mobile data is actually enabled, but they are
      * not considered here. See {@link #isDataEnabled(int)} for more details.
      *
-     * Accepts either ACCESS_NETWORK_STATE, MODIFY_PHONE_STATE or carrier privileges.
+     * Accepts either READ_BASIC_PHONE_STATE, ACCESS_NETWORK_STATE, MODIFY_PHONE_STATE
+     * or carrier privileges.
      *
      * @return {@code true} if data is enabled else {@code false}
      */
     @Override
     public boolean isUserDataEnabled(int subId) {
+        String functionName = "isUserDataEnabled";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(permission.READ_BASIC_PHONE_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(permission.ACCESS_NETWORK_STATE, functionName);
+            }
         } catch (Exception e) {
             TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                    mApp, subId, "isUserDataEnabled");
+                    mApp, subId, functionName);
+
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6619,17 +6677,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean isDataEnabled(int subId) {
+        String functionName = "isDataEnabled";
         try {
             try {
                 mApp.enforceCallingOrSelfPermission(
                         android.Manifest.permission.ACCESS_NETWORK_STATE,
-                        null);
+                        functionName);
             } catch (Exception e) {
-                mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
-                        "isDataEnabled");
+                try {
+                    mApp.enforceCallingOrSelfPermission(
+                            android.Manifest.permission.READ_PHONE_STATE,
+                            functionName);
+                } catch (Exception e2) {
+                    mApp.enforceCallingOrSelfPermission(
+                            permission.READ_BASIC_PHONE_STATE, functionName);
+                }
             }
         } catch (Exception e) {
-            enforceReadPrivilegedPermission("isDataEnabled");
+            enforceReadPrivilegedPermission(functionName);
         }
 
         final long identity = Binder.clearCallingIdentity();
@@ -6659,12 +6724,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public boolean isDataEnabledForReason(int subId,
             @TelephonyManager.DataEnabledReason int reason) {
+        String functionName = "isDataEnabledForReason";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.ACCESS_NETWORK_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(permission.READ_BASIC_PHONE_STATE,
+                        functionName);
+            }
         } catch (Exception e) {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
-                    "isDataEnabledForReason");
+            try {
+                mApp.enforceCallingOrSelfPermission(android.Manifest.permission.READ_PHONE_STATE,
+                        functionName);
+            } catch (Exception e2) {
+                TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
+                        mApp, subId, functionName);
+            }
         }
 
 
@@ -7526,6 +7603,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String getDeviceIdWithFeature(String callingPackage, String callingFeatureId) {
+        try {
+            mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        } catch (SecurityException se) {
+            EventLog.writeEvent(0x534e4554, "186530889", Binder.getCallingUid());
+            throw new SecurityException("Package " + callingPackage + " does not belong to "
+                    + Binder.getCallingUid());
+        }
         final Phone phone = PhoneFactory.getPhone(0);
         if (phone == null) {
             return null;
@@ -7830,49 +7914,54 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * {@hide}
      * Returns the service state information on specified subscription.
      */
     @Override
-    public ServiceState getServiceStateForSubscriber(int subId, String callingPackage,
-            String callingFeatureId) {
+    public ServiceState getServiceStateForSubscriber(int subId,
+            boolean renounceFineLocationAccess, boolean renounceCoarseLocationAccess,
+            String callingPackage, String callingFeatureId) {
         if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
                 mApp, subId, callingPackage, callingFeatureId, "getServiceStateForSubscriber")) {
             return null;
         }
 
-        LocationAccessPolicy.LocationPermissionResult fineLocationResult =
-                LocationAccessPolicy.checkLocationPermission(mApp,
-                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
-                                .setCallingPackage(callingPackage)
-                                .setCallingFeatureId(callingFeatureId)
-                                .setCallingPid(Binder.getCallingPid())
-                                .setCallingUid(Binder.getCallingUid())
-                                .setMethod("getServiceStateForSubscriber")
-                                .setLogAsInfo(true)
-                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
-                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
-                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
-                                .build());
+        boolean hasFinePermission = false;
+        boolean hasCoarsePermission = false;
+        if (!renounceFineLocationAccess) {
+            LocationAccessPolicy.LocationPermissionResult fineLocationResult =
+                    LocationAccessPolicy.checkLocationPermission(mApp,
+                            new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                    .setCallingPackage(callingPackage)
+                                    .setCallingFeatureId(callingFeatureId)
+                                    .setCallingPid(Binder.getCallingPid())
+                                    .setCallingUid(Binder.getCallingUid())
+                                    .setMethod("getServiceStateForSubscriber")
+                                    .setLogAsInfo(true)
+                                    .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                    .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                    .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
+                                    .build());
+            hasFinePermission =
+                    fineLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
+        }
 
-        LocationAccessPolicy.LocationPermissionResult coarseLocationResult =
-                LocationAccessPolicy.checkLocationPermission(mApp,
-                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
-                                .setCallingPackage(callingPackage)
-                                .setCallingFeatureId(callingFeatureId)
-                                .setCallingPid(Binder.getCallingPid())
-                                .setCallingUid(Binder.getCallingUid())
-                                .setMethod("getServiceStateForSubscriber")
-                                .setLogAsInfo(true)
-                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
-                                .setMinSdkVersionForFine(Integer.MAX_VALUE)
-                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
-                                .build());
-        // We don't care about hard or soft here -- all we need to know is how much info to scrub.
-        boolean hasFinePermission =
-                fineLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
-        boolean hasCoarsePermission =
-                coarseLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
+        if (!renounceCoarseLocationAccess) {
+            LocationAccessPolicy.LocationPermissionResult coarseLocationResult =
+                    LocationAccessPolicy.checkLocationPermission(mApp,
+                            new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                    .setCallingPackage(callingPackage)
+                                    .setCallingFeatureId(callingFeatureId)
+                                    .setCallingPid(Binder.getCallingPid())
+                                    .setCallingUid(Binder.getCallingUid())
+                                    .setMethod("getServiceStateForSubscriber")
+                                    .setLogAsInfo(true)
+                                    .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                    .setMinSdkVersionForFine(Integer.MAX_VALUE)
+                                    .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
+                                    .build());
+            hasCoarsePermission =
+                    coarseLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
+        }
 
         final Phone phone = getPhone(subId);
         if (phone == null) {
@@ -8584,6 +8673,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *
      * <p>Requires one of the following permissions:
      * {@link android.Manifest.permission#ACCESS_NETWORK_STATE},
+     * {@link android.Manifest.permission#READ_BASIC_PHONE_STATE},
      * {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling app has carrier
      * privileges.
      *
@@ -8593,12 +8683,19 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean isDataRoamingEnabled(int subId) {
+        String functionName = "isDataRoamingEnabled";
         try {
-            mApp.enforceCallingOrSelfPermission(android.Manifest.permission.ACCESS_NETWORK_STATE,
-                    null);
+            try {
+                mApp.enforceCallingOrSelfPermission(
+                        android.Manifest.permission.ACCESS_NETWORK_STATE,
+                        functionName);
+            } catch (Exception e) {
+                mApp.enforceCallingOrSelfPermission(
+                        permission.READ_BASIC_PHONE_STATE, functionName);
+            }
         } catch (Exception e) {
             TelephonyPermissions.enforceCallingOrSelfReadPhoneStatePermissionOrCarrierPrivilege(
-                    mApp, subId, "isDataRoamingEnabled");
+                    mApp, subId, functionName);
         }
 
         boolean isEnabled = false;
@@ -8681,6 +8778,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 .checkPackage(Binder.getCallingUid(), callingPackage);
 
         boolean hasReadPermission = false;
+        boolean isIccIdAccessRestricted = false;
         try {
             enforceReadPrivilegedPermission("getUiccCardsInfo");
             hasReadPermission = true;
@@ -8692,7 +8790,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 throw new SecurityException("Caller does not have permission.");
             }
         }
-
+        // checking compatibility, if calling app's target SDK is T and beyond.
+        if (CompatChanges.isChangeEnabled(GET_API_SIGNATURES_FROM_UICC_PORT_INFO,
+                Binder.getCallingUid())) {
+            isIccIdAccessRestricted = true;
+        }
         final long identity = Binder.clearCallingIdentity();
         try {
             UiccController uiccController = UiccController.getInstance();
@@ -8704,21 +8806,23 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             // Remove private info if the caller doesn't have access
             ArrayList<UiccCardInfo> filteredInfos = new ArrayList<>();
             for (UiccCardInfo cardInfo : cardInfos) {
+                //setting the value after compatibility check
+                cardInfo.setIccIdAccessRestricted(isIccIdAccessRestricted);
                 // For an inactive eUICC, the UiccCard will be null even though the UiccCardInfo
                 // is available
-                UiccCard card = uiccController.getUiccCardForSlot(cardInfo.getSlotIndex());
+                UiccCard card = uiccController.getUiccCardForSlot(cardInfo.getPhysicalSlotIndex());
                 // TODO remove card.getUiccPortList().length once MEP API refactoring CL is merged
                 //  Get UiccPortInfo from CardInfo and process further based on each UiccPort
                 if (card == null || card.getUiccPortList().length == 0) {
                     // assume no access if the card or ports are unavailable
-                    filteredInfos.add(cardInfo.getUnprivileged());
+                    filteredInfos.add(getUiccCardInfoUnPrivileged(cardInfo));
                     continue;
                 }
 
                 if (haveCarrierPrivilegeAccess(card, callingPackage)) {
                     filteredInfos.add(cardInfo);
                 } else {
-                    filteredInfos.add(cardInfo.getUnprivileged());
+                    filteredInfos.add(getUiccCardInfoUnPrivileged(cardInfo));
                 }
             }
             return filteredInfos;
@@ -8727,10 +8831,70 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    @Override
-    public UiccSlotInfo[] getUiccSlotsInfo() {
-        enforceReadPrivilegedPermission("getUiccSlotsInfo");
+    /**
+     * Returns a copy of the UiccCardinfo with the EID and ICCID set to null. These values are
+     * generally private and require carrier privileges to view.
+     *
+     * @hide
+     */
+    @NonNull
+    public UiccCardInfo getUiccCardInfoUnPrivileged(UiccCardInfo cardInfo) {
+        List<UiccPortInfo> portinfo = new  ArrayList<>();
+        for (UiccPortInfo portinfos : cardInfo.getPorts()) {
+            portinfo.add(getUiccPortInfoUnPrivileged(portinfos));
+        }
+        return new UiccCardInfo(
+                cardInfo.isEuicc(),
+                cardInfo.getCardId(),
+                null,
+                cardInfo.getPhysicalSlotIndex(),
+                cardInfo.isRemovable(),
+                cardInfo.isMultipleEnabledProfilesSupported(),
+                portinfo
+        );
+    }
 
+    /**
+     * @hide
+     * @return a copy of the UiccPortInfo with ICCID set to {@link UiccPortInfo#ICCID_REDACTED}.
+     * These values are generally private and require carrier privileges to view.
+     */
+    @NonNull
+    public UiccPortInfo getUiccPortInfoUnPrivileged(UiccPortInfo portInfo) {
+        return new UiccPortInfo(
+                UiccPortInfo.ICCID_REDACTED,
+                portInfo.getPortIndex(),
+                portInfo.getLogicalSlotIndex(),
+                portInfo.isActive()
+        );
+    }
+    @Override
+    public UiccSlotInfo[] getUiccSlotsInfo(String callingPackage) {
+        // Verify that tha callingPackage belongs to the calling UID
+        mApp.getSystemService(AppOpsManager.class)
+                .checkPackage(Binder.getCallingUid(), callingPackage);
+
+        boolean hasReadPermission = false;
+        boolean isLogicalSlotAccessRestricted = false;
+        String iccId;
+
+        try {
+            enforceReadPrivilegedPermission("getUiccSlotsInfo");
+            hasReadPermission = true;
+        } catch (SecurityException e) {
+            // even without READ_PRIVILEGED_PHONE_STATE, we allow the call to continue if the caller
+            // has carrier privileges on an active UICC
+            if (checkCarrierPrivilegesForPackageAnyPhone(callingPackage)
+                    == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS) {
+                hasReadPermission = true;
+            }
+        }
+
+        // checking compatibility, if calling app's target SDK is T and beyond.
+        if (CompatChanges.isChangeEnabled(GET_API_SIGNATURES_FROM_UICC_PORT_INFO,
+                Binder.getCallingUid())) {
+            isLogicalSlotAccessRestricted  = true;
+        }
         final long identity = Binder.clearCallingIdentity();
         try {
             UiccSlot[] slots = UiccController.getInstance().getUiccSlots();
@@ -8738,7 +8902,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 Rlog.i(LOG_TAG, "slots is null.");
                 return null;
             }
-
             UiccSlotInfo[] infos = new UiccSlotInfo[slots.length];
             for (int i = 0; i < slots.length; i++) {
                 UiccSlot slot = slots[i];
@@ -8748,12 +8911,24 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
                 String cardId;
                 UiccCard card = slot.getUiccCard();
+                //if has read permission
+                if (hasReadPermission) {
+                    iccId = slot.getIccId();
+                } else {
+                    // if no read permission checking carrier
+                    if (haveCarrierPrivilegeAccess(card, callingPackage)) {
+                        iccId = slot.getIccId();
+                    } else {
+                        //if no carrier permission redact ICCID
+                        iccId = IccUtils.TEST_ICCID;
+                    }
+                }
                 if (card != null) {
                     cardId = card.getCardId();
                 } else {
                     cardId = slot.getEid();
                     if (TextUtils.isEmpty(cardId)) {
-                        cardId = slot.getIccId();
+                        cardId = iccId;
                     }
                 }
 
@@ -8781,15 +8956,19 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         break;
 
                 }
-
                 infos[i] = new UiccSlotInfo(
-                        slot.isActive(),
                         slot.isEuicc(),
                         cardId,
                         cardState,
-                        slot.getPhoneId(),
                         slot.isExtendedApduSupported(),
-                        slot.isRemovable());
+                        slot.isRemovable(), Collections.singletonList(
+                        new UiccPortInfo(
+                                iccId,
+                                0 /* TODO: to use portList from UiccSlots */,
+                                slot.getPhoneId(),
+                                slot.isActive())));
+                //setting the value after compatibility check
+                infos[i].setLogicalSlotAccessRestricted(isLogicalSlotAccessRestricted);
             }
             return infos;
         } finally {
@@ -8798,11 +8977,31 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
+    @Deprecated
+    //TODO : once integrating with HAL Changes we can clean up this Internal API.
     public boolean switchSlots(int[] physicalSlots) {
         enforceModifyPermission();
 
         final long identity = Binder.clearCallingIdentity();
         try {
+            return (Boolean) sendRequest(CMD_SWITCH_SLOTS, physicalSlots);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    public boolean setSimSlotMapping(@NonNull List<UiccSlotMapping> slotMapping) {
+        enforceModifyPermission();
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            //TODO: once integrating the HAL changes we can proceed with to work on the parsing side
+            int[] physicalSlots = new int[slotMapping.size()];
+            for (int i = 0; i < physicalSlots.length; i++) {
+                physicalSlots[i] = slotMapping.get(i).getPhysicalSlotIndex();
+            }
             return (Boolean) sendRequest(CMD_SWITCH_SLOTS, physicalSlots);
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -9392,7 +9591,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public int[] getSlotsMapping() {
+    public int[] getSlotsMapping(@NonNull String callingPackage) {
         enforceReadPrivilegedPermission("getSlotsMapping");
 
         final long identity = Binder.clearCallingIdentity();
@@ -9400,7 +9599,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int phoneCount = TelephonyManager.getDefault().getPhoneCount();
             // All logical slots should have a mapping to a physical slot.
             int[] logicalSlotsMapping = new int[phoneCount];
-            UiccSlotInfo[] slotInfos = getUiccSlotsInfo();
+            UiccSlotInfo[] slotInfos = getUiccSlotsInfo(callingPackage);
             for (int i = 0; i < slotInfos.length; i++) {
                 if (SubscriptionManager.isValidPhoneId(slotInfos[i].getLogicalSlotIdx())) {
                     logicalSlotsMapping[slotInfos[i].getLogicalSlotIdx()] = i;
@@ -10956,5 +11155,88 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    /**
+     * @return {@CellIdentity} last known cell identity {@CellIdentity}.
+     *
+     * Require {@link android.Manifest.permission#ACCESS_FINE_LOCATION} and
+     * com.android.phone.permission.ACCESS_LAST_KNOWN_CELL_ID, otherwise throws
+     * SecurityException.
+     * If there is current registered network this value will be same as the registered cell
+     * identity. If the device goes out of service the previous cell identity is cached and
+     * will be returned. If the cache age of the Cell identity is more than 24 hours
+     * it will be cleared and null will be returned.
+     *
+     */
+    @Override
+    public @Nullable CellIdentity getLastKnownCellIdentity(int subId, String callingPackage,
+            String callingFeatureId) {
+        mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
+        LocationAccessPolicy.LocationPermissionResult fineLocationResult =
+                LocationAccessPolicy.checkLocationPermission(mApp,
+                        new LocationAccessPolicy.LocationPermissionQuery.Builder()
+                                .setCallingPackage(callingPackage)
+                                .setCallingFeatureId(callingFeatureId)
+                                .setCallingPid(Binder.getCallingPid())
+                                .setCallingUid(Binder.getCallingUid())
+                                .setMethod("getLastKnownCellIdentity")
+                                .setLogAsInfo(true)
+                                .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
+                                .setMinSdkVersionForEnforcement(Build.VERSION_CODES.Q)
+                                .build());
+
+        boolean hasFinePermission =
+                fineLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
+        if (!hasFinePermission
+                || !TelephonyPermissions.checkLastKnownCellIdAccessPermission(mApp)) {
+            throw new SecurityException("getLastKnownCellIdentity need ACCESS_FINE_LOCATION "
+                    + "and BIND_CONNECTION_SERVICE permission.");
+        }
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            Phone phone = getPhone(subId);
+            if (phone == null) return null;
+            ServiceStateTracker sst = phone.getServiceStateTracker();
+            if (sst == null) return null;
+            return sst.getLastKnownCellIdentity();
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Sets the modem service class Name that Telephony will bind to.
+     *
+     * @param serviceName The class name of the modem service.
+     * @return true if the operation is succeed, otherwise false.
+     */
+    public boolean setModemService(String serviceName) {
+        Log.d(LOG_TAG, "setModemService - " + serviceName);
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setModemService");
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
+                        SubscriptionManager.INVALID_SUBSCRIPTION_ID,
+                        "setModemService");
+        return mPhoneConfigurationManager.setModemService(serviceName);
+    }
+
+    /**
+     * Return the class name of the currently bounded modem service.
+     *
+     * @return the class name of the modem service.
+     */
+    public String getModemService() {
+        String result;
+        Log.d(LOG_TAG, "getModemService");
+        TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "getModemService");
+        TelephonyPermissions
+                        .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
+                        mApp, SubscriptionManager.INVALID_SUBSCRIPTION_ID,
+                        "getModemService");
+        result = mPhoneConfigurationManager.getModemService();
+        Log.d(LOG_TAG, "result = " + result);
+        return result;
     }
 }
