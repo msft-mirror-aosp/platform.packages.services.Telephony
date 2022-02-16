@@ -28,9 +28,6 @@ import static android.provider.Telephony.ServiceStateTable.getUriForSubscription
 import static android.provider.Telephony.ServiceStateTable.getUriForSubscriptionIdAndField;
 
 import android.Manifest;
-import android.app.compat.CompatChanges;
-import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
@@ -233,15 +230,6 @@ public class ServiceStateProvider extends ContentProvider {
      */
     public static final String OPERATOR_ALPHA_SHORT_RAW = "operator_alpha_short_raw";
 
-    /**
-     * If the change Id is enabled, location permission is required to access location sensitive
-     * columns in the ServiceStateTable.
-     */
-    @ChangeId
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
-    @VisibleForTesting
-    /* package */ static final long ENFORCE_LOCATION_PERMISSION_CHECK = 191911306;
-
     private final HashMap<Integer, ServiceState> mServiceStates = new HashMap<>();
 
     @VisibleForTesting
@@ -410,8 +398,7 @@ public class ServiceStateProvider extends ContentProvider {
                 return null;
             }
 
-            final boolean enforceLocationPermission =
-                    CompatChanges.isChangeEnabled(ENFORCE_LOCATION_PERMISSION_CHECK);
+            // TODO(b/182384053): replace targetSdk check with CompatChanges#isChangeEnabled
             final boolean targetingAtLeastS = TelephonyPermissions.getTargetSdk(getContext(),
                     getCallingPackage()) >= Build.VERSION_CODES.S;
             final boolean canReadPrivilegedPhoneState = getContext().checkCallingOrSelfPermission(
@@ -419,7 +406,7 @@ public class ServiceStateProvider extends ContentProvider {
 
             final String[] availableColumns;
             final ServiceState ss;
-            if (enforceLocationPermission && targetingAtLeastS && !canReadPrivilegedPhoneState) {
+            if (targetingAtLeastS && !canReadPrivilegedPhoneState) {
                 // targetSdkVersion S+ without read privileged phone state permission can only
                 // access public columns which have no location sensitive info.
                 availableColumns = PUBLIC_COLUMNS;
@@ -428,9 +415,9 @@ public class ServiceStateProvider extends ContentProvider {
                 availableColumns = ALL_COLUMNS;
 
                 final boolean hasLocationPermission = hasLocationPermission();
-                if (!enforceLocationPermission || hasLocationPermission) {
+                if (hasLocationPermission) {
                     // No matter the targetSdkVersion, return unredacted ServiceState if caller does
-                    // have location permission or location permission enforcement is not introduced
+                    // have location permission.
                     ss = unredactedServiceState;
                 } else {
                     // The caller has targetSdkVersion S+ but no location permission. It explicitly
