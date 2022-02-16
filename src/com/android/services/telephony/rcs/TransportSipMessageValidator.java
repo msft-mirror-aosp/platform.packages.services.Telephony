@@ -16,9 +16,6 @@
 
 package com.android.services.telephony.rcs;
 
-import static com.android.internal.telephony.TelephonyStatsLog.SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__INCOMING;
-import static com.android.internal.telephony.TelephonyStatsLog.SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__OUTGOING;
-
 import android.telephony.ims.DelegateRegistrationState;
 import android.telephony.ims.FeatureTagState;
 import android.telephony.ims.SipDelegateConfiguration;
@@ -29,8 +26,6 @@ import android.util.LocalLog;
 import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.telephony.SipMessageParsingUtils;
-import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.services.telephony.rcs.validator.IncomingTransportStateValidator;
 import com.android.services.telephony.rcs.validator.MalformedSipMessageValidator;
@@ -150,13 +145,11 @@ public class TransportSipMessageValidator {
     private PendingTask mPendingClose;
     private PendingRegCleanupTask mPendingRegCleanup;
     private Consumer<Set<String>> mRegistrationAppliedConsumer;
-    private final RcsStats mRcsStats;
 
     public TransportSipMessageValidator(int subId, ScheduledExecutorService executor) {
         mSubId = subId;
         mExecutor = executor;
-        mRcsStats = RcsStats.getInstance();
-        mSipSessionTracker = new SipSessionTracker(subId, mRcsStats);
+        mSipSessionTracker = new SipSessionTracker();
         mOutgoingTransportStateValidator = new OutgoingTransportStateValidator(mSipSessionTracker);
         mIncomingTransportStateValidator = new IncomingTransportStateValidator();
         mOutgoingMessageValidator = new MalformedSipMessageValidator().andThen(
@@ -170,7 +163,7 @@ public class TransportSipMessageValidator {
     public TransportSipMessageValidator(int subId, ScheduledExecutorService executor,
             SipSessionTracker sipSessionTracker,
             OutgoingTransportStateValidator outgoingStateValidator,
-            IncomingTransportStateValidator incomingStateValidator, RcsStats rcsStats) {
+            IncomingTransportStateValidator incomingStateValidator) {
         mSubId = subId;
         mExecutor = executor;
         mSipSessionTracker = sipSessionTracker;
@@ -178,7 +171,6 @@ public class TransportSipMessageValidator {
         mIncomingTransportStateValidator = incomingStateValidator;
         mOutgoingMessageValidator = mOutgoingTransportStateValidator;
         mIncomingMessageValidator = mIncomingTransportStateValidator;
-        mRcsStats = rcsStats;
     }
 
     /**
@@ -373,11 +365,7 @@ public class TransportSipMessageValidator {
         }
         ValidationResult result = mOutgoingMessageValidator.validate(message);
         logi("verifyOutgoingMessage: " + result + ", message=" + message);
-        if (result.isValidated) {
-            mSipSessionTracker.filterSipMessage(
-                    SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__OUTGOING, message);
-        }
-        updateForMetrics(SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__OUTGOING, message, result);
+        if (result.isValidated) mSipSessionTracker.filterSipMessage(message);
         return result;
     }
 
@@ -390,11 +378,7 @@ public class TransportSipMessageValidator {
     public ValidationResult verifyIncomingMessage(SipMessage message) {
         ValidationResult result = mIncomingMessageValidator.validate(message);
         logi("verifyIncomingMessage: " + result + ", message=" + message);
-        if (result.isValidated) {
-            mSipSessionTracker.filterSipMessage(
-                    SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__INCOMING, message);
-        }
-        updateForMetrics(SIP_TRANSPORT_SESSION__SIP_MESSAGE_DIRECTION__INCOMING, message, result);
+        if (result.isValidated) mSipSessionTracker.filterSipMessage(message);
         return result;
     }
 
@@ -553,28 +537,6 @@ public class TransportSipMessageValidator {
     private Set<String> getTrackedSipSessionCallIds() {
         return mSipSessionTracker.getTrackedDialogs().stream().map(SipDialog::getCallId)
                 .collect(Collectors.toSet());
-    }
-
-    private void updateForMetrics(int direction, SipMessage m, ValidationResult result) {
-        String[] startLineSegments = SipMessageParsingUtils
-                .splitStartLineAndVerify(m.getStartLine());
-        if (SipMessageParsingUtils.isSipRequest(m.getStartLine())) {
-            if (result.isValidated) {
-                // SipMessage add to list for Metrics stats
-                mRcsStats.onSipMessageRequest(m.getCallIdParameter(), startLineSegments[0],
-                        direction);
-            } else {
-                //Message sending fail and there is no response.
-                mRcsStats.invalidatedMessageResult(mSubId, startLineSegments[0], direction,
-                        result.restrictedReason);
-            }
-        } else if (SipMessageParsingUtils.isSipResponse(m.getStartLine())) {
-            int statusCode = Integer.parseInt(startLineSegments[1]);
-            mRcsStats.onSipMessageResponse(mSubId, m.getCallIdParameter(), statusCode,
-                    result.restrictedReason);
-        } else {
-            logw("Message is Restricted");
-        }
     }
 
     private void logi(String log) {

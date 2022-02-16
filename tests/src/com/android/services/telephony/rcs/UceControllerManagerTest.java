@@ -19,7 +19,6 @@ package com.android.services.telephony.rcs;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -200,9 +199,9 @@ public class UceControllerManagerTest extends TelephonyTestBase {
         doReturn(false).when(mUceController).isUnavailable();
         uceCtrlManager.onRcsConnected(mRcsFeatureManager);
 
-        uceCtrlManager.getUcePublishState(true);
+        uceCtrlManager.getUcePublishState();
 
-        verify(mUceController).getUcePublishState(eq(true));
+        verify(mUceController).getUcePublishState();
     }
 
     @Test
@@ -212,7 +211,7 @@ public class UceControllerManagerTest extends TelephonyTestBase {
         uceCtrlManager.onRcsDisconnected();
 
         try {
-            uceCtrlManager.getUcePublishState(true);
+            uceCtrlManager.getUcePublishState();
             fail();
         } catch (ImsException e) {
             assertEquals(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE, e.getCode());
@@ -226,9 +225,9 @@ public class UceControllerManagerTest extends TelephonyTestBase {
         UceControllerManager uceCtrlManager = getUceControllerManager();
         IRcsUcePublishStateCallback callback = Mockito.mock(IRcsUcePublishStateCallback.class);
 
-        uceCtrlManager.registerPublishStateCallback(callback, true);
+        uceCtrlManager.registerPublishStateCallback(callback);
 
-        verify(mUceController).registerPublishStateCallback(callback, true);
+        verify(mUceController).registerPublishStateCallback(callback);
     }
 
     @Test
@@ -239,7 +238,7 @@ public class UceControllerManagerTest extends TelephonyTestBase {
 
         try {
             IRcsUcePublishStateCallback callback = Mockito.mock(IRcsUcePublishStateCallback.class);
-            uceCtrlManager.registerPublishStateCallback(callback, true);
+            uceCtrlManager.registerPublishStateCallback(callback);
             fail();
         } catch (ImsException e) {
             assertEquals(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE, e.getCode());
