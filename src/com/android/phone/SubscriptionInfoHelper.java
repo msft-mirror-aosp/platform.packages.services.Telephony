@@ -91,8 +91,7 @@ public class SubscriptionInfoHelper {
 
         intent.putExtra(SubscriptionInfoHelper.SUB_ID_EXTRA, subscription.getSubscriptionId());
         intent.putExtra(
-                SubscriptionInfoHelper.SUB_LABEL_EXTRA, subscription.getDisplayName() == null ? null
-                        : subscription.getDisplayName().toString());
+                SubscriptionInfoHelper.SUB_LABEL_EXTRA, subscription.getDisplayName().toString());
     }
 
     /**

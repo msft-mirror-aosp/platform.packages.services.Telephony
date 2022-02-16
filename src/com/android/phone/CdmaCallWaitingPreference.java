@@ -78,7 +78,7 @@ public class CdmaCallWaitingPreference extends Preference {
     public void onClick() {
         super.onClick();
 
-        AlertDialog.Builder builder = FrameworksUtils.makeAlertDialogBuilder(mContext);
+        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
         builder.setTitle(mContext.getText(R.string.cdma_call_waiting));
         builder.setMessage(mContext.getText(R.string.enable_cdma_call_waiting_setting));
         builder.setPositiveButton(R.string.enable_cdma_cw, new DialogInterface.OnClickListener() {
