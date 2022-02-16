@@ -468,8 +468,7 @@ public class PhoneUtils {
                     };
 
                 // build the dialog
-                final AlertDialog newDialog =
-                        FrameworksUtils.makeAlertDialogBuilder(contextThemeWrapper)
+                final AlertDialog newDialog = new AlertDialog.Builder(contextThemeWrapper)
                         .setMessage(text)
                         .setView(dialogView)
                         .setPositiveButton(R.string.send_button, mUSSDDialogListener)
