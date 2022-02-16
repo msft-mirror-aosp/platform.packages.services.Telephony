@@ -56,7 +56,6 @@ public class GetPin2Screen extends Activity implements TextView.OnEditorActionLi
         mPin2Field.setOnEditorActionListener(this);
         mPin2Field.setInputType(
                 InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_VARIATION_PASSWORD);
-        mPin2Field.requestFocus();
 
         mOkButton = (Button) findViewById(R.id.ok);
         mOkButton.setOnClickListener(mClicked);
