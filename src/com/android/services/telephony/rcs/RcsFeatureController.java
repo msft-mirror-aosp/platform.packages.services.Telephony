@@ -33,7 +33,6 @@ import com.android.ims.RcsFeatureManager;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.imsphone.ImsRegistrationCallbackHelper;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.phone.ImsStateCallbackController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -128,7 +127,7 @@ public class RcsFeatureController {
     private FeatureConnector.Listener<RcsFeatureManager> mFeatureConnectorListener =
             new FeatureConnector.Listener<RcsFeatureManager>() {
                 @Override
-                public void connectionReady(RcsFeatureManager manager, int subId)
+                public void connectionReady(RcsFeatureManager manager)
                         throws com.android.ims.ImsException {
                     if (manager == null) {
                         logw("connectionReady returned null RcsFeatureManager");
@@ -140,8 +139,6 @@ public class RcsFeatureController {
                         // ImsService is gone.
                         updateConnectionStatus(manager);
                         setupConnectionToService(manager);
-                        ImsStateCallbackController.getInstance()
-                                .notifyExternalRcsStateChanged(mSlotId, true, true);
                     } catch (ImsException e) {
                         updateConnectionStatus(null /*manager*/);
                         // Use deprecated Exception for compatibility.
