@@ -58,7 +58,6 @@ public class CallForwardEditPreference extends EditPhoneNumberPreference {
             CarrierXmlParser.SsEntry.SSAction.UNKNOWN;
     private int mAction;
     private HashMap<String, String> mCfInfo;
-    private long mDelayMillisAfterUssdSet = 1000;
 
     public CallForwardEditPreference(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -428,8 +427,7 @@ public class CallForwardEditPreference extends EditPhoneNumberPreference {
                                     default: // not reachable
                                         s = getContext().getText(R.string.disable_cfnrc_forbidden);
                                 }
-                                AlertDialog.Builder builder =
-                                        FrameworksUtils.makeAlertDialogBuilder(getContext());
+                                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                                 builder.setNeutralButton(R.string.close_dialog, null);
                                 builder.setTitle(getContext()
                                         .getText(R.string.error_updating_title));
@@ -442,8 +440,7 @@ public class CallForwardEditPreference extends EditPhoneNumberPreference {
                                 // Handle the fail-to-enable case.
                                 CharSequence s = getContext()
                                     .getText(R.string.registration_cf_forbidden);
-                                AlertDialog.Builder builder =
-                                        FrameworksUtils.makeAlertDialogBuilder(getContext());
+                                AlertDialog.Builder builder = new AlertDialog.Builder(getContext());
                                 builder.setNeutralButton(R.string.close_dialog, null);
                                 builder.setTitle(getContext()
                                         .getText(R.string.error_updating_title));
@@ -491,9 +488,8 @@ public class CallForwardEditPreference extends EditPhoneNumberPreference {
                 mPhone.getCallForwardingOption(reason, mServiceClass,
                         obtainMessage(MESSAGE_GET_CF, msg.arg1, MESSAGE_SET_CF, ar.exception));
             } else {
-                mHandler.sendMessageDelayed(mHandler.obtainMessage(mHandler.MESSAGE_GET_CF_USSD,
-                        msg.arg1, MyHandler.MESSAGE_SET_CF, ar.exception),
-                        mDelayMillisAfterUssdSet);
+                mHandler.sendMessage(mHandler.obtainMessage(mHandler.MESSAGE_GET_CF_USSD,
+                        msg.arg1, MyHandler.MESSAGE_SET_CF, ar.exception));
             }
         }
 
