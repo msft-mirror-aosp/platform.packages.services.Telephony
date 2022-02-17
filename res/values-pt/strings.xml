@@ -637,14 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Modo de retorno de chamada de emergência"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Conexão de dados desativada"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Sem conexão de dados até <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
-      <item quantity="one">O smartphone ficará no modo de retorno de chamada de emergência por <xliff:g id="COUNT_1">%s</xliff:g> minutos. Nesse modo, não será possível usar apps que utilizem conexão de dados. Quer sair agora?</item>
-      <item quantity="other">O smartphone ficará no modo de retorno de chamada de emergência por <xliff:g id="COUNT_1">%s</xliff:g> minutos. Nesse modo, não será possível usar apps que utilizem conexão de dados. Quer sair agora?</item>
-    </plurals>
-    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
-      <item quantity="one">A ação selecionada não está disponível no modo de retorno de chamada de emergência. O smartphone ficará nesse modo por <xliff:g id="COUNT_1">%s</xliff:g> minutos. Quer sair agora?</item>
-      <item quantity="other">A ação selecionada não está disponível no modo de retorno de chamada de emergência. O smartphone ficará nesse modo por <xliff:g id="COUNT_1">%s</xliff:g> minutos. Quer sair agora?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm (7661603870224398025) -->
+    <!-- format error in translation for alert_dialog_not_avaialble_in_ecm (8717711120099503279) -->
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"A ação selecionada não está disponível durante uma chamada de emergência."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Saindo do modo de retorno de chamada de emergência"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Sim"</string>
@@ -652,10 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Descartar"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"O smartphone está no modo de retorno de chamada de emergência"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"Até <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
-      <item quantity="one">O smartphone ficará no modo de retorno de chamada de emergência por <xliff:g id="COUNT_1">%s</xliff:g> minuto.\nVocê quer sair agora?</item>
-      <item quantity="other">O smartphone ficará no modo de retorno de chamada de emergência por <xliff:g id="COUNT_1">%s</xliff:g> minutos.\nVocê quer sair agora?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm_without_data_restriction_hint (7549850847524907932) -->
     <string name="voicemail_provider" msgid="4158806657253745294">"Serviço"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Configuração"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Não definido&gt;"</string>
@@ -827,7 +818,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"Não é possível ligar porque há outra chamada sendo realizada."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"Não é possível ligar porque há uma chamada recebida que não foi atendida. Atenda ou rejeite essa chamada antes de fazer outra."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"Não é possível ligar porque as chamadas foram desativadas pela propriedade \"ro.telephony.disable-call system\"."</string>
-    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"Não é possível ligar porque já há duas chamadas em andamento. Encerre uma das chamadas ou mescle-as em uma conferência antes de fazer outra."</string>
+    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"Não é possível ligar porque já há duas chamadas em andamento. Encerre uma das chamadas ou mescle-as em uma conferência antes de fazer outra."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"Verifique se os dados móveis estão ativados para usar este serviço: <xliff:g id="SUPP_SERVICE">%s</xliff:g>. Você pode alterar essa opção nas configurações da rede móvel."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"Verifique se os dados móveis e o roaming de dados estão ativados para usar este serviço: <xliff:g id="SUPP_SERVICE">%s</xliff:g>. Você pode alterar essa opção nas configurações da rede móvel."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"Verifique se os dados móveis estão ativados para o SIM <xliff:g id="SIM_NUMBER">%2$d</xliff:g> para usar este serviço: <xliff:g id="SUPP_SERVICE">%1$s</xliff:g>. Você pode alterar essa opção nas configurações da rede móvel."</string>
