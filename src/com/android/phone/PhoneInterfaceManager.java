@@ -22,6 +22,7 @@ import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_CDMA;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_GSM;
 import static com.android.internal.telephony.PhoneConstants.PHONE_TYPE_IMS;
 import static com.android.internal.telephony.PhoneConstants.SUBSCRIPTION_KEY;
+import static com.android.internal.telephony.TelephonyStatsLog.RCS_CLIENT_PROVISIONING_STATS__EVENT__CLIENT_PARAMS_SENT;
 
 import android.Manifest;
 import android.Manifest.permission;
@@ -187,6 +188,7 @@ import com.android.internal.telephony.euicc.EuiccConnector;
 import com.android.internal.telephony.ims.ImsResolver;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
+import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
@@ -2799,8 +2801,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int subId = mSubscriptionController.getDefaultDataSubId();
             final Phone phone = getPhone(subId);
             if (phone != null) {
-                phone.getDataEnabledSettings().setDataEnabled(
-                        TelephonyManager.DATA_ENABLED_REASON_USER, true);
+                if (phone.isUsingNewDataStack()) {
+                    phone.getDataSettingsManager().setDataEnabled(
+                            TelephonyManager.DATA_ENABLED_REASON_USER, true);
+                } else {
+                    phone.getDataEnabledSettings().setDataEnabled(
+                            TelephonyManager.DATA_ENABLED_REASON_USER, true);
+                }
                 return true;
             } else {
                 return false;
@@ -2820,8 +2827,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int subId = mSubscriptionController.getDefaultDataSubId();
             final Phone phone = getPhone(subId);
             if (phone != null) {
-                phone.getDataEnabledSettings().setDataEnabled(
-                        TelephonyManager.DATA_ENABLED_REASON_USER, false);
+                if (phone.isUsingNewDataStack()) {
+                    phone.getDataSettingsManager().setDataEnabled(
+                            TelephonyManager.DATA_ENABLED_REASON_USER, false);
+                } else {
+                    phone.getDataEnabledSettings().setDataEnabled(
+                            TelephonyManager.DATA_ENABLED_REASON_USER, false);
+                }
                 return true;
             } else {
                 return false;
@@ -5439,11 +5451,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public int setForbiddenPlmns(int subId, int appType, List<String> fplmns, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(mApp, subId, callingPackage,
-                callingFeatureId, "setForbiddenPlmns")) {
-            if (DBG) logv("no permissions for setForbiddenplmns");
-            throw new IllegalStateException("No Permissions for setForbiddenPlmns");
-        }
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
+                mApp, subId, "setForbiddenPlmns");
+
         if (appType != TelephonyManager.APPTYPE_USIM && appType != TelephonyManager.APPTYPE_SIM) {
             loge("setForbiddenPlmnList(): App Type must be USIM or SIM");
             throw new IllegalArgumentException("Invalid appType: App Type must be USIM or SIM");
@@ -6662,10 +6672,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = PhoneFactory.getPhone(phoneId);
             if (phone != null) {
                 boolean retVal;
-                if (reason == TelephonyManager.DATA_ENABLED_REASON_USER) {
-                    retVal = phone.isUserDataEnabled();
+                if (phone.isUsingNewDataStack()) {
+                    retVal = phone.getDataSettingsManager().isDataEnabledForReason(reason);
                 } else {
-                    retVal = phone.getDataEnabledSettings().isDataEnabledForReason(reason);
+                    if (reason == TelephonyManager.DATA_ENABLED_REASON_USER) {
+                        retVal = phone.isUserDataEnabled();
+                    } else {
+                        retVal = phone.getDataEnabledSettings().isDataEnabledForReason(reason);
+                    }
                 }
                 if (DBG) log("isDataEnabledForReason: retVal=" + retVal);
                 return retVal;
@@ -8266,6 +8280,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int result = (int) sendRequest(CMD_ENABLE_VONR, enabled, subId,
                     workSource);
             if (DBG) log("setVoNrEnabled result: " + result);
+
+            if (result == TelephonyManager.ENABLE_VONR_SUCCESS) {
+                if (DBG) {
+                    log("Set VoNR settings in siminfo db; subId=" + subId + ", value:" + enabled);
+                }
+                SubscriptionManager.setSubscriptionProperty(
+                        subId, SubscriptionManager.NR_ADVANCED_CALLING_ENABLED,
+                        (enabled ? "1" : "0"));
+            }
+
             return result;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -8395,7 +8419,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 if (reason == TelephonyManager.DATA_ENABLED_REASON_CARRIER) {
                     phone.carrierActionSetMeteredApnsEnabled(enabled);
                 } else {
-                    phone.getDataEnabledSettings().setDataEnabled(reason, enabled);
+                    if (phone.isUsingNewDataStack()) {
+                        phone.getDataSettingsManager().setDataEnabled(reason, enabled);
+                    } else {
+                        phone.getDataEnabledSettings().setDataEnabled(reason, enabled);
+                    }
                 }
             }
         } finally {
@@ -9565,7 +9593,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone == null) return false;
 
             boolean isMetered = ApnSettingUtils.isMeteredApnType(apnType, phone);
-            return !isMetered || phone.getDataEnabledSettings().isDataEnabled(apnType);
+            boolean isDataEnabled;
+            if (phone.isUsingNewDataStack()) {
+                isDataEnabled = phone.getDataSettingsManager().isDataEnabled(apnType);
+            } else {
+                isDataEnabled = phone.getDataEnabledSettings().isDataEnabled(apnType);
+            }
+            return !isMetered || isDataEnabled;
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -9719,9 +9753,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
             switch (policy) {
                 case TelephonyManager.MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL:
-                    return phone.getDataEnabledSettings().isDataAllowedInVoiceCall();
+                    if (phone.isUsingNewDataStack()) {
+                        return phone.getDataSettingsManager().isDataAllowedInVoiceCall();
+                    } else {
+                        return phone.getDataEnabledSettings().isDataAllowedInVoiceCall();
+                    }
                 case TelephonyManager.MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED:
-                    return phone.getDataEnabledSettings().isMmsAlwaysAllowed();
+                    if (phone.isUsingNewDataStack()) {
+                        return phone.getDataSettingsManager().isMmsAlwaysAllowed();
+                    } else {
+                        return phone.getDataEnabledSettings().isMmsAlwaysAllowed();
+                    }
                 default:
                     throw new IllegalArgumentException(policy + " is not a valid policy");
             }
@@ -9742,10 +9784,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
             switch (policy) {
                 case TelephonyManager.MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL:
-                    phone.getDataEnabledSettings().setAllowDataDuringVoiceCall(enabled);
+                    if (phone.isUsingNewDataStack()) {
+                        phone.getDataSettingsManager().setAllowDataDuringVoiceCall(enabled);
+                    } else {
+                        phone.getDataEnabledSettings().setAllowDataDuringVoiceCall(enabled);
+                    }
                     break;
                 case TelephonyManager.MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED:
-                    phone.getDataEnabledSettings().setAlwaysAllowMmsData(enabled);
+                    if (phone.isUsingNewDataStack()) {
+                        phone.getDataSettingsManager().setAlwaysAllowMmsData(enabled);
+                    } else {
+                        phone.getDataEnabledSettings().setAlwaysAllowMmsData(enabled);
+                    }
                     break;
                 default:
                     throw new IllegalArgumentException(policy + " is not a valid policy");
@@ -10461,6 +10511,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             } else {
                 configBinder.setRcsClientConfiguration(rcc);
             }
+
+            RcsStats.getInstance().onRcsClientProvisioningStats(subId,
+                    RCS_CLIENT_PROVISIONING_STATS__EVENT__CLIENT_PARAMS_SENT);
         } catch (RemoteException e) {
             Rlog.e(LOG_TAG, "fail to setRcsClientConfiguration " + e.getMessage());
             throw new ServiceSpecificException(ImsException.CODE_ERROR_SERVICE_UNAVAILABLE,
