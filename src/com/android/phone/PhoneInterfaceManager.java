@@ -5695,22 +5695,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         return false;
     }
 
-    public String[] getPcscfAddress(String apnType, String callingPackage,
-            String callingFeatureId) {
-        final Phone defaultPhone = getDefaultPhone();
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(mApp, defaultPhone.getSubId(),
-                callingPackage, callingFeatureId, "getPcscfAddress")) {
-            return new String[0];
-        }
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return defaultPhone.getPcscfAddress(apnType);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
-    }
-
     /**
      * Toggle IMS disable and enable for the framework to reset it. See {@link #enableIms(int)} and
      * {@link #disableIms(int)}.
@@ -6685,8 +6669,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 boolean retVal;
                 if (phone.isUsingNewDataStack()) {
-                    retVal = phone.getDataNetworkController().getDataSettingsManager()
-                            .isDataEnabled();
+                    retVal = phone.getDataSettingsManager().isDataEnabled();
                 } else {
                     retVal = phone.getDataEnabledSettings().isDataEnabled();
                 }
@@ -11195,7 +11178,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public void getSlicingConfig(ResultReceiver callback) {
-        enforceReadPrivilegedPermission("getSlicingConfig");
+        TelephonyPermissions
+                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
+                        mApp, SubscriptionManager.INVALID_SUBSCRIPTION_ID, "getSlicingConfig");
 
         final long identity = Binder.clearCallingIdentity();
         try {
