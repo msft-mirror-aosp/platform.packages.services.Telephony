@@ -68,7 +68,7 @@ public class PhoneDisplayMessage {
         // displaying system alert dialog on the screen instead of
         // using another activity to display the message.  This
         // places the message at the forefront of the UI.
-        sDisplayMessageDialog = FrameworksUtils.makeAlertDialogBuilder(context)
+        sDisplayMessageDialog = new AlertDialog.Builder(context)
                 .setIcon(android.R.drawable.ic_dialog_info)
                 .setTitle(title)
                 .setMessage(msg)
