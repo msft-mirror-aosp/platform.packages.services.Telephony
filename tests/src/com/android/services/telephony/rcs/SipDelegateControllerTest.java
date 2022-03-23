@@ -30,7 +30,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.os.Binder;
 import android.telephony.ims.DelegateRegistrationState;
 import android.telephony.ims.DelegateRequest;
 import android.telephony.ims.FeatureTagState;
@@ -108,8 +107,7 @@ public class SipDelegateControllerTest extends TelephonyTestBase {
         assertTrue(future.get());
         verify(mMockMessageTracker).openTransport(mMockSipDelegate, request.getFeatureTags(),
                 Collections.emptySet());
-        verify(mMockDelegateStateTracker).sipDelegateConnected(request.getFeatureTags(),
-                Collections.emptySet());
+        verify(mMockDelegateStateTracker).sipDelegateConnected(Collections.emptySet());
     }
 
     @SmallTest
@@ -140,7 +138,7 @@ public class SipDelegateControllerTest extends TelephonyTestBase {
         allowedTags.removeAll(deniedTags.stream().map(FeatureTagState::getFeatureTag)
                 .collect(Collectors.toSet()));
         verify(mMockMessageTracker).openTransport(mMockSipDelegate, allowedTags, deniedTags);
-        verify(mMockDelegateStateTracker).sipDelegateConnected(allowedTags, deniedTags);
+        verify(mMockDelegateStateTracker).sipDelegateConnected(deniedTags);
     }
 
     @SmallTest
@@ -251,9 +249,7 @@ public class SipDelegateControllerTest extends TelephonyTestBase {
                 Collections.emptySet());
         verify(mMockMessageTracker).openTransport(mMockSipDelegate, newFts,
                 Collections.emptySet());
-        verify(mMockDelegateStateTracker).sipDelegateConnected(
-                request.getFeatureTags(), Collections.emptySet());
-        verify(mMockDelegateStateTracker).sipDelegateConnected(newFts, Collections.emptySet());
+        verify(mMockDelegateStateTracker, times(2)).sipDelegateConnected(Collections.emptySet());
     }
 
     private void createSipDelegate(DelegateRequest request, SipDelegateController controller)
@@ -292,8 +288,8 @@ public class SipDelegateControllerTest extends TelephonyTestBase {
 
     private SipDelegateController getTestDelegateController(DelegateRequest request,
             Set<FeatureTagState> deniedSet) {
-        return new SipDelegateController(TEST_SUB_ID, Binder.getCallingUid(), request, "",
-                mExecutorService, mMockMessageTracker, mMockDelegateStateTracker,
+        return new SipDelegateController(TEST_SUB_ID, request, "", mExecutorService,
+                mMockMessageTracker, mMockDelegateStateTracker,
                 (a, b, deniedFeatureSet, d, e) ->  {
                     assertEquals(deniedSet, deniedFeatureSet);
                     return mMockBinderConnection;
