@@ -1446,19 +1446,19 @@
     <!-- ECM: Displays the time when ECM will end, Example: "No Data Connection until 10:45 AM" -->
     <string name="phone_in_ecm_notification_complete_time">No data connection until <xliff:g id="completeTime">%s</xliff:g></string>
     <!-- ECM: Dialog box message for exiting from the notifications screen -->
-    <string name="alert_dialog_exit_ecm"> {count, plural,
+    <plurals name="alert_dialog_exit_ecm">
         <!-- number of minutes is one -->
-        =1    {The phone will be in Emergency Callback mode for one minute. While in this mode no apps using a data connection can be used. Do you want to exit now?}
+        <item quantity="one">The phone will be in Emergency Callback mode for <xliff:g id="count">%s</xliff:g> minute. While in this mode no apps using a data connection can be used. Do you want to exit now?</item>
         <!-- number of minutes is not equal to one -->
-        other {The phone will be in Emergency Callback mode for %s minutes. While in this mode no applications using a data connection can be used. Do you want to exit now?}
-    }</string>
+        <item quantity="other">The phone will be in Emergency Callback mode for <xliff:g id="count">%s</xliff:g> minutes. While in this mode no applications using a data connection can be used. Do you want to exit now?</item>
+    </plurals>
     <!-- ECM: Dialog box message for exiting from any other app -->
-    <string name="alert_dialog_not_avaialble_in_ecm"> {count, plural,
+    <plurals name="alert_dialog_not_avaialble_in_ecm">
         <!-- number of minutes is one -->
-        =1    {The selected action isn\'t available while in the Emergency Callback mode. The phone will be in this mode for one minute. Do you want to exit now?}
+        <item quantity="one">The selected action isn\'t available while in the Emergency Callback mode. The phone will be in this mode for <xliff:g id="count">%s</xliff:g> minute. Do you want to exit now?</item>
         <!-- number of minutes is not equal to one -->
-        other {The selected action isn\'t available while in the Emergency Callback mode. The phone will be in this mode for %s minutes. Do you want to exit now?}
-    }</string>
+        <item quantity="other">The selected action isn\'t available while in the Emergency Callback mode. The phone will be in this mode for <xliff:g id="count">%s</xliff:g> minutes. Do you want to exit now?</item>
+    </plurals>
     <!-- ECM: Dialog box message while in emergency call -->
     <string name="alert_dialog_in_ecm_call">The selected action isn\'t available while in an emergency call.</string>
     <!-- ECM: Progress text -->
@@ -1474,12 +1474,12 @@
     <!-- ECM: Displays the time when ECM will end without data restriction hint, Example: "Until 10:45 AM" -->
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint">Until <xliff:g id="completeTime">%s</xliff:g></string>
     <!-- ECM: Dialog box message without data restriction hint for exiting from the notifications screen -->
-    <string name="alert_dialog_exit_ecm_without_data_restriction_hint"> {count, plural,
+    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint">
         <!-- number of minutes is one -->
-        =1    {The phone will be in emergency callback mode for one minute.\nDo you want to exit now?}
+        <item quantity="one">The phone will be in emergency callback mode for <xliff:g id="count">%s</xliff:g> minute.\nDo you want to exit now?</item>
         <!-- number of minutes is not equal to one -->
-        other {The phone will be in emergency callback mode for %s minutes.\nDo you want to exit now?}
-    }</string>
+        <item quantity="other">The phone will be in emergency callback mode for <xliff:g id="count">%s</xliff:g> minutes.\nDo you want to exit now?</item>
+    </plurals>
 
     <!-- For incoming calls, this is a string we can get from a CDMA network instead of
          the actual phone number, to indicate there's no number present.  DO NOT TRANSLATE. -->
@@ -1952,7 +1952,7 @@
     <string name="callFailed_calling_disabled">Cannot place a call as calling has been disabled using the ro.telephony.disable-call system property.</string>
     <!-- In-call screen: error message shown when the user attempts to place a call, but calling has
          been disabled using a debug property. -->
-    <string name="callFailed_too_many_calls">Cannot place a call as there are already two calls in progress.  Disconnect one of the calls or merge them into a conference prior to placing a new call.</string>
+    <string name="callFailed_too_many_calls">Cannot place a call a there are already two calls in progress.  Disconnect one of the calls or merge them into a conference prior to placing a new call.</string>
     <!-- Message displayed to the user when they attempt to edit options for a supplementary service
          (call waiting, call barring, call forwarding, and caller ID), but they are required to
          enable mobile data first. -->
@@ -2196,16 +2196,4 @@
     <!-- Telephony notification channel name for a channel containing SIP accounts removed
      notificatios -->
     <string name="notification_channel_sip_account">Deprecated SIP accounts</string>
-
-    <!-- Instruction text to notify user that emergency calls may not be possible when voice is
-    enabled over wifi. [CHAR LIMIT=NONE] -->
-    <string name="limited_service_alert_dialog_description"><xliff:g id="spn" example="Operator">%s</xliff:g> doesn\'t support emergency calls over Wi-Fi.
-\n\nEmergency calls will be placed through a mobile network. If there\'s limited mobile coverage,
- your emergency call may not go through.
-</string>
-    <!-- Option to hide the popup dialog if it is not necessary for the user. [CHAR LIMIT=40] -->
-    <string name="do_not_show_again">Don\'t show again</string>
-    <!-- Option to turn off wifi calling -->
-    <string name="turn_off_wfc">Turn off Wi-Fi calling</string>
-    <string name="unavailable_emergency_calls_notification_name">Emergency calls may be unavailable</string>
 </resources>
