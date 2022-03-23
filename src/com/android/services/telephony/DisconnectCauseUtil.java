@@ -787,12 +787,12 @@ public class DisconnectCauseUtil {
             default:
                 break;
         }
-        return resourceId == null ? "" : context.getResources().getString(resourceId);
+        return resourceId == null ? "" : context.getResources().getText(resourceId);
     }
 
     private static boolean isRadioOffForThermalMitigation(int phoneId) {
         Phone phone = PhoneFactory.getPhone(phoneId);
-        return phone == null ? false : phone.isRadioOffForThermalMitigation();
+        return phone.isRadioOffForThermalMitigation();
     }
 
     /**
