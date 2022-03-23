@@ -65,7 +65,6 @@ import com.android.internal.telephony.SubscriptionInfoUpdater;
 import com.android.internal.telephony.TelephonyPermissions;
 import com.android.internal.telephony.util.ArrayUtils;
 import com.android.internal.util.IndentingPrintWriter;
-import com.android.telephony.Rlog;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -349,7 +348,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     try {
                         ICarrierService carrierService =
                                 ICarrierService.Stub.asInterface(conn.service);
-                        carrierService.getCarrierConfig(phoneId, carrierId, resultReceiver);
+                        carrierService.getCarrierConfig(carrierId, resultReceiver);
                         logdWithLocalLog("Fetch config for default app: "
                                 + mPlatformCarrierConfigPackage
                                 + " carrierid: " + carrierId.toString());
@@ -489,7 +488,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     try {
                         ICarrierService carrierService =
                                 ICarrierService.Stub.asInterface(conn.service);
-                        carrierService.getCarrierConfig(phoneId, carrierId, resultReceiver);
+                        carrierService.getCarrierConfig(carrierId, resultReceiver);
                         logdWithLocalLog("Fetch config for carrier app: "
                                 + getCarrierPackageForPhoneId(phoneId)
                                 + " carrierid: " + carrierId.toString());
@@ -657,7 +656,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                     try {
                         ICarrierService carrierService =
                                 ICarrierService.Stub.asInterface(conn.service);
-                        carrierService.getCarrierConfig(phoneId, null, resultReceiver);
+                        carrierService.getCarrierConfig(null, resultReceiver);
                         logdWithLocalLog("Fetch no sim config from default app: "
                                 + mPlatformCarrierConfigPackage);
                     } catch (RemoteException e) {
@@ -890,15 +889,22 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         return new CarrierIdentifier(mcc, mnc, spn, imsi, gid1, gid2, carrierId, specificCarrierId);
     }
 
-    /** Returns the package name of a privileged carrier app, or null if there is none. */
+    /** Returns the package name of a priveleged carrier app, or null if there is none. */
     @Nullable
     private String getCarrierPackageForPhoneId(int phoneId) {
+        List<String> carrierPackageNames;
         final long token = Binder.clearCallingIdentity();
         try {
-            return TelephonyManager.from(mContext)
-                    .getCarrierServicePackageNameForLogicalSlot(phoneId);
+            carrierPackageNames = TelephonyManager.from(mContext)
+                .getCarrierPackageNamesForIntentAndPhone(
+                    new Intent(CarrierService.CARRIER_SERVICE_INTERFACE), phoneId);
         } finally {
             Binder.restoreCallingIdentity(token);
+        }
+        if (carrierPackageNames != null && carrierPackageNames.size() > 0) {
+            return carrierPackageNames.get(0);
+        } else {
+            return null;
         }
     }
 
@@ -1058,7 +1064,6 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         }
 
         String fileName;
-        String iccid = null;
         if (isNoSimConfig) {
             fileName = getFilenameForNoSimConfig(packageName);
         } else {
@@ -1068,7 +1073,7 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
                 return null;
             }
 
-            iccid = getIccIdForPhoneId(phoneId);
+            final String iccid = getIccIdForPhoneId(phoneId);
             final int cid = getSpecificCarrierIdForPhoneId(phoneId);
             if (iccid == null) {
                 loge("Cannot restore config with null iccid.");
@@ -1097,36 +1102,12 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         } catch (FileNotFoundException e) {
             // Missing file is normal occurrence that might occur with a new sim or when restoring
             // an override file during boot and should not be treated as an error.
-            if (file != null) {
-                if (isNoSimConfig) {
-                    logd("File not found: " + file.getPath());
-                } else {
-                    String filePath = file.getPath();
-                    filePath = getFilePathForLogging(filePath, iccid);
-                    logd("File not found : " + filePath);
-                }
-            }
+            if (file != null) logd("File not found: " + file.getPath());
         } catch (IOException e) {
             loge(e.toString());
         }
 
         return restoredBundle;
-    }
-
-    /**
-     * This method will mask most part of iccid in the filepath for logging on userbuild
-     */
-    private String getFilePathForLogging(String filePath, String iccid) {
-        // If loggable then return with actual file path
-        if (Rlog.isLoggable(LOG_TAG, Log.VERBOSE)) {
-            return filePath;
-        }
-        String path = filePath;
-        int length = (iccid != null) ? iccid.length() : 0;
-        if (length > 5 && filePath != null) {
-            path = filePath.replace(iccid.substring(5), "***************");
-        }
-        return path;
     }
 
     private PersistableBundle restoreConfigFromXml(String packageName, @NonNull String extraString,
