@@ -637,8 +637,14 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Режим на обратно обаждане при спешност"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Връзката с данни е деактивирана"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Няма връзка за данни до <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <string name="alert_dialog_exit_ecm" msgid="7661603870224398025">"{count,plural, =1{Телефонът ще бъде в режим на обратно обаждане при спешност в продължение на 1 минута. През това време не могат да се използват приложения, работещи с връзка с данни. Искате ли да излезете сега?}other{Телефонът ще бъде в режим на обратно обаждане при спешност в продължение на %s минути. През това време не могат да се използват приложения, работещи с връзка с данни. Искате ли да излезете сега?}}"</string>
-    <string name="alert_dialog_not_avaialble_in_ecm" msgid="8717711120099503279">"{count,plural, =1{Избраното действие не е налично в режим на обратно обаждане при спешност. Телефонът ще бъде в този режим в продължение на 1 минута. Искате ли да излезете сега?}other{Избраното действие не е налично в режим на обратно обаждане при спешност. Телефонът ще бъде в този режим в продължение на %s минути. Искате ли да излезете сега?}}"</string>
+    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
+      <item quantity="other">Телефонът ще бъде в режим за обратно обаждане при спешност в продължение на <xliff:g id="COUNT_1">%s</xliff:g> минути. В този режим не могат да се използват приложения, работещи с връзка за данни. Искате ли да излезете сега?</item>
+      <item quantity="one">Телефонът ще бъде в режим за обратно обаждане при спешност в продължение на <xliff:g id="COUNT_0">%s</xliff:g> минута. В този режим не могат да се използват приложения, работещи с връзка за данни. Искате ли да излезете сега?</item>
+    </plurals>
+    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
+      <item quantity="other">Избраното действие не е налице в режима за обратно обаждане при спешност. Телефонът ще бъде в този режим в продължение на <xliff:g id="COUNT_1">%s</xliff:g> минути. Искате ли да излезете сега?</item>
+      <item quantity="one">Избраното действие не е налице в режима за обратно обаждане при спешност. Телефонът ще бъде в този режим в продължение на <xliff:g id="COUNT_0">%s</xliff:g> минута. Искате ли да излезете сега?</item>
+    </plurals>
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"Избраното действие не е налично по време на спешно обаждане."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Излиза се от режим на спешно обратно обаждане"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Да"</string>
@@ -646,7 +652,10 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Отхвърляне"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"Телефонът е в режим на спешно обратно обаждане"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"До <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <string name="alert_dialog_exit_ecm_without_data_restriction_hint" msgid="7549850847524907932">"{count,plural, =1{Телефонът ще бъде в режим на обратно обаждане при спешност в продължение на 1 минута.\nИскате ли да излезете сега?}other{Телефонът ще бъде в режим на обратно обаждане при спешност в продължение на %s минути.\nИскате ли да излезете сега?}}"</string>
+    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
+      <item quantity="other">Телефонът ще бъде в режим на спешно обратно обаждане в продължение на <xliff:g id="COUNT_1">%s</xliff:g> минути.\nИскате ли да излезете сега?</item>
+      <item quantity="one">Телефонът ще бъде в режим на спешно обратно обаждане в продължение на <xliff:g id="COUNT_0">%s</xliff:g> минута.\nИскате ли да излезете сега?</item>
+    </plurals>
     <string name="voicemail_provider" msgid="4158806657253745294">"Услуга"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Настройка"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Не е зададено&gt;"</string>
@@ -818,7 +827,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"Не може да се извърши обаждане, тъй като в момента се набира друго изходящо обаждане."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"Не може да се извърши обаждане, тъй като има неотговорено входящо обаждане. Отговорете му или го отхвърлете, преди да извършите ново обаждане."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"Не може да се извърши обаждане, тъй като обажданията са деактивирани чрез системното свойство ro.telephony.disable-call."</string>
-    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"Не може да се извърши обаждане, тъй като вече се провеждат две обаждания. Прекъснете едно от тях или ги обединете в конферентен разговор, преди да извършите ново обаждане."</string>
+    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"Не може да се извърши обаждане, тъй като вече се провеждат две обаждания. Прекъснете едно от тях или ги обединете в конферентен разговор, преди да извършите ново обаждане."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"За да използвате <xliff:g id="SUPP_SERVICE">%s</xliff:g>, мобилните данни трябва да са включени. Можете да промените това в настройките за мобилната мрежа."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"За да използвате <xliff:g id="SUPP_SERVICE">%s</xliff:g>, мобилните данни и роумингът на данни трябва да са включени. Можете да промените това в настройките за мобилната мрежа."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"За да използвате <xliff:g id="SUPP_SERVICE">%1$s</xliff:g>, мобилните данни за SIM <xliff:g id="SIM_NUMBER">%2$d</xliff:g> трябва да са включени. Можете да промените това в настройките за мобилната мрежа."</string>
@@ -918,12 +927,4 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Сигналът ви за Bluetooth е слаб. Опитайте да превключите на високоговорител."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Известия за качеството на обаждането"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Оттеглени профили за SIP"</string>
-    <!-- no translation found for limited_service_alert_dialog_description (6686928033670697313) -->
-    <skip />
-    <!-- no translation found for do_not_show_again (8923026903375124550) -->
-    <skip />
-    <!-- no translation found for turn_off_wfc (2346229945400554258) -->
-    <skip />
-    <!-- no translation found for unavailable_emergency_calls_notification_name (4390236789690885552) -->
-    <skip />
 </resources>
