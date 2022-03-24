@@ -31,7 +31,6 @@ import android.content.res.XmlResourceParser;
 import android.media.AudioManager;
 import android.net.ConnectivityManager;
 import android.net.Uri;
-import android.net.sip.SipManager;
 import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
@@ -39,7 +38,6 @@ import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.PowerManager;
 import android.os.SystemProperties;
-import android.os.UserManager;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.sysprop.TelephonyProperties;
@@ -73,14 +71,12 @@ import com.android.internal.telephony.dataconnection.DataConnectionReasons.DataD
 import com.android.internal.telephony.ims.ImsResolver;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
-import com.android.internal.telephony.uicc.UiccCard;
+import com.android.internal.telephony.uicc.UiccPort;
 import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.phone.settings.SettingsConstants;
 import com.android.phone.vvm.CarrierVvmPackageInstalledReceiver;
 import com.android.services.telephony.rcs.TelephonyRcsService;
-import com.android.services.telephony.sip.SipAccountRegistry;
-import com.android.services.telephony.sip.SipUtil;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -124,7 +120,6 @@ public class PhoneGlobals extends ContextWrapper {
     private static final int EVENT_DATA_ROAMING_CONNECTED = 11;
     private static final int EVENT_DATA_ROAMING_OK = 12;
     private static final int EVENT_UNSOL_CDMA_INFO_RECORD = 13;
-    private static final int EVENT_RESTART_SIP = 14;
     private static final int EVENT_DATA_ROAMING_SETTINGS_CHANGED = 15;
     private static final int EVENT_MOBILE_DATA_SETTINGS_CHANGED = 16;
     private static final int EVENT_CARRIER_CONFIG_CHANGED = 17;
@@ -155,11 +150,12 @@ public class PhoneGlobals extends ContextWrapper {
 
     CallManager mCM;
     CallNotifier notifier;
-    CallerInfoCache callerInfoCache;
     NotificationMgr notificationMgr;
     TelephonyRcsService mTelephonyRcsService;
     public PhoneInterfaceManager phoneMgr;
     public ImsRcsController imsRcsController;
+    public ImsStateCallbackController mImsStateCallbackController;
+    public ImsProvisioningController mImsProvisioningController;
     CarrierConfigLoader configLoader;
 
     private Phone phoneInEcm;
@@ -204,8 +200,6 @@ public class PhoneGlobals extends ContextWrapper {
 
     // Broadcast receiver for various intent broadcasts (see onCreate())
     private final BroadcastReceiver mReceiver = new PhoneAppBroadcastReceiver();
-    // Broadcast receiver for SIP based intents (see onCreate())
-    private final SipReceiver mSipReceiver = new SipReceiver();
 
     private final CarrierVvmPackageInstalledReceiver mCarrierVvmPackageInstalledReceiver =
             new CarrierVvmPackageInstalledReceiver();
@@ -242,13 +236,13 @@ public class PhoneGlobals extends ContextWrapper {
 
         // if passed in subType is unknown, retrieve it here.
         if (subType == -1) {
-            final UiccCard uiccCard = phone.getUiccCard();
-            if (uiccCard == null) {
+            final UiccPort uiccPort = phone.getUiccPort();
+            if (uiccPort == null) {
                 Log.e(LOG_TAG,
-                        "handleSimLock: uiccCard for phone " + phone.getPhoneId() + " is null");
+                        "handleSimLock: uiccPort for phone " + phone.getPhoneId() + " is null");
                 return;
             }
-            final UiccProfile uiccProfile = uiccCard.getUiccProfile();
+            final UiccProfile uiccProfile = uiccPort.getUiccProfile();
             if (uiccProfile == null) {
                 Log.e(LOG_TAG,
                         "handleSimLock: uiccProfile for phone " + phone.getPhoneId() + " is null");
@@ -333,17 +327,6 @@ public class PhoneGlobals extends ContextWrapper {
 
                 case EVENT_UNSOL_CDMA_INFO_RECORD:
                     //TODO: handle message here;
-                    break;
-                case EVENT_RESTART_SIP:
-                    // This should only run if the Phone process crashed and was restarted. We do
-                    // not want this running if the device is still in the FBE encrypted state.
-                    // This is the same procedure that is triggered in the SipIncomingCallReceiver
-                    // upon BOOT_COMPLETED.
-                    UserManager userManager =
-                            (UserManager) sMe.getSystemService(Context.USER_SERVICE);
-                    if (userManager != null && userManager.isUserUnlocked()) {
-                        SipUtil.startSipService();
-                    }
                     break;
                 case EVENT_DATA_ROAMING_SETTINGS_CHANGED:
                 case EVENT_MOBILE_DATA_SETTINGS_CHANGED:
@@ -442,9 +425,6 @@ public class PhoneGlobals extends ContextWrapper {
             // status bar icons and control other status bar behavior.
             notificationMgr = NotificationMgr.init(this);
 
-            // If PhoneGlobals has crashed and is being restarted, then restart.
-            mHandler.sendEmptyMessage(EVENT_RESTART_SIP);
-
             // Create an instance of CdmaPhoneCallState and initialize it to IDLE
             cdmaPhoneCallState = new CdmaPhoneCallState();
             cdmaPhoneCallState.CdmaPhoneCallStateInit();
@@ -458,21 +438,19 @@ public class PhoneGlobals extends ContextWrapper {
 
             mKeyguardManager = (KeyguardManager) getSystemService(Context.KEYGUARD_SERVICE);
 
-            // Create the CallerInfoCache singleton, which remembers custom ring tone and
-            // send-to-voicemail settings.
-            //
-            // The asynchronous caching will start just after this call.
-            callerInfoCache = CallerInfoCache.init(this);
-
             phoneMgr = PhoneInterfaceManager.init(this);
 
             imsRcsController = ImsRcsController.init(this);
 
             if (getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_IMS)) {
+                mImsStateCallbackController =
+                        ImsStateCallbackController.make(this, PhoneFactory.getPhones().length);
                 mTelephonyRcsService = new TelephonyRcsService(this,
                         PhoneFactory.getPhones().length);
                 mTelephonyRcsService.initialize();
                 imsRcsController.setRcsService(mTelephonyRcsService);
+                mImsProvisioningController =
+                        ImsProvisioningController.make(this, PhoneFactory.getPhones().length);
             }
 
             configLoader = CarrierConfigLoader.init(this);
@@ -489,8 +467,12 @@ public class PhoneGlobals extends ContextWrapper {
             mCM.registerForMmiComplete(mHandler, MMI_COMPLETE, null);
 
             // Initialize cell status using current airplane mode.
-            handleAirplaneModeChange(this, Settings.Global.getInt(getContentResolver(),
-                    Settings.Global.AIRPLANE_MODE_ON, AIRPLANE_OFF));
+            handleAirplaneModeChange(
+                    Settings.Global.getInt(
+                                    getContentResolver(),
+                                    Settings.Global.AIRPLANE_MODE_ON,
+                                    AIRPLANE_OFF)
+                            == AIRPLANE_ON);
 
             // Register for misc other intent broadcasts.
             IntentFilter intentFilter =
@@ -502,12 +484,6 @@ public class PhoneGlobals extends ContextWrapper {
             intentFilter.addAction(TelephonyIntents.ACTION_DEFAULT_DATA_SUBSCRIPTION_CHANGED);
             intentFilter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
             registerReceiver(mReceiver, intentFilter);
-
-            IntentFilter sipIntentFilter = new IntentFilter(Intent.ACTION_BOOT_COMPLETED);
-            sipIntentFilter.addAction(SipManager.ACTION_SIP_SERVICE_UP);
-            sipIntentFilter.addAction(SipManager.ACTION_SIP_CALL_OPTION_CHANGED);
-            sipIntentFilter.addAction(SipManager.ACTION_SIP_REMOVE_PROFILE);
-            registerReceiver(mSipReceiver, sipIntentFilter);
 
             mCarrierVvmPackageInstalledReceiver.register(this);
 
@@ -649,20 +625,20 @@ public class PhoneGlobals extends ContextWrapper {
         notifier.updateCallNotifierRegistrationsAfterRadioTechnologyChange();
     }
 
-    private void handleAirplaneModeChange(Context context, int newMode) {
-        int cellState = Settings.Global.getInt(context.getContentResolver(),
-                Settings.Global.CELL_ON, PhoneConstants.CELL_ON_FLAG);
-        boolean isAirplaneNewlyOn = (newMode == 1);
+    private void handleAirplaneModeChange(boolean isAirplaneNewlyOn) {
+        int cellState =
+                Settings.Global.getInt(
+                        getContentResolver(), Settings.Global.CELL_ON, PhoneConstants.CELL_ON_FLAG);
         switch (cellState) {
             case PhoneConstants.CELL_OFF_FLAG:
                 // Airplane mode does not affect the cell radio if user
                 // has turned it off.
                 break;
             case PhoneConstants.CELL_ON_FLAG:
-                maybeTurnCellOff(context, isAirplaneNewlyOn);
+                maybeTurnCellOff(isAirplaneNewlyOn);
                 break;
             case PhoneConstants.CELL_OFF_DUE_TO_AIRPLANE_MODE_FLAG:
-                maybeTurnCellOn(context, isAirplaneNewlyOn);
+                maybeTurnCellOn(isAirplaneNewlyOn);
                 break;
         }
         for (Phone phone : PhoneFactory.getPhones()) {
@@ -673,57 +649,59 @@ public class PhoneGlobals extends ContextWrapper {
     /*
      * Returns true if the radio must be turned off when entering airplane mode.
      */
-    private boolean isCellOffInAirplaneMode(Context context) {
-        String airplaneModeRadios = Settings.Global.getString(context.getContentResolver(),
-                Settings.Global.AIRPLANE_MODE_RADIOS);
+    private boolean isCellOffInAirplaneMode() {
+        String airplaneModeRadios =
+                Settings.Global.getString(
+                        getContentResolver(), Settings.Global.AIRPLANE_MODE_RADIOS);
         return airplaneModeRadios == null
                 || airplaneModeRadios.contains(Settings.Global.RADIO_CELL);
     }
 
-    private void setRadioPowerOff(Context context) {
+    private void setRadioPowerOff() {
         Log.i(LOG_TAG, "Turning radio off - airplane");
-        Settings.Global.putInt(context.getContentResolver(), Settings.Global.CELL_ON,
-                 PhoneConstants.CELL_OFF_DUE_TO_AIRPLANE_MODE_FLAG);
-        TelephonyProperties.airplane_mode_on(true); // true means int value 1
+        Settings.Global.putInt(
+                getContentResolver(),
+                Settings.Global.CELL_ON,
+                PhoneConstants.CELL_OFF_DUE_TO_AIRPLANE_MODE_FLAG);
         Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT, 0);
+        TelephonyProperties.airplane_mode_on(true); // true means int value 1
         PhoneUtils.setRadioPower(false);
     }
 
-    private void setRadioPowerOn(Context context) {
+    private void setRadioPowerOn() {
         Log.i(LOG_TAG, "Turning radio on - airplane");
-        Settings.Global.putInt(context.getContentResolver(), Settings.Global.CELL_ON,
-                PhoneConstants.CELL_ON_FLAG);
-        Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT,
-                1);
+        Settings.Global.putInt(
+                getContentResolver(), Settings.Global.CELL_ON, PhoneConstants.CELL_ON_FLAG);
+        Settings.Global.putInt(getContentResolver(), Settings.Global.ENABLE_CELLULAR_ON_BOOT, 1);
         TelephonyProperties.airplane_mode_on(false); // false means int value 0
         PhoneUtils.setRadioPower(true);
     }
 
-    private void maybeTurnCellOff(Context context, boolean isAirplaneNewlyOn) {
+    private void maybeTurnCellOff(boolean isAirplaneNewlyOn) {
         if (isAirplaneNewlyOn) {
             // If we are trying to turn off the radio, make sure there are no active
             // emergency calls.  If there are, switch airplane mode back to off.
-            TelecomManager tm = (TelecomManager) context.getSystemService(TELECOM_SERVICE);
+            TelecomManager tm = (TelecomManager) getSystemService(TELECOM_SERVICE);
 
             if (tm != null && tm.isInEmergencyCall()) {
                 // Switch airplane mode back to off.
                 ConnectivityManager cm =
-                        (ConnectivityManager) context.getSystemService(CONNECTIVITY_SERVICE);
+                        (ConnectivityManager) getSystemService(CONNECTIVITY_SERVICE);
                 cm.setAirplaneMode(false);
                 Toast.makeText(this, R.string.radio_off_during_emergency_call, Toast.LENGTH_LONG)
                         .show();
                 Log.i(LOG_TAG, "Ignoring airplane mode: emergency call. Turning airplane off");
-            } else if (isCellOffInAirplaneMode(context)) {
-                setRadioPowerOff(context);
+            } else if (isCellOffInAirplaneMode()) {
+                setRadioPowerOff();
             } else {
                 Log.i(LOG_TAG, "Ignoring airplane mode: settings prevent cell radio power off");
             }
         }
     }
 
-    private void maybeTurnCellOn(Context context, boolean isAirplaneNewlyOn) {
+    private void maybeTurnCellOn(boolean isAirplaneNewlyOn) {
         if (!isAirplaneNewlyOn) {
-            setRadioPowerOn(context);
+            setRadioPowerOn();
         }
     }
 
@@ -735,13 +713,8 @@ public class PhoneGlobals extends ContextWrapper {
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
             if (action.equals(Intent.ACTION_AIRPLANE_MODE_CHANGED)) {
-                int airplaneMode = Settings.Global.getInt(getContentResolver(),
-                        Settings.Global.AIRPLANE_MODE_ON, AIRPLANE_OFF);
-                // Treat any non-OFF values as ON.
-                if (airplaneMode != AIRPLANE_OFF) {
-                    airplaneMode = AIRPLANE_ON;
-                }
-                handleAirplaneModeChange(context, airplaneMode);
+                boolean airplaneMode = intent.getBooleanExtra("state", false);
+                handleAirplaneModeChange(airplaneMode);
             } else if (action.equals(TelephonyIntents.ACTION_SIM_STATE_CHANGED)) {
                 // re-register as it may be a new IccCard
                 int phoneId = intent.getIntExtra(PhoneConstants.PHONE_KEY,
@@ -804,31 +777,6 @@ public class PhoneGlobals extends ContextWrapper {
                 if (phone != null) {
                     updateDataRoamingStatus();
                 }
-            }
-        }
-    }
-
-    private class SipReceiver extends BroadcastReceiver {
-
-        @Override
-        public void onReceive(Context context, Intent intent) {
-            String action = intent.getAction();
-
-            SipAccountRegistry sipAccountRegistry = SipAccountRegistry.getInstance();
-            if (action.equals(Intent.ACTION_BOOT_COMPLETED)) {
-                SipUtil.startSipService();
-            } else if (action.equals(SipManager.ACTION_SIP_SERVICE_UP)
-                    || action.equals(SipManager.ACTION_SIP_CALL_OPTION_CHANGED)) {
-                sipAccountRegistry.setup(context);
-            } else if (action.equals(SipManager.ACTION_SIP_REMOVE_PROFILE)) {
-                if (DBG) {
-                    Log.d(LOG_TAG, "SIP_REMOVE_PHONE "
-                            + intent.getStringExtra(SipManager.EXTRA_LOCAL_URI));
-                }
-                sipAccountRegistry.removeSipProfile(intent.getStringExtra(
-                        SipManager.EXTRA_LOCAL_URI));
-            } else {
-                if (DBG) Log.d(LOG_TAG, "onReceive, action not processed: " + action);
             }
         }
     }
@@ -1037,6 +985,12 @@ public class PhoneGlobals extends ContextWrapper {
         pw.println("RcsService:");
         try {
             if (mTelephonyRcsService != null) mTelephonyRcsService.dump(fd, pw, args);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        pw.println("ImsStateCallbackController:");
+        try {
+            if (mImsStateCallbackController != null) mImsStateCallbackController.dump(pw);
         } catch (Exception e) {
             e.printStackTrace();
         }
