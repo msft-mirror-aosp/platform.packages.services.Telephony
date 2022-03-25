@@ -637,14 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"ತುರ್ತು ಕಾಲ್‌ಬ್ಯಾಕ್‌ ಮೋಡ್‌"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"ಡೇಟಾ ಸಂಪರ್ಕ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"<xliff:g id="COMPLETETIME">%s</xliff:g> ರವರೆಗೆ ಯಾವುದೇ ಡೇಟಾ ಸಂಪರ್ಕವಿಲ್ಲ"</string>
-    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
-      <item quantity="one">ಪೋನ್‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳ ಕಾಲ ತುರ್ತು ಮರಳಿ ಕರೆಮಾಡು ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ. ಈ ಮೋಡ್‌ನಲ್ಲಿರುವಾಗ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಡೇಟಾ ಸಂಪರ್ಕವನ್ನು ಬಳಸಿಕೊಂಡು ಬಳಸಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ. ನೀವು ಇದೀಗ ನಿರ್ಗಮಿಸಲು ಬಯಸುವಿರಾ?</item>
-      <item quantity="other">ಪೋನ್‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳ ಕಾಲ ತುರ್ತು ಮರಳಿ ಕರೆಮಾಡು ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ. ಈ ಮೋಡ್‌ನಲ್ಲಿರುವಾಗ ಯಾವುದೇ ಅಪ್ಲಿಕೇಶನ್‌ಗಳನ್ನು ಡೇಟಾ ಸಂಪರ್ಕವನ್ನು ಬಳಸಿಕೊಂಡು ಬಳಸಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ. ನೀವು ಇದೀಗ ನಿರ್ಗಮಿಸಲು ಬಯಸುವಿರಾ?</item>
-    </plurals>
-    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
-      <item quantity="one">ತುರ್ತು ಮರಳಿ ಕರೆಮಾಡು ಮೋಡ್‌ನಲ್ಲಿರುವಾಗ ಆಯ್ಕೆಮಾಡಿದ ಕ್ರಿಯೆಯು ಲಭ್ಯವಿರುವುದಿಲ್ಲ. ಫೋನ್‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳ ಕಾಲ ಈ ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ. ನೀವು ಇದೀಗ ನಿರ್ಗಮಿಸಲು ಬಯಸುವಿರಾ?</item>
-      <item quantity="other">ತುರ್ತು ಮರಳಿ ಕರೆಮಾಡು ಮೋಡ್‌ನಲ್ಲಿರುವಾಗ ಆಯ್ಕೆಮಾಡಿದ ಕ್ರಿಯೆಯು ಲಭ್ಯವಿರುವುದಿಲ್ಲ. ಫೋನ್‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳ ಕಾಲ ಈ ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ. ನೀವು ಇದೀಗ ನಿರ್ಗಮಿಸಲು ಬಯಸುವಿರಾ?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm (7661603870224398025) -->
+    <!-- format error in translation for alert_dialog_not_avaialble_in_ecm (8717711120099503279) -->
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"ತುರ್ತು ಕರೆಯಲ್ಲಿರುವಾಗ ಆಯ್ಕೆಮಾಡಿದ ಕ್ರಿಯೆಯು ಲಭ್ಯವಿರುವುದಿಲ್ಲ."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"ತುರ್ತು ಕಾಲ್‌ಬ್ಯಾಕ್‌ ಮೋಡ್‌ನಿಂದ ನಿರ್ಗಮಿಸಲಾಗುತ್ತಿದೆ"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"ಹೌದು"</string>
@@ -652,10 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"ವಜಾಗೊಳಿಸಿ"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"ಫೋನ್‌‌, ತುರ್ತು ಕಾಲ್‌ಬ್ಯಾಕ್ ಮೋಡ್‌ನಲ್ಲಿದೆ"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"<xliff:g id="COMPLETETIME">%s</xliff:g> ವರೆಗೆ"</string>
-    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
-      <item quantity="one">ಫೋನ್‌‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳವರೆಗೆ ತುರ್ತು ಕಾಲ್‌ಬ್ಯಾಕ್ ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ.\n ನೀವು ಈಗಲೇ ನಿರ್ಗಮಿಸಲು ಬಯಸುತ್ತೀರಾ?</item>
-      <item quantity="other">ಫೋನ್‌‌ <xliff:g id="COUNT_1">%s</xliff:g> ನಿಮಿಷಗಳವರೆಗೆ ತುರ್ತು ಕಾಲ್‌ಬ್ಯಾಕ್ ಮೋಡ್‌ನಲ್ಲಿರುತ್ತದೆ.\n ನೀವು ಈಗಲೇ ನಿರ್ಗಮಿಸಲು ಬಯಸುತ್ತೀರಾ?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm_without_data_restriction_hint (7549850847524907932) -->
     <string name="voicemail_provider" msgid="4158806657253745294">"ಸೇವೆ"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"ಸೆಟಪ್"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;ಹೊಂದಿಸಿಲ್ಲ&gt;"</string>
@@ -827,7 +818,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"ಹೊಸ ಕರೆಯನ್ನು ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ ಏಕೆಂದರೆ ಮತ್ತೊಂದು ಕರೆಯನ್ನು ಈಗಾಗಲೇ ಮಾಡಲಾಗುತ್ತಿದೆ."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"ಉತ್ತರಿಸದೇ ಒಳಬರುವ ಕರೆ ಬರುತ್ತಿರುವುದರಿಂದ ಕರೆ ಮಾಡಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ. ಹೊಸ ಕರೆಯನ್ನು ಮಾಡುವ ಮೊದಲು ಕರೆಗೆ ಉತ್ತರ ನೀಡಿ ಅಥವಾ ತಿರಸ್ಕರಿಸಿ."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"ಕರೆ ವೈಶಿಷ್ಟ್ಯವನ್ನು ro.telephony.disable-call ಸಿಸ್ಟಂ ಗುಣಲಕ್ಷಣದಿಂದ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿರುತ್ತದೆ, ಆದ್ದರಿಂದ ಕರೆ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ."</string>
-    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"ಈಗಾಗಲೇ ಎರಡು ಕರೆಗಳು ಪ್ರಗತಿಯಲ್ಲಿರುವುದರಿಂದ, ಕರೆ ಮಾಡಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ.ಒಂದು ಕರೆಯ ಸಂಪರ್ಕವನ್ನು ಕಡಿತಗೊಳಿಸಿ ಅಥವಾ ನೀವು ಹೊಸ ಕರೆಯನ್ನು ಮಾಡುವ ಮೊದಲು ಎರಡು ಕರೆಗಳನ್ನು ಒಂದೇ ಕಾನ್ಫರೆನ್ಸ್‌ನಲ್ಲಿ ವಿಲೀನಗೊಳಿಸಿ."</string>
+    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"ಈಗಾಗಲೇ ಎರಡು ಕರೆಗಳು ಪ್ರಗತಿಯಲ್ಲಿರುವುದರಿಂದ, ಕರೆ ಮಾಡಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ. ಒಂದು ಕರೆಯ ಸಂಪರ್ಕವನ್ನು ಕಡಿತಗೊಳಿಸಿ ಅಥವಾ ಹೊಸ ಕರೆಯನ್ನು ಮಾಡುವ ಮೊದಲು ಎರಡು ಕರೆಗಳನ್ನು ಒಂದೇ ಕಾನ್ಫರೆನ್ಸ್‌ನಲ್ಲಿ ವಿಲೀನಗೊಳಿಸಿ."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"<xliff:g id="SUPP_SERVICE">%s</xliff:g> ಅನ್ನು ಬಳಸಲು, ಮೊಬೈಲ್ ಡೇಟಾ ಆನ್‌ ಆಗಿದೆಯೇ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ. ನೀವು ಇದನ್ನು ಮೊಬೈಲ್‌ ನೆಟ್‌ವರ್ಕ್‌ ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"<xliff:g id="SUPP_SERVICE">%s</xliff:g> ಅನ್ನು ಬಳಸಲು, ಮೊಬೈಲ್ ಡೇಟಾ ಮತ್ತು ಡೇಟಾ ರೋಮಿಂಗ್ ಆನ್‌ ಆಗಿದೆಯೇ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ. ನೀವು ಇದನ್ನು ಮೊಬೈಲ್‌ ನೆಟ್‌ವರ್ಕ್‌ ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"<xliff:g id="SUPP_SERVICE">%1$s</xliff:g> ಅನ್ನು ಬಳಸಲು, <xliff:g id="SIM_NUMBER">%2$d</xliff:g> ಸಿಮ್‌ಗಾಗಿ ಮೊಬೈಲ್ ಡೇಟಾ ಆನ್‌ ಆಗಿದೆಯೇ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ. ನೀವು ಇದನ್ನು ಮೊಬೈಲ್‌ ನೆಟ್‌ವರ್ಕ್‌ ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಬದಲಾಯಿಸಬಹುದು."</string>
@@ -927,4 +918,12 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"ನಿಮ್ಮ ಬ್ಲೂಟೂತ್ ಸಿಗ್ನಲ್ ದುರ್ಬಲವಾಗಿದೆ. ಸ್ಪೀಕರ್‌ಫೋನ್‌ಗೆ ಬದಲಾಯಿಸಲು ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"ಕರೆ ಗುಣಮಟ್ಟದ ಅಧಿಸೂಚನೆ"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"ತಡೆಹಿಡಿಯಲಾಗಿರುವ SIP ಖಾತೆಗಳು"</string>
+    <!-- no translation found for limited_service_alert_dialog_description (6686928033670697313) -->
+    <skip />
+    <!-- no translation found for do_not_show_again (8923026903375124550) -->
+    <skip />
+    <!-- no translation found for turn_off_wfc (2346229945400554258) -->
+    <skip />
+    <!-- no translation found for unavailable_emergency_calls_notification_name (4390236789690885552) -->
+    <skip />
 </resources>
