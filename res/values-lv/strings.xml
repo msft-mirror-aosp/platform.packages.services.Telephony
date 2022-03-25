@@ -637,16 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Ārkārtas atzvana režīms"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Datu savienojums ir atspējots."</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Datu savienojums nebūs pieejams līdz plkst. <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
-      <item quantity="zero">Tālrunī <xliff:g id="COUNT_1">%s</xliff:g> minūtes būs aktivizēts ārkārtas atzvana režīms. Šajā režīmā nevar izmantot lietotnes, kurās tiek lietots datu savienojums. Vai vēlaties to aizvērt tūlīt?</item>
-      <item quantity="one">Tālrunī <xliff:g id="COUNT_1">%s</xliff:g> minūti būs aktivizēts ārkārtas atzvana režīms. Šajā režīmā nevar izmantot lietotnes, kurās tiek lietots datu savienojums. Vai vēlaties to aizvērt tūlīt?</item>
-      <item quantity="other">Tālrunī <xliff:g id="COUNT_1">%s</xliff:g> minūtes būs aktivizēts ārkārtas atzvana režīms. Šajā režīmā nevar izmantot lietotnes, kurās tiek lietots datu savienojums. Vai vēlaties to aizvērt tūlīt?</item>
-    </plurals>
-    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
-      <item quantity="zero">Atlasītā darbība nav pieejama ārkārtas atzvana režīmā. Šis režīms tālrunī būs aktivizēts <xliff:g id="COUNT_1">%s</xliff:g> minūtes. Vai vēlaties to aizvērt tūlīt?</item>
-      <item quantity="one">Atlasītā darbība nav pieejama ārkārtas atzvana režīmā. Šis režīms tālrunī būs aktivizēts <xliff:g id="COUNT_1">%s</xliff:g> minūti. Vai vēlaties to aizvērt tūlīt?</item>
-      <item quantity="other">Atlasītā darbība nav pieejama ārkārtas atzvana režīmā. Šis režīms tālrunī būs aktivizēts <xliff:g id="COUNT_1">%s</xliff:g> minūtes. Vai vēlaties to aizvērt tūlīt?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm (7661603870224398025) -->
+    <!-- format error in translation for alert_dialog_not_avaialble_in_ecm (8717711120099503279) -->
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"Atlasītā darbība nav pieejama, veicot ārkārtas izsaukumu."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Notiek iziešana no ārkārtas atzvana režīma"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Jā"</string>
@@ -654,11 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Noraidīt"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"Tālrunis atrodas ārkārtas atzvana režīmā."</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"Līdz plkst. <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
-      <item quantity="zero">Tālrunis atradīsies ārkārtas atzvana režīmā <xliff:g id="COUNT_1">%s</xliff:g> minūtes.\nVai vēlaties iziet tūlīt?</item>
-      <item quantity="one">Tālrunis atradīsies ārkārtas atzvana režīmā <xliff:g id="COUNT_1">%s</xliff:g> minūti.\nVai vēlaties iziet tūlīt?</item>
-      <item quantity="other">Tālrunis atradīsies ārkārtas atzvana režīmā <xliff:g id="COUNT_1">%s</xliff:g> minūtes.\nVai vēlaties iziet tūlīt?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm_without_data_restriction_hint (7549850847524907932) -->
     <string name="voicemail_provider" msgid="4158806657253745294">"Pakalpojums"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Iestatīšana"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Nav iestatīts&gt;"</string>
@@ -830,7 +818,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"Nevar veikt zvanu, jo jau tiek sastādīts numurs citam izejošajam zvanam."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"Nevar veikt zvanu, jo ir neatbildēts ienākošais zvans. Pirms jauna zvana veikšanas atbildiet uz ienākošo zvanu vai noraidiet to."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"Nevar veikt zvanu, jo zvanīšana ir atspējota, izmantojot sistēmas rekvizītu ro.telephony.disable-call."</string>
-    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"Nevar veikt zvanu, jo pašlaik jau notiek divi zvani. Pirms jauna zvana veikšanas pārtrauciet vienu no pašreizējiem zvaniem vai apvienojiet tos konferences zvanā."</string>
+    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"Nevar veikt zvanu, jo pašlaik jau notiek divi zvani. Pirms jauna zvana veikšanas pārtrauciet vienu no pašreizējiem zvaniem vai apvienojiet tos konferences zvanā."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"Lai izmantotu pakalpojumu <xliff:g id="SUPP_SERVICE">%s</xliff:g>, jāieslēdz mobilie dati. Tos var ieslēgt mobilā tīkla iestatījumos."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"Lai izmantotu pakalpojumu <xliff:g id="SUPP_SERVICE">%s</xliff:g>, jāieslēdz mobilie dati un datu viesabonēšana. Tos var ieslēgt mobilā tīkla iestatījumos."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"Lai izmantotu pakalpojumu <xliff:g id="SUPP_SERVICE">%1$s</xliff:g>, jāieslēdz mobilie dati SIM kartei <xliff:g id="SIM_NUMBER">%2$d</xliff:g>. Tos var ieslēgt mobilā tīkla iestatījumos."</string>
@@ -930,4 +918,12 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Bluetooth signāls ir vājš. Mēģiniet pārslēgties uz skaļruni."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Paziņojums par zvana kvalitāti"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"SIP konti, kuru darbība ir pārtraukta"</string>
+    <!-- no translation found for limited_service_alert_dialog_description (6686928033670697313) -->
+    <skip />
+    <!-- no translation found for do_not_show_again (8923026903375124550) -->
+    <skip />
+    <!-- no translation found for turn_off_wfc (2346229945400554258) -->
+    <skip />
+    <!-- no translation found for unavailable_emergency_calls_notification_name (4390236789690885552) -->
+    <skip />
 </resources>
