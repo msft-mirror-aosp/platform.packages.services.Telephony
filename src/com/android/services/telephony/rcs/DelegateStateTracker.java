@@ -16,6 +16,10 @@
 
 package com.android.services.telephony.rcs;
 
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
+import android.os.Build;
 import android.os.RemoteException;
 import android.telephony.ims.DelegateRegistrationState;
 import android.telephony.ims.FeatureTagState;
@@ -24,8 +28,12 @@ import android.telephony.ims.SipDelegateImsConfiguration;
 import android.telephony.ims.aidl.ISipDelegate;
 import android.telephony.ims.aidl.ISipDelegateConnectionStateCallback;
 import android.telephony.ims.stub.DelegateConnectionStateCallback;
+import android.util.ArraySet;
 import android.util.LocalLog;
 import android.util.Log;
+
+import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.metrics.RcsStats;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -40,21 +48,69 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
     private static final String LOG_TAG = "DelegateST";
 
     private final int mSubId;
+    private final int mUid;
     private final ISipDelegateConnectionStateCallback mAppStateCallback;
     private final ISipDelegate mLocalDelegateImpl;
 
     private final LocalLog mLocalLog = new LocalLog(SipTransportController.LOG_SIZE);
 
+    private final RcsStats mRcsStats;
+
     private List<FeatureTagState> mDelegateDeniedTags;
     private DelegateRegistrationState mLastRegState;
     private boolean mCreatedCalled = false;
     private int mRegistrationStateOverride = -1;
+    private CompatChangesFactory mCompatChangesFactory;
+    private Set<String> mDelegateSupportedTags;
 
-    public DelegateStateTracker(int subId, ISipDelegateConnectionStateCallback appStateCallback,
-            ISipDelegate localDelegateImpl) {
+    /**
+     * Interface for checking compatibility of apps
+     */
+    public interface CompatChangesFactory {
+        /**
+         *  @param changeId The ID of the compatibility change.
+         *  @param uid      The UID of the app.
+         *  @return {@code true} if the change is enabled for the current app.
+         */
+        boolean isChangeEnabled(long changeId, int uid);
+    }
+
+    /**
+     * For apps targeting Android T and above, support the REGISTERING state on APIs, such as
+     * {@code DelegateRegistrationState#addRegisteringFeatureTags} and
+     * {@code DelegateRegistrationState#getRegisteringFeatureTags}
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.S)
+    @VisibleForTesting
+    public static final long SUPPORT_REGISTERING_DELEGATE_STATE = 205194548;
+
+    /**
+     * For apps targeting Android T and above, support the DEREGISTERING_REASON_LOSING_PDN state
+     * on APIs, such as {@code DelegateRegistrationState#addDeregisteringFeatureTag} and
+     * {@code DelegateRegistrationState#getDeregisteringFeatureTags}
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.S)
+    @VisibleForTesting
+    public static final long SUPPORT_DEREGISTERING_LOSING_PDN_STATE = 201522903;
+
+    public DelegateStateTracker(int subId, int uid,
+            ISipDelegateConnectionStateCallback appStateCallback,
+            ISipDelegate localDelegateImpl, RcsStats rcsStats) {
         mSubId = subId;
+        mUid = uid;
         mAppStateCallback = appStateCallback;
         mLocalDelegateImpl = localDelegateImpl;
+        mRcsStats = rcsStats;
+        setCompatChangesFactory((changeId, uid1) -> CompatChanges.isChangeEnabled(changeId, uid1));
+    }
+
+    @VisibleForTesting
+    protected void setCompatChangesFactory(CompatChangesFactory factory) {
+        mCompatChangesFactory = factory;
     }
 
     /**
@@ -63,10 +119,13 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
      * Registration and state updates will be send via the
      * {@link SipDelegateBinderConnection.StateCallback} callback implemented by this class as they
      * arrive.
+     * @param supportedTags the tags supported by the SipTransportController and ImsService creating
+     *                      the SipDelegate. These tags will be used as a key for SipDelegate
+     *                      metrics.
      * @param deniedTags The tags denied by the SipTransportController and ImsService creating the
      *         SipDelegate. These tags will need to be notified back to the IMS application.
      */
-    public void sipDelegateConnected(Set<FeatureTagState> deniedTags) {
+    public void sipDelegateConnected(Set<String> supportedTags, Set<FeatureTagState> deniedTags) {
         logi("SipDelegate connected with denied tags:" + deniedTags);
         // From the IMS application perspective, we only call onCreated/onDestroyed once and
         // provide the local implementation of ISipDelegate, which doesn't change, even though
@@ -74,6 +133,8 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
         if (!mCreatedCalled) {
             mCreatedCalled = true;
             notifySipDelegateCreated();
+            mDelegateSupportedTags = supportedTags;
+            mRcsStats.createSipDelegateStats(mSubId, mDelegateSupportedTags);
         }
         mRegistrationStateOverride = -1;
         mDelegateDeniedTags = new ArrayList<>(deniedTags);
@@ -84,8 +145,8 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
      *
      * This will trigger an override of the IMS application's registration state. All feature tags
      * in the REGISTERED state will be overridden to move to the deregistering state specified until
-     * a new SipDelegate was successfully created and {@link #sipDelegateConnected(Set)} was called
-     * or it was destroyed and {@link #sipDelegateDestroyed(int)} was called.
+     * a new SipDelegate was successfully created and {@link #sipDelegateConnected(Set, Set)} was
+     * called or it was destroyed and {@link #sipDelegateDestroyed(int)} was called.
      * @param deregisteringReason The new deregistering reason that all feature tags in the
      *         registered state should now report.
      */
@@ -115,6 +176,7 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
         mRegistrationStateOverride = -1;
         try {
             mAppStateCallback.onDestroyed(reason);
+            mRcsStats.onSipDelegateStats(mSubId, mDelegateSupportedTags, reason);
         } catch (RemoteException e) {
             logw("sipDelegateDestroyed: IMS application is dead: " + e);
         }
@@ -127,6 +189,13 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
      */
     @Override
     public void onRegistrationStateChanged(DelegateRegistrationState registrationState) {
+        if (!mCompatChangesFactory.isChangeEnabled(SUPPORT_DEREGISTERING_LOSING_PDN_STATE, mUid)) {
+            registrationState = overrideDeregisteringStateForCompatibility(registrationState);
+        }
+        if (!mCompatChangesFactory.isChangeEnabled(SUPPORT_REGISTERING_DELEGATE_STATE, mUid)) {
+            registrationState = overrideRegistrationForCompatibility(registrationState);
+        }
+
         if (mRegistrationStateOverride > DelegateRegistrationState.DEREGISTERED_REASON_UNKNOWN) {
             logi("onRegistrationStateChanged: overriding registered state to "
                     + mRegistrationStateOverride);
@@ -141,6 +210,11 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
         logi("onRegistrationStateChanged: sending reg state " + registrationState);
         try {
             mAppStateCallback.onFeatureTagStatusChanged(registrationState, mDelegateDeniedTags);
+            Set<String> registeredFeatureTags = registrationState.getRegisteredFeatureTags();
+            mRcsStats.onSipTransportFeatureTagStats(mSubId,
+                    new ArraySet<FeatureTagState>(mDelegateDeniedTags),
+                    registrationState.getDeregisteredFeatureTags(),
+                    registeredFeatureTags);
         } catch (RemoteException e) {
             logw("onRegistrationStateChanged: IMS application is dead: " + e);
         }
@@ -186,6 +260,7 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
     private DelegateRegistrationState overrideRegistrationForDelegateChange(
             int registerOverrideReason, DelegateRegistrationState state) {
         Set<String> registeredFeatures = state.getRegisteredFeatureTags();
+        Set<String> registeringFeatures = state.getRegisteringFeatureTags();
         DelegateRegistrationState.Builder overriddenState = new DelegateRegistrationState.Builder();
         // keep other deregistering/deregistered tags the same.
         for (FeatureTagState dereging : state.getDeregisteringFeatureTags()) {
@@ -196,11 +271,76 @@ public class DelegateStateTracker implements DelegateBinderStateManager.StateCal
             overriddenState.addDeregisteredFeatureTag(dereged.getFeatureTag(),
                     dereged.getState());
         }
-        // Override REGISTERED only
+        // Override REGISTERING/REGISTERED
+        for (String ft : registeringFeatures) {
+            overriddenState.addDeregisteringFeatureTag(ft, registerOverrideReason);
+        }
         for (String ft : registeredFeatures) {
             overriddenState.addDeregisteringFeatureTag(ft, registerOverrideReason);
         }
         return overriddenState.build();
+    }
+
+    private DelegateRegistrationState overrideRegistrationForCompatibility(
+            DelegateRegistrationState state) {
+        Set<String> registeredFeatures = state.getRegisteredFeatureTags();
+        Set<String> registeringFeatures = state.getRegisteringFeatureTags();
+        DelegateRegistrationState.Builder overriddenState = new DelegateRegistrationState.Builder();
+        // keep other registered/deregistering/deregistered tags the same.
+        for (FeatureTagState dereging : state.getDeregisteringFeatureTags()) {
+            overriddenState.addDeregisteringFeatureTag(dereging.getFeatureTag(),
+                    dereging.getState());
+        }
+        for (FeatureTagState dereged : state.getDeregisteredFeatureTags()) {
+            overriddenState.addDeregisteredFeatureTag(dereged.getFeatureTag(),
+                    dereged.getState());
+        }
+        overriddenState.addRegisteredFeatureTags(registeredFeatures);
+
+        // move the REGISTERING state to the DEREGISTERED state.
+        for (String tag : registeringFeatures) {
+            overriddenState.addDeregisteredFeatureTag(tag,
+                    DelegateRegistrationState.DEREGISTERED_REASON_NOT_REGISTERED);
+        }
+
+        return overriddenState.build();
+    }
+
+    /**
+     * @param state The RegistrationState reported by the SipDelegate to be sent to the
+     *              IMS application .
+     * @return DEREGISTERING_REASON_PDN_CHANGE instead of DEREGISTERING_REASON_LOSING_PDN
+     * if the SUPPORT_DEREGISTERING_LOSING_PDN_STATE compat key is not enabled for the application
+     * consuming the registration change events.
+     */
+    private DelegateRegistrationState overrideDeregisteringStateForCompatibility(
+            DelegateRegistrationState state) {
+        Set<String> registeredFeatures = state.getRegisteredFeatureTags();
+        Set<String> registeringFeatures = state.getRegisteringFeatureTags();
+        DelegateRegistrationState.Builder overriddenState = new DelegateRegistrationState.Builder();
+
+        // keep other registered/registering/deregistered tags the same.
+        for (FeatureTagState dereged : state.getDeregisteredFeatureTags()) {
+            overriddenState.addDeregisteredFeatureTag(dereged.getFeatureTag(),
+                    dereged.getState());
+        }
+        overriddenState.addRegisteredFeatureTags(registeredFeatures);
+        overriddenState.addRegisteringFeatureTags(registeringFeatures);
+
+        // change DEREGISTERING_REASON_LOSING_PDN to DEREGISTERING_REASON_PDN_CHANGE
+        for (FeatureTagState dereging : state.getDeregisteringFeatureTags()) {
+            overriddenState.addDeregisteringFeatureTag(dereging.getFeatureTag(),
+                    getDeregisteringReasonForCompatibility(dereging.getState()));
+        }
+
+        return overriddenState.build();
+    }
+
+    private int getDeregisteringReasonForCompatibility(int reason) {
+        if (reason == DelegateRegistrationState.DEREGISTERING_REASON_LOSING_PDN) {
+            reason = DelegateRegistrationState.DEREGISTERING_REASON_PDN_CHANGE;
+        }
+        return reason;
     }
 
     private void notifySipDelegateCreated() {

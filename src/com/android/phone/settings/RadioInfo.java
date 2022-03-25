@@ -17,6 +17,7 @@
 package com.android.phone.settings;
 
 import static android.net.ConnectivityManager.NetworkCallback;
+
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
 import android.content.ComponentName;
@@ -57,7 +58,6 @@ import android.telephony.CellSignalStrengthGsm;
 import android.telephony.CellSignalStrengthLte;
 import android.telephony.CellSignalStrengthWcdma;
 import android.telephony.DataSpecificRegistrationInfo;
-import android.telephony.data.NetworkSlicingConfig;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.PhysicalChannelConfig;
 import android.telephony.RadioAccessFamily;
@@ -66,6 +66,7 @@ import android.telephony.SignalStrength;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
+import android.telephony.data.NetworkSlicingConfig;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
@@ -102,8 +103,8 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Radio Information Class
@@ -673,6 +674,12 @@ public class RadioInfo extends AppCompatActivity {
         mPreferredNetworkType.setSelection(mPreferredNetworkTypeResult, true);
         mPreferredNetworkType.setOnItemSelectedListener(mPreferredNetworkHandler);
 
+        new Thread(() -> {
+            int networkType = (int) mTelephonyManager.getPreferredNetworkTypeBitmask();
+            runOnUiThread(() -> updatePreferredNetworkType(
+                    RadioAccessFamily.getNetworkTypeFromRaf(networkType)));
+        }).start();
+
         // set phone index
         mSelectPhoneIndex.setSelection(mSelectedPhoneIndex, true);
         mSelectPhoneIndex.setOnItemSelectedListener(mSelectPhoneIndexHandler);
@@ -1042,6 +1049,8 @@ public class RadioInfo extends AppCompatActivity {
                 display = r.getString(R.string.radioInfo_service_in);
                 break;
             case ServiceState.STATE_OUT_OF_SERVICE:
+                display = r.getString(R.string.radioInfo_service_out);
+                break;
             case ServiceState.STATE_EMERGENCY_ONLY:
                 display = r.getString(R.string.radioInfo_service_emergency);
                 break;
@@ -1118,24 +1127,28 @@ public class RadioInfo extends AppCompatActivity {
                 & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
             return;
         }
-
         ServiceState ss = serviceState;
         if (ss == null && mPhone != null) {
             ss = mPhone.getServiceState();
         }
         if (ss != null) {
+            boolean isNrSa = ss.getDataNetworkType() == TelephonyManager.NETWORK_TYPE_NR;
             NetworkRegistrationInfo nri = ss.getNetworkRegistrationInfo(
                     NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
             if (nri != null) {
                 DataSpecificRegistrationInfo dsri = nri.getDataSpecificInfo();
                 if (dsri != null) {
-                    mEndcAvailable.setText(dsri.isEnDcAvailable ? "True" : "False");
-                    mDcnrRestricted.setText(dsri.isDcNrRestricted ? "True" : "False");
-                    mNrAvailable.setText(dsri.isNrAvailable ? "True" : "False");
+                    mEndcAvailable.setText(isNrSa ? "N/A"
+                            : dsri.isEnDcAvailable ? "True" : "False");
+                    mDcnrRestricted.setText(isNrSa ? "N/A"
+                            : dsri.isDcNrRestricted ? "True" : "False");
+                    mNrAvailable.setText(isNrSa ? "N/A" : dsri.isNrAvailable ? "True" : "False");
                 }
             }
-            mNrState.setText(NetworkRegistrationInfo.nrStateToString(ss.getNrState()));
-            mNrFrequency.setText(ServiceState.frequencyRangeToString(ss.getNrFrequencyRange()));
+            mNrState.setText(isNrSa ? "N/A"
+                    : NetworkRegistrationInfo.nrStateToString(ss.getNrState()));
+            mNrFrequency.setText(isNrSa ? "N/A"
+                    : ServiceState.frequencyRangeToString(ss.getNrFrequencyRange()));
         }
 
         Executor simpleExecutor = (r) -> r.run();
@@ -1164,9 +1177,16 @@ public class RadioInfo extends AppCompatActivity {
         if (s == null) s = r.getString(R.string.radioInfo_unknown);
         mSubscriberId.setText(s);
 
-        //FIXME: Replace with a TelephonyManager call
-        s = mPhone.getLine1Number();
-        if (s == null) s = r.getString(R.string.radioInfo_unknown);
+        SubscriptionManager subMgr = getSystemService(SubscriptionManager.class);
+        int subId = mPhone.getSubId();
+        s = subMgr.getPhoneNumber(subId)
+                + " { CARRIER:"
+                + subMgr.getPhoneNumber(subId, SubscriptionManager.PHONE_NUMBER_SOURCE_CARRIER)
+                + ", UICC:"
+                + subMgr.getPhoneNumber(subId, SubscriptionManager.PHONE_NUMBER_SOURCE_UICC)
+                + ", IMS:"
+                + subMgr.getPhoneNumber(subId, SubscriptionManager.PHONE_NUMBER_SOURCE_IMS)
+                + " }";
         mLine1Number.setText(s);
     }
 
