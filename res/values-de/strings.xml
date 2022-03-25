@@ -637,14 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Notfallrückrufmodus"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Datenverbindung deaktiviert"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Keine Datenverbindung bis <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
-      <item quantity="other">Das Smartphone wird <xliff:g id="COUNT_1">%s</xliff:g> Minuten lang in den Notfallrückrufmodus versetzt. In dieser Zeit können Apps mit Datenverbindung nicht genutzt werden. Möchtest du den Vorgang jetzt abbrechen?</item>
-      <item quantity="one">Das Smartphone wird <xliff:g id="COUNT_0">%s</xliff:g> Minute lang in den Notfallrückrufmodus versetzt. In dieser Zeit können Apps mit Datenverbindung nicht genutzt werden. Möchtest du den Vorgang jetzt abbrechen?</item>
-    </plurals>
-    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
-      <item quantity="other">Die ausgewählte Aktion ist im Notfallrückrufmodus nicht verfügbar. Das Smartphone ist <xliff:g id="COUNT_1">%s</xliff:g> Minuten lang in diesem Modus. Möchtest du den Vorgang jetzt abbrechen?</item>
-      <item quantity="one">Die ausgewählte Aktion ist im Notfallrückrufmodus nicht verfügbar. Das Smartphone ist <xliff:g id="COUNT_0">%s</xliff:g> Minute lang in diesem Modus. Möchtest du den Vorgang jetzt abbrechen?</item>
-    </plurals>
+    <string name="alert_dialog_exit_ecm" msgid="7661603870224398025">"{count,plural, =1{Das Smartphone bleibt 1 Minute im Notfallrückrufmodus. In diesem Modus können keine Apps verwendet werden, die eine Datenverbindung erfordern. Möchtest du den Vorgang jetzt beenden?}other{Das Smartphone bleibt %s Minuten im Notfallrückrufmodus. In diesem Modus können keine Apps verwendet werden, die eine Datenverbindung erfordern. Möchtest du den Vorgang jetzt beenden?}}"</string>
+    <string name="alert_dialog_not_avaialble_in_ecm" msgid="8717711120099503279">"{count,plural, =1{Die ausgewählte Aktion ist im Notfallrückrufmodus nicht verfügbar. Das Telefon bleibt 1 Minute in diesem Modus. Möchtest du den Vorgang jetzt beenden?}other{Die ausgewählte Aktion ist im Notfallrückrufmodus nicht verfügbar. Das Telefon bleibt %s Minuten in diesem Modus. Möchtest du den Vorgang jetzt beenden?}}"</string>
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"Die ausgewählte Aktion ist während eines Notrufs nicht verfügbar."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Notfallrückrufmodus wird beendet..."</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Ja"</string>
@@ -652,10 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Verwerfen"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"Das Smartphone ist im Notfallrückrufmodus"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"Bis <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
-      <item quantity="other">Das Smartphone bleibt <xliff:g id="COUNT_1">%s</xliff:g> Minuten im Notfallrückrufmodus.\nMöchtest du den Vorgang jetzt beenden?</item>
-      <item quantity="one">Das Smartphone bleibt <xliff:g id="COUNT_0">%s</xliff:g> Minute im Notfallrückrufmodus.\nMöchtest du den Vorgang jetzt beenden?</item>
-    </plurals>
+    <string name="alert_dialog_exit_ecm_without_data_restriction_hint" msgid="7549850847524907932">"{count,plural, =1{Das Smartphone bleibt 1 Minute im Notfallrückrufmodus.\nMöchtest du den Vorgang jetzt beenden?}other{Das Smartphone bleibt %s Minuten im Notfallrückrufmodus.\nMöchtest du den Vorgang jetzt beenden?}}"</string>
     <string name="voicemail_provider" msgid="4158806657253745294">"Dienst"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Einrichtung"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Nicht festgelegt&gt;"</string>
@@ -827,7 +818,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"Anruf nicht möglich, da bereits ein anderer ausgehender Anruf aufgebaut wird."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"Anruf nicht möglich, da ein nicht angenommener eingehender Anruf vorhanden ist. Nimm den eingehenden Anruf an oder lehne ihn ab, bevor du einen neuen Anruf startest."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"Anruf nicht möglich, weil Anrufe über die Systemeigenschaft \"ro.telephony.disable-call\" deaktiviert wurden."</string>
-    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"Anruf nicht möglich, weil bereits zwei Anrufe aktiv sind. Beenden einen der Anrufe oder führe beide Anrufe in einer Telefonkonferenz zusammen, bevor du einen neuen Anruf startest."</string>
+    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"Anruf nicht möglich, weil bereits zwei Anrufe aktiv sind. Beende einen der Anrufe oder führe beide Anrufe in einer Telefonkonferenz zusammen, bevor du einen neuen Anruf startest."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"Damit du <xliff:g id="SUPP_SERVICE">%s</xliff:g> nutzen kannst, müssen mobile Daten aktiviert sein. Du kannst dies in den Einstellungen für das Mobilfunknetz ändern."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"Damit du <xliff:g id="SUPP_SERVICE">%s</xliff:g> nutzen kannst, müssen mobile Daten und Daten-Roaming aktiviert sein. Du kannst dies in den Einstellungen für das Mobilfunknetz ändern."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"Damit du <xliff:g id="SUPP_SERVICE">%1$s</xliff:g> nutzen kannst, müssen mobile Daten für SIM <xliff:g id="SIM_NUMBER">%2$d</xliff:g> aktiviert sein. Du kannst dies in den Einstellungen für das Mobilfunknetz ändern."</string>
@@ -927,4 +918,12 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Das Bluetooth-Signal ist schwach. Verwende die Freisprechfunktion."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Benachrichtigung zu Anrufqualität"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Eingestellte SIP-Konten"</string>
+    <!-- no translation found for limited_service_alert_dialog_description (6686928033670697313) -->
+    <skip />
+    <!-- no translation found for do_not_show_again (8923026903375124550) -->
+    <skip />
+    <!-- no translation found for turn_off_wfc (2346229945400554258) -->
+    <skip />
+    <!-- no translation found for unavailable_emergency_calls_notification_name (4390236789690885552) -->
+    <skip />
 </resources>

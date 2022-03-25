@@ -637,18 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Režim tiesňového spätného volania"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Dátové pripojenie zakázané"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Dátové pripojenie nebude dostupné do <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm" formatted="false" msgid="5425906903766466743">
-      <item quantity="few">Telefón bude <xliff:g id="COUNT_1">%s</xliff:g> minúty v režime spätného tiesňového volania. Keď bude v tomto režime, nesmiete používať žiadne aplikácie využívajúce dátové pripojenie. Chcete ho ukončiť?</item>
-      <item quantity="many">Telefón bude <xliff:g id="COUNT_1">%s</xliff:g> minúty v režime spätného tiesňového volania. Keď bude v tomto režime, nesmiete používať žiadne aplikácie využívajúce dátové pripojenie. Chcete ho ukončiť?</item>
-      <item quantity="other">Telefón bude <xliff:g id="COUNT_1">%s</xliff:g> minút v režime spätného tiesňového volania. Keď bude v tomto režime, nesmiete používať žiadne aplikácie využívajúce dátové pripojenie. Chcete ho ukončiť?</item>
-      <item quantity="one">Telefón bude <xliff:g id="COUNT_0">%s</xliff:g> minútu v režime spätného tiesňového volania. Keď bude v tomto režime, nesmiete používať žiadne aplikácie využívajúce dátové pripojenie. Chcete ho ukončiť?</item>
-    </plurals>
-    <plurals name="alert_dialog_not_avaialble_in_ecm" formatted="false" msgid="1152682528741457004">
-      <item quantity="few">Pri spustenom režime spätného tiesňového volania nie je vybraná akcia k dispozícii. Telefón bude v tomto režime <xliff:g id="COUNT_1">%s</xliff:g> minúty. Chcete ho ukončiť?</item>
-      <item quantity="many">Pri spustenom režime spätného tiesňového volania nie je vybraná akcia k dispozícii. Telefón bude v tomto režime <xliff:g id="COUNT_1">%s</xliff:g> minúty. Chcete ho ukončiť?</item>
-      <item quantity="other">Pri spustenom režime spätného tiesňového volania nie je vybraná akcia k dispozícii. Telefón bude v tomto režime <xliff:g id="COUNT_1">%s</xliff:g> minút. Chcete ho ukončiť?</item>
-      <item quantity="one">Pri spustenom režime spätného tiesňového volania nie je vybraná akcia k dispozícii. Telefón bude v tomto režime <xliff:g id="COUNT_0">%s</xliff:g> minútu. Chcete ho ukončiť?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm (7661603870224398025) -->
+    <!-- format error in translation for alert_dialog_not_avaialble_in_ecm (8717711120099503279) -->
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"Počas tiesňového volania nie je vybratá akcia k dispozícii."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Ukončenie režimu tiesňového spätného volania"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Áno"</string>
@@ -656,12 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Zatvoriť"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"Telefón je v režime tiesňového spätného volania"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"Do <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <plurals name="alert_dialog_exit_ecm_without_data_restriction_hint" formatted="false" msgid="6477733043040328640">
-      <item quantity="few">Telefón bude v režime tiesňového spätného volania <xliff:g id="COUNT_1">%s</xliff:g> minúty.\nChcete tento režim ukončiť?</item>
-      <item quantity="many">Telefón bude v režime tiesňového spätného volania <xliff:g id="COUNT_1">%s</xliff:g> minúty.\nChcete tento režim ukončiť?</item>
-      <item quantity="other">Telefón bude v režime tiesňového spätného volania <xliff:g id="COUNT_1">%s</xliff:g> minút.\nChcete tento režim ukončiť?</item>
-      <item quantity="one">Telefón bude v režime tiesňového spätného volania <xliff:g id="COUNT_0">%s</xliff:g> minútu.\nChcete tento režim ukončiť?</item>
-    </plurals>
+    <!-- format error in translation for alert_dialog_exit_ecm_without_data_restriction_hint (7549850847524907932) -->
     <string name="voicemail_provider" msgid="4158806657253745294">"Služba"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Nastavenie"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Nenastavené&gt;"</string>
@@ -833,7 +818,7 @@
     <string name="callFailed_already_dialing" msgid="7250591188960691086">"Hovor sa nedá uskutočniť, pretože sa už vytáča iný odchádzajúci hovor."</string>
     <string name="callFailed_already_ringing" msgid="2376603543544289303">"Hovor sa nedá uskutočniť, pretože máte neprijatý prichádzajúci hovor. Prijmite alebo odmietnite prichádzajúci hovor a až potom uskutočnite nový hovor."</string>
     <string name="callFailed_calling_disabled" msgid="5010992739401206283">"Hovor sa nedá uskutočniť, pretože hovory boli zakázané systémovým príkazom ro.telephony.disable-call."</string>
-    <string name="callFailed_too_many_calls" msgid="5379426826618582180">"Hovor sa nedá uskutočniť, pretože už prebiehajú dva hovory. Odpojte jeden hovor alebo ich zlúčte do konferencie a až potom uskutočnite nový hovor."</string>
+    <string name="callFailed_too_many_calls" msgid="2761754044990799580">"Hovor sa nedá uskutočniť, pretože už prebiehajú dva hovory. Odpojte jeden hovor alebo ich zlúčte do konferencie a až potom uskutočnite nový hovor."</string>
     <string name="supp_service_over_ut_precautions" msgid="2145018231396701311">"Ak chcete používať službu <xliff:g id="SUPP_SERVICE">%s</xliff:g>, skontrolujte, či máte zapnuté mobilné dáta. Môžete to zmeniť v nastaveniach mobilnej siete."</string>
     <string name="supp_service_over_ut_precautions_roaming" msgid="670342104569972327">"Ak chcete používať službu <xliff:g id="SUPP_SERVICE">%s</xliff:g>, skontrolujte, či máte zapnuté mobilné dáta a dátový roaming. Môžete to zmeniť v nastaveniach mobilnej siete."</string>
     <string name="supp_service_over_ut_precautions_dual_sim" msgid="5166866975550910474">"Ak chcete používať službu <xliff:g id="SUPP_SERVICE">%1$s</xliff:g>, skontrolujte, či máte pre SIM kartu <xliff:g id="SIM_NUMBER">%2$d</xliff:g> zapnuté mobilné dáta. Môžete to zmeniť v nastaveniach mobilnej siete."</string>
@@ -933,4 +918,12 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Signál Bluetooth je slabý. Skúste prepnúť na reproduktor."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Upozornenie o kvalite hovoru"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Účty SIP s ukončenou podporou"</string>
+    <!-- no translation found for limited_service_alert_dialog_description (6686928033670697313) -->
+    <skip />
+    <!-- no translation found for do_not_show_again (8923026903375124550) -->
+    <skip />
+    <!-- no translation found for turn_off_wfc (2346229945400554258) -->
+    <skip />
+    <!-- no translation found for unavailable_emergency_calls_notification_name (4390236789690885552) -->
+    <skip />
 </resources>
