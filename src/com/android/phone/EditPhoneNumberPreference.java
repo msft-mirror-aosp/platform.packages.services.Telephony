@@ -16,9 +16,6 @@
 
 package com.android.phone;
 
-import static android.view.View.LAYOUT_DIRECTION_LOCALE;
-import static android.view.View.TEXT_DIRECTION_LOCALE;
-
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
@@ -39,8 +36,6 @@ import android.view.ViewGroup;
 import android.widget.EditText;
 import android.widget.ImageButton;
 import android.widget.TextView;
-
-import com.android.internal.telephony.CommandsInterface;
 
 public class EditPhoneNumberPreference extends EditTextPreference {
 
@@ -95,7 +90,6 @@ public class EditPhoneNumberPreference extends EditTextPreference {
     private String mPhoneNumber;
     private boolean mChecked;
 
-    private boolean mIsUnknownStatus;
 
     /**
      * Interface for the dialog closed listener, related to
@@ -215,9 +209,7 @@ public class EditPhoneNumberPreference extends EditTextPreference {
                 }
             }
             editText.setText(BidiFormatter.getInstance().unicodeWrap(
-                    mPhoneNumber, TextDirectionHeuristics.LOCALE));
-            editText.setTextDirection(TEXT_DIRECTION_LOCALE);
-            editText.setLayoutDirection(LAYOUT_DIRECTION_LOCALE);
+                    mPhoneNumber, TextDirectionHeuristics.LTR));
             editText.setMovementMethod(ArrowKeyMovementMethod.getInstance());
             editText.setKeyListener(DialerKeyListener.getInstance());
             editText.setOnFocusChangeListener(mDialogFocusChangeListener);
@@ -262,13 +254,7 @@ public class EditPhoneNumberPreference extends EditTextPreference {
         // displayed, since there is no need to hide the edittext
         // field anymore.
         if (mConfirmationMode == CM_ACTIVATION) {
-            if (mIsUnknownStatus) {
-                builder.setPositiveButton(mEnableText, this);
-                builder.setNeutralButton(mDisableText, this);
-                if (mPrefId == CommandsInterface.CF_REASON_ALL) {
-                    builder.setPositiveButton(null, null);
-                }
-            } else if (mChecked) {
+            if (mChecked) {
                 builder.setPositiveButton(mChangeNumberText, this);
                 builder.setNeutralButton(mDisableText, this);
             } else {
@@ -324,8 +310,7 @@ public class EditPhoneNumberPreference extends EditTextPreference {
     @Override
     public void onClick(DialogInterface dialog, int which) {
         // The neutral button (button3) is always the toggle.
-        if ((mConfirmationMode == CM_ACTIVATION) && (which == DialogInterface.BUTTON_NEUTRAL)
-             && !mIsUnknownStatus) {
+        if ((mConfirmationMode == CM_ACTIVATION) && (which == DialogInterface.BUTTON_NEUTRAL)) {
             //flip the toggle if we are in the correct mode.
             setToggled(!isToggled());
         }
@@ -513,13 +498,5 @@ public class EditPhoneNumberPreference extends EditTextPreference {
      */
     public void showPhoneNumberDialog() {
         showDialog(null);
-    }
-
-    public void setUnknownStatus(boolean isUnknown) {
-        mIsUnknownStatus = isUnknown;
-    }
-
-    public boolean isUnknownStatus() {
-        return mIsUnknownStatus;
     }
 }

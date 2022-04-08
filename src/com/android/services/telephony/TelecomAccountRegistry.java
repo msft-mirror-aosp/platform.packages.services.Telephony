@@ -32,7 +32,6 @@ import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.PersistableBundle;
@@ -43,11 +42,11 @@ import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
+import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
-import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ImsMmTelManager;
@@ -107,15 +106,6 @@ public class TelecomAccountRegistry {
      */
     private static final int LISTENER_STATE_REGISTERED = 3;
 
-    /**
-     * Copy-pasted from android.telecom.PhoneAccount -- hidden constant which is unfortunately being
-     * used by some 1P apps, so we're keeping it here until we can remove it.
-     */
-    private static final String EXTRA_SUPPORTS_VIDEO_CALLING_FALLBACK =
-            "android.telecom.extra.SUPPORTS_VIDEO_CALLING_FALLBACK";
-
-    private Handler mHandler;
-
     final class AccountEntry implements PstnPhoneCapabilitiesNotifier.Listener {
         private final Phone mPhone;
         private PhoneAccount mAccount;
@@ -123,14 +113,13 @@ public class TelecomAccountRegistry {
         private final PstnPhoneCapabilitiesNotifier mPhoneCapabilitiesNotifier;
         private boolean mIsEmergency;
         private boolean mIsRttCapable;
-        private boolean mIsCallComposerCapable;
         private boolean mIsAdhocConfCapable;
         private boolean mIsEmergencyPreferred;
         private MmTelFeature.MmTelCapabilities mMmTelCapabilities;
         private ImsMmTelManager.CapabilityCallback mMmtelCapabilityCallback;
         private RegistrationManager.RegistrationCallback mImsRegistrationCallback;
         private ImsMmTelManager mMmTelManager;
-        private final boolean mIsTestAccount;
+        private final boolean mIsDummy;
         private boolean mIsVideoCapable;
         private boolean mIsVideoPresenceSupported;
         private boolean mIsVideoPauseSupported;
@@ -142,20 +131,20 @@ public class TelecomAccountRegistry {
         private boolean mIsUsingSimCallManager;
         private boolean mIsShowPreciseFailedCause;
 
-        AccountEntry(Phone phone, boolean isEmergency, boolean isTest) {
+        AccountEntry(Phone phone, boolean isEmergency, boolean isDummy) {
             mPhone = phone;
             mIsEmergency = isEmergency;
-            mIsTestAccount = isTest;
+            mIsDummy = isDummy;
             mIsAdhocConfCapable = mPhone.isImsRegistered();
-            mAccount = registerPstnPhoneAccount(isEmergency, isTest);
+            mAccount = registerPstnPhoneAccount(isEmergency, isDummy);
             Log.i(this, "Registered phoneAccount: %s with handle: %s",
                     mAccount, mAccount.getAccountHandle());
             mIncomingCallNotifier = new PstnIncomingCallNotifier((Phone) mPhone);
             mPhoneCapabilitiesNotifier = new PstnPhoneCapabilitiesNotifier((Phone) mPhone,
                     this);
 
-            if (mIsTestAccount || isEmergency) {
-                // For test and emergency entries, there is no sub ID that can be assigned, so do
+            if (mIsDummy || isEmergency) {
+                // For dummy and emergency entries, there is no sub ID that can be assigned, so do
                 // not register for capabilities callbacks.
                 return;
             }
@@ -177,7 +166,6 @@ public class TelecomAccountRegistry {
                         MmTelFeature.MmTelCapabilities capabilities) {
                     mMmTelCapabilities = capabilities;
                     updateRttCapability();
-                    updateCallComposerCapability(capabilities);
                 }
             };
             registerMmTelCapabilityCallback();
@@ -259,7 +247,7 @@ public class TelecomAccountRegistry {
          * Trigger re-registration of this account.
          */
         public void reRegisterPstnPhoneAccount() {
-            PhoneAccount newAccount = buildPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+            PhoneAccount newAccount = buildPstnPhoneAccount(mIsEmergency, mIsDummy);
             if (!newAccount.equals(mAccount)) {
                 Log.i(this, "reRegisterPstnPhoneAccount: subId: " + getSubId()
                         + " - re-register due to account change.");
@@ -270,8 +258,8 @@ public class TelecomAccountRegistry {
             }
         }
 
-        private PhoneAccount registerPstnPhoneAccount(boolean isEmergency, boolean isTestAccount) {
-            PhoneAccount account = buildPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+        private PhoneAccount registerPstnPhoneAccount(boolean isEmergency, boolean isDummyAccount) {
+            PhoneAccount account = buildPstnPhoneAccount(mIsEmergency, mIsDummy);
             // Register with Telecom and put into the account entry.
             mTelecomManager.registerPhoneAccount(account);
             return account;
@@ -280,13 +268,13 @@ public class TelecomAccountRegistry {
         /**
          * Registers the specified account with Telecom as a PhoneAccountHandle.
          */
-        private PhoneAccount buildPstnPhoneAccount(boolean isEmergency, boolean isTestAccount) {
-            String testPrefix = isTestAccount ? "Test " : "";
+        private PhoneAccount buildPstnPhoneAccount(boolean isEmergency, boolean isDummyAccount) {
+            String dummyPrefix = isDummyAccount ? "Dummy " : "";
 
             // Build the Phone account handle.
             PhoneAccountHandle phoneAccountHandle =
                     PhoneUtils.makePstnPhoneAccountHandleWithPrefix(
-                            mPhone, testPrefix, isEmergency);
+                            mPhone, dummyPrefix, isEmergency);
 
             // Populate the phone account data.
             int subId = mPhone.getSubId();
@@ -346,8 +334,8 @@ public class TelecomAccountRegistry {
 
                 // The label is user-visible so let's use the display name that the user may
                 // have set in Settings->Sim cards.
-                label = testPrefix + subDisplayName;
-                description = testPrefix + mContext.getResources().getString(
+                label = dummyPrefix + subDisplayName;
+                description = dummyPrefix + mContext.getResources().getString(
                                 R.string.sim_description_default, slotIdString);
             }
 
@@ -370,10 +358,6 @@ public class TelecomAccountRegistry {
                 mIsRttCapable = true;
             } else {
                 mIsRttCapable = false;
-            }
-
-            if (mIsCallComposerCapable) {
-                capabilities |= PhoneAccount.CAPABILITY_CALL_COMPOSER;
             }
 
             mIsVideoCapable = mPhone.isVideoEnabled();
@@ -432,12 +416,13 @@ public class TelecomAccountRegistry {
                 extras.putBoolean(PhoneAccount.EXTRA_PLAY_CALL_RECORDING_TONE, true);
             }
 
-            extras.putBoolean(EXTRA_SUPPORTS_VIDEO_CALLING_FALLBACK,
+            extras.putBoolean(PhoneAccount.EXTRA_SUPPORTS_VIDEO_CALLING_FALLBACK,
                     mContext.getResources()
                             .getBoolean(R.bool.config_support_video_calling_fallback));
 
             if (slotId != SubscriptionManager.INVALID_SIM_SLOT_INDEX) {
-                extras.putInt(PhoneAccount.EXTRA_SORT_ORDER, slotId);
+                extras.putString(PhoneAccount.EXTRA_SORT_ORDER,
+                    String.valueOf(slotId));
             }
 
             mIsMergeCallSupported = isCarrierMergeCallSupported();
@@ -588,15 +573,9 @@ public class TelecomAccountRegistry {
         private boolean isCarrierVideoPresenceSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            if (b == null) return false;
-
-            // If using the new RcsUceAdapter API, this should be true if
-            // KEY_ENABLE_PRESENCE_CAPABILITY_EXCHANGE_BOOL is set. If using the old
-            // KEY_USE_RCS_PRESENCE_BOOL key, we have to also check the user setting.
-            return b.getBoolean(
-                    CarrierConfigManager.Ims.KEY_ENABLE_PRESENCE_CAPABILITY_EXCHANGE_BOOL)
-                    || (b.getBoolean(CarrierConfigManager.KEY_USE_RCS_PRESENCE_BOOL)
-                    && isUserContactDiscoverySettingEnabled());
+            boolean carrierConfigEnabled = b != null
+                    && b.getBoolean(CarrierConfigManager.KEY_USE_RCS_PRESENCE_BOOL);
+            return carrierConfigEnabled && isUserContactDiscoverySettingEnabled();
         }
 
         /**
@@ -750,15 +729,6 @@ public class TelecomAccountRegistry {
         }
 
         /**
-         * Determines from carrier config whether to always allow RTT while roaming.
-         */
-        private boolean isCarrierAllowRttWhenRoaming() {
-            PersistableBundle b =
-                    PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b.getBoolean(CarrierConfigManager.KEY_RTT_SUPPORTED_WHILE_ROAMING_BOOL);
-        }
-
-        /**
          * Where a device supports instant lettering and call subjects, retrieves the necessary
          * PhoneAccount extras for those features.
          *
@@ -797,7 +767,7 @@ public class TelecomAccountRegistry {
                     // time we get here, the original phone account could have been torn down.
                     return;
                 }
-                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
             }
         }
 
@@ -816,7 +786,7 @@ public class TelecomAccountRegistry {
                     Log.i(this, "updateAdhocConfCapability - changed, new value: "
                             + isAdhocConfCapable);
                     mIsAdhocConfCapable = isAdhocConfCapable;
-                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
                 }
             }
         }
@@ -835,7 +805,7 @@ public class TelecomAccountRegistry {
                 if (mIsVideoPresenceSupported != isVideoPresenceSupported) {
                     Log.i(this, "updateVideoPresenceCapability for subId=" + mPhone.getSubId()
                             + ", new value= " + isVideoPresenceSupported);
-                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
                 }
             }
         }
@@ -844,18 +814,7 @@ public class TelecomAccountRegistry {
             boolean isRttEnabled = isRttCurrentlySupported();
             if (isRttEnabled != mIsRttCapable) {
                 Log.i(this, "updateRttCapability - changed, new value: " + isRttEnabled);
-                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
-            }
-        }
-
-        public void updateCallComposerCapability(MmTelFeature.MmTelCapabilities capabilities) {
-            boolean isCallComposerCapable = capabilities.isCapable(
-                    MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_CALL_COMPOSER);
-            if (isCallComposerCapable != mIsCallComposerCapable) {
-                mIsCallComposerCapable = isCallComposerCapable;
-                Log.i(this, "updateCallComposerCapability - changed, new value: "
-                        + isCallComposerCapable);
-                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
             }
         }
 
@@ -864,7 +823,7 @@ public class TelecomAccountRegistry {
                     activeDataSubId);
             if (isEmergencyPreferred != mIsEmergencyPreferred) {
                 Log.i(this, "updateDefaultDataSubId - changed, new value: " + isEmergencyPreferred);
-                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsDummy);
             }
         }
 
@@ -888,8 +847,7 @@ public class TelecomAccountRegistry {
                 // Next check whether we're in or near a country that supports it
                 String country =
                         mPhone.getServiceStateTracker().getLocaleTracker()
-                                .getLastKnownCountryIso().toLowerCase();
-
+                                .getCurrentCountry().toLowerCase();
                 String[] supportedCountries = mContext.getResources().getStringArray(
                         R.array.config_simless_emergency_rtt_supported_countries);
                 if (supportedCountries == null || Arrays.stream(supportedCountries).noneMatch(
@@ -898,7 +856,7 @@ public class TelecomAccountRegistry {
                             + " not supported in this country: " + country);
                     return false;
                 }
-
+                
                 return true;
             }
 
@@ -910,15 +868,11 @@ public class TelecomAccountRegistry {
             boolean isRoaming = mTelephonyManager.isNetworkRoaming(mPhone.getSubId());
             boolean isOnWfc = mPhone.getImsRegistrationTech()
                     == ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
-            boolean alwaysAllowWhileRoaming = isCarrierAllowRttWhenRoaming();
 
-            boolean shouldDisableBecauseRoamingOffWfc =
-                    (isRoaming && !isOnWfc) && !alwaysAllowWhileRoaming;
-
+            boolean shouldDisableBecauseRoamingOffWfc = isRoaming && !isOnWfc;
             Log.i(this, "isRttCurrentlySupported -- regular acct,"
                     + " hasVoiceAvailability: " + hasVoiceAvailability + "\n"
                     + " isRttSupported: " + isRttSupported + "\n"
-                    + " alwaysAllowWhileRoaming: " + alwaysAllowWhileRoaming + "\n"
                     + " isRoaming: " + isRoaming + "\n"
                     + " isOnWfc: " + isOnWfc + "\n");
 
@@ -1011,9 +965,6 @@ public class TelecomAccountRegistry {
             return mMmTelManager.isAvailable(ImsRegistrationImplBase.REGISTRATION_TECH_LTE,
                     MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE)
                     || mMmTelManager.isAvailable(ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN,
-                    MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE)
-                    || mMmTelManager.isAvailable(
-                            ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM,
                     MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE);
         }
     }
@@ -1088,11 +1039,7 @@ public class TelecomAccountRegistry {
         }
     };
 
-    private final TelephonyCallback mTelephonyCallback = new TelecomAccountTelephonyCallback();
-
-    private class TelecomAccountTelephonyCallback extends TelephonyCallback implements
-            TelephonyCallback.ActiveDataSubscriptionIdListener,
-            TelephonyCallback.ServiceStateListener {
+    private final PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
         @Override
         public void onServiceStateChanged(ServiceState serviceState) {
             int newState = serviceState.getState();
@@ -1118,7 +1065,7 @@ public class TelecomAccountRegistry {
                 }
             }
         }
-    }
+    };
 
     private static TelecomAccountRegistry sInstance;
     private final Context mContext;
@@ -1158,7 +1105,6 @@ public class TelecomAccountRegistry {
         mTelephonyManager = TelephonyManager.from(context);
         mSubscriptionManager = SubscriptionManager.from(context);
         mHandlerThread.start();
-        mHandler = new Handler(Looper.getMainLooper());
         mRegisterSubscriptionListenerBackoff = new ExponentialBackoff(
                 REGISTER_START_DELAY_MS,
                 REGISTER_MAXIMUM_DELAY_MS,
@@ -1181,7 +1127,7 @@ public class TelecomAccountRegistry {
         this.mTelephonyConnectionService = telephonyConnectionService;
     }
 
-    public TelephonyConnectionService getTelephonyConnectionService() {
+    TelephonyConnectionService getTelephonyConnectionService() {
         return mTelephonyConnectionService;
     }
 
@@ -1210,7 +1156,7 @@ public class TelecomAccountRegistry {
      * @param handle The {@link PhoneAccountHandle}.
      * @return {@code True} if merging calls is supported.
      */
-    public boolean isMergeCallSupported(PhoneAccountHandle handle) {
+    boolean isMergeCallSupported(PhoneAccountHandle handle) {
         synchronized (mAccountsLock) {
             for (AccountEntry entry : mAccounts) {
                 if (entry.getPhoneAccountHandle().equals(handle)) {
@@ -1228,7 +1174,7 @@ public class TelecomAccountRegistry {
      * @param handle The {@link PhoneAccountHandle}.
      * @return {@code True} if video conferencing is supported.
      */
-    public boolean isVideoConferencingSupported(PhoneAccountHandle handle) {
+    boolean isVideoConferencingSupported(PhoneAccountHandle handle) {
         synchronized (mAccountsLock) {
             for (AccountEntry entry : mAccounts) {
                 if (entry.getPhoneAccountHandle().equals(handle)) {
@@ -1246,7 +1192,7 @@ public class TelecomAccountRegistry {
      * @param handle The {@link PhoneAccountHandle}.
      * @return {@code True} if merging of wifi calls is allowed when VoWIFI is disabled.
      */
-    public boolean isMergeOfWifiCallsAllowedWhenVoWifiOff(final PhoneAccountHandle handle) {
+    boolean isMergeOfWifiCallsAllowedWhenVoWifiOff(final PhoneAccountHandle handle) {
         synchronized (mAccountsLock) {
             Optional<AccountEntry> result = mAccounts.stream().filter(
                     entry -> entry.getPhoneAccountHandle().equals(handle)).findFirst();
@@ -1266,7 +1212,7 @@ public class TelecomAccountRegistry {
      * @param handle The {@link PhoneAccountHandle}.
      * @return {@code True} if merging IMS calls is supported.
      */
-    public boolean isMergeImsCallSupported(PhoneAccountHandle handle) {
+    boolean isMergeImsCallSupported(PhoneAccountHandle handle) {
         synchronized (mAccountsLock) {
             for (AccountEntry entry : mAccounts) {
                 if (entry.getPhoneAccountHandle().equals(handle)) {
@@ -1386,8 +1332,8 @@ public class TelecomAccountRegistry {
 
         // We also need to listen for changes to the service state (e.g. emergency -> in service)
         // because this could signal a removal or addition of a SIM in a single SIM phone.
-        mTelephonyManager.registerTelephonyCallback(new HandlerExecutor(mHandler),
-                mTelephonyCallback);
+        mTelephonyManager.listen(mPhoneStateListener, PhoneStateListener.LISTEN_SERVICE_STATE
+                | PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
 
         // Listen for user switches.  When the user switches, we need to ensure that if the current
         // use is not the primary user we disable video calling.
@@ -1407,7 +1353,8 @@ public class TelecomAccountRegistry {
 
     private void registerContentObservers() {
         // Listen to the RTT system setting so that we update it when the user flips it.
-        ContentObserver rttUiSettingObserver = new ContentObserver(mHandler) {
+        ContentObserver rttUiSettingObserver = new ContentObserver(
+                new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
                 synchronized (mAccountsLock) {
@@ -1423,7 +1370,8 @@ public class TelecomAccountRegistry {
                 rttSettingUri, false, rttUiSettingObserver);
 
         // Listen to the changes to the user's Contacts Discovery Setting.
-        ContentObserver contactDiscoveryObserver = new ContentObserver(mHandler) {
+        ContentObserver contactDiscoveryObserver = new ContentObserver(
+                new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
                 synchronized (mAccountsLock) {
@@ -1455,17 +1403,6 @@ public class TelecomAccountRegistry {
             }
         }
         return false;
-    }
-
-    PhoneAccountHandle getPhoneAccountHandleForSubId(int subId) {
-        synchronized (mAccountsLock) {
-            for (AccountEntry entry : mAccounts) {
-                if (entry.getSubId() == subId) {
-                    return entry.getPhoneAccountHandle();
-                }
-            }
-        }
-        return null;
     }
 
     /**
@@ -1525,7 +1462,7 @@ public class TelecomAccountRegistry {
                         }
 
                         mAccounts.add(new AccountEntry(phone, false /* emergency */,
-                                false /* isTest */));
+                                false /* isDummy */));
                     }
                 }
             } finally {
@@ -1536,14 +1473,14 @@ public class TelecomAccountRegistry {
                     Log.i(this, "setupAccounts: adding default");
                     mAccounts.add(
                             new AccountEntry(PhoneFactory.getDefaultPhone(), true /* emergency */,
-                                    false /* isTest */));
+                                    false /* isDummy */));
                 }
             }
 
             // Add a fake account entry.
-            if (DBG && phones.length > 0 && "TRUE".equals(System.getProperty("test_sim"))) {
+            if (DBG && phones.length > 0 && "TRUE".equals(System.getProperty("dummy_sim"))) {
                 mAccounts.add(new AccountEntry(phones[0], false /* emergency */,
-                        true /* isTest */));
+                        true /* isDummy */));
             }
         }
 

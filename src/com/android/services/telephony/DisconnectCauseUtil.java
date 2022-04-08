@@ -23,7 +23,6 @@ import android.provider.Settings;
 import android.telecom.DisconnectCause;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
-import android.telephony.ims.ImsReasonInfo;
 
 import com.android.internal.telephony.CallFailCause;
 import com.android.internal.telephony.Phone;
@@ -65,13 +64,13 @@ public class DisconnectCauseUtil {
     * message and tone.
     *
     * @param telephonyDisconnectCause The code for the reason for the disconnect.
-    * @param telephonyPreciseDisconnectCause The code for the precise reason for the disconnect.
+    * @param telephonyPerciseDisconnectCause The code for the percise reason for the disconnect.
     * @param reason Description of the reason for the disconnect, not intended for the user to see..
     */
     public static DisconnectCause toTelecomDisconnectCause(
-            int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason) {
-        return toTelecomDisconnectCause(telephonyDisconnectCause, telephonyPreciseDisconnectCause,
-                reason, SubscriptionManager.getDefaultVoicePhoneId(), null);
+            int telephonyDisconnectCause, int telephonyPerciseDisconnectCause, String reason) {
+        return toTelecomDisconnectCause(telephonyDisconnectCause, telephonyPerciseDisconnectCause,
+                reason, SubscriptionManager.getDefaultVoicePhoneId());
     }
 
     /**
@@ -85,33 +84,30 @@ public class DisconnectCauseUtil {
     public static DisconnectCause toTelecomDisconnectCause(int telephonyDisconnectCause,
             String reason, int phoneId) {
         return toTelecomDisconnectCause(telephonyDisconnectCause, CallFailCause.NOT_VALID,
-                reason, phoneId, null);
+                reason, phoneId);
     }
 
    /**
     * Converts from a disconnect code in {@link android.telephony.DisconnectCause} into a more
     * generic {@link android.telecom.DisconnectCause}.object, possibly populated with a localized
     * message and tone for Slot.
+    *
     * @param telephonyDisconnectCause The code for the reason for the disconnect.
-    * @param telephonyPreciseDisconnectCause The code for the precise reason for the disconnect.
-    * @param reason Description of the reason for the disconnect, not intended for the user to see.
+    * @param telephonyPerciseDisconnectCause The code for the percise reason for the disconnect.
+    * @param reason Description of the reason for the disconnect, not intended for the user to see..
     * @param phoneId To support localized message based on phoneId
-    * @param imsReasonInfo
     */
     public static DisconnectCause toTelecomDisconnectCause(
-            int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason,
-            int phoneId, ImsReasonInfo imsReasonInfo) {
+            int telephonyDisconnectCause, int telephonyPerciseDisconnectCause, String reason,
+            int phoneId) {
         Context context = PhoneGlobals.getInstance();
         return new DisconnectCause(
                 toTelecomDisconnectCauseCode(telephonyDisconnectCause),
                 toTelecomDisconnectCauseLabel(context, telephonyDisconnectCause,
-                        telephonyPreciseDisconnectCause),
+                        telephonyPerciseDisconnectCause),
                 toTelecomDisconnectCauseDescription(context, telephonyDisconnectCause, phoneId),
                 toTelecomDisconnectReason(context,telephonyDisconnectCause, reason, phoneId),
-                toTelecomDisconnectCauseTone(telephonyDisconnectCause, phoneId),
-                telephonyDisconnectCause,
-                telephonyPreciseDisconnectCause,
-                imsReasonInfo);
+                toTelecomDisconnectCauseTone(telephonyDisconnectCause, phoneId));
     }
 
     /**
@@ -237,10 +233,10 @@ public class DisconnectCauseUtil {
      * Returns a label for to the disconnect cause to be shown to the user.
      */
     private static CharSequence toTelecomDisconnectCauseLabel(
-            Context context, int telephonyDisconnectCause, int telephonyPreciseDisconnectCause) {
+            Context context, int telephonyDisconnectCause, int telephonyPerciseDisconnectCause) {
         CharSequence label;
-        if (telephonyPreciseDisconnectCause != CallFailCause.NOT_VALID) {
-            label = getLabelFromPreciseDisconnectCause(context, telephonyPreciseDisconnectCause,
+        if (telephonyPerciseDisconnectCause != CallFailCause.NOT_VALID) {
+            label = getLabelFromPreciseDisconnectCause(context, telephonyPerciseDisconnectCause,
                     telephonyDisconnectCause);
         } else {
             label = getLabelFromDisconnectCause(context, telephonyDisconnectCause);
@@ -658,14 +654,12 @@ public class DisconnectCauseUtil {
                 break;
 
             case android.telephony.DisconnectCause.POWER_OFF:
-                // Radio is explicitly powered off because the device's radio is off.
+                // Radio is explictly powered off because the device is in airplane mode.
 
                 // TODO: Offer the option to turn the radio on, and automatically retry the call
                 // once network registration is complete.
 
-                if (isRadioOffForThermalMitigation(phoneId)) {
-                    resourceId = R.string.incall_error_power_off_thermal;
-                } else if (ImsUtil.shouldPromoteWfc(context, phoneId)) {
+                if (ImsUtil.shouldPromoteWfc(context, phoneId)) {
                     resourceId = R.string.incall_error_promote_wfc;
                 } else if (ImsUtil.isWfcModeWifiOnly(context, phoneId)) {
                     resourceId = R.string.incall_error_wfc_only_no_wireless_network;
@@ -787,12 +781,7 @@ public class DisconnectCauseUtil {
             default:
                 break;
         }
-        return resourceId == null ? "" : context.getResources().getText(resourceId);
-    }
-
-    private static boolean isRadioOffForThermalMitigation(int phoneId) {
-        Phone phone = PhoneFactory.getPhone(phoneId);
-        return phone.isRadioOffForThermalMitigation();
+        return resourceId == null ? "" : context.getResources().getString(resourceId);
     }
 
     /**

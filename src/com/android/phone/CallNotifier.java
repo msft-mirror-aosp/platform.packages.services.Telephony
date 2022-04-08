@@ -25,14 +25,13 @@ import android.media.AudioSystem;
 import android.media.ToneGenerator;
 import android.os.AsyncResult;
 import android.os.Handler;
-import android.os.HandlerExecutor;
 import android.os.Message;
 import android.os.SystemProperties;
 import android.telecom.TelecomManager;
+import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
-import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.util.ArrayMap;
 import android.util.Log;
@@ -69,8 +68,8 @@ public class CallNotifier extends Handler {
     /** The singleton instance. */
     private static CallNotifier sInstance;
 
-    private Map<Integer, CallNotifierTelephonyCallback> mTelephonyCallback =
-            new ArrayMap<Integer, CallNotifierTelephonyCallback>();
+    private Map<Integer, CallNotifierPhoneStateListener> mPhoneStateListeners =
+            new ArrayMap<Integer, CallNotifierPhoneStateListener>();
     private Map<Integer, Boolean> mCFIStatus = new ArrayMap<Integer, Boolean>();
     private Map<Integer, Boolean> mMWIStatus = new ArrayMap<Integer, Boolean>();
     private PhoneGlobals mApplication;
@@ -567,7 +566,7 @@ public class CallNotifier extends Handler {
         // slot 0 first then slot 1. This is needed to ensure that when CFI or MWI is enabled for
         // both slots, user always sees icon related to slot 0 on left side followed by that of
         // slot 1.
-        List<Integer> subIdList = new ArrayList<Integer>(mTelephonyCallback.keySet());
+        List<Integer> subIdList = new ArrayList<Integer>(mPhoneStateListeners.keySet());
         Collections.sort(subIdList, new Comparator<Integer>() {
             public int compare(Integer sub1, Integer sub2) {
                 int slotId1 = SubscriptionController.getInstance().getSlotIndex(sub1);
@@ -584,9 +583,10 @@ public class CallNotifier extends Handler {
                 mApplication.notificationMgr.updateMwi(subId, false);
                 mApplication.notificationMgr.updateCfi(subId, false);
 
-                // Unregister the listener.
-                mTelephonyManager.unregisterTelephonyCallback(mTelephonyCallback.get(subId));
-                mTelephonyCallback.remove(subId);
+                // Listening to LISTEN_NONE removes the listener.
+                mTelephonyManager.listen(
+                        mPhoneStateListeners.get(subId), PhoneStateListener.LISTEN_NONE);
+                mPhoneStateListeners.remove(subId);
             } else {
                 Log.d(LOG_TAG, "updatePhoneStateListeners: update CF notifications.");
 
@@ -616,11 +616,12 @@ public class CallNotifier extends Handler {
         // Register new phone listeners for active subscriptions.
         for (int i = 0; i < subInfos.size(); i++) {
             int subId = subInfos.get(i).getSubscriptionId();
-            if (!mTelephonyCallback.containsKey(subId)) {
-                CallNotifierTelephonyCallback listener = new CallNotifierTelephonyCallback(subId);
-                mTelephonyManager.createForSubscriptionId(subId).registerTelephonyCallback(
-                        new HandlerExecutor(this), listener);
-                mTelephonyCallback.put(subId, listener);
+            if (!mPhoneStateListeners.containsKey(subId)) {
+                CallNotifierPhoneStateListener listener = new CallNotifierPhoneStateListener(subId);
+                mTelephonyManager.createForSubscriptionId(subId).listen(listener,
+                        PhoneStateListener.LISTEN_MESSAGE_WAITING_INDICATOR
+                        | PhoneStateListener.LISTEN_CALL_FORWARDING_INDICATOR);
+                mPhoneStateListeners.put(subId, listener);
             }
         }
     }
@@ -767,13 +768,10 @@ public class CallNotifier extends Handler {
                 }
             };
 
-    private class CallNotifierTelephonyCallback extends TelephonyCallback implements
-            TelephonyCallback.MessageWaitingIndicatorListener,
-            TelephonyCallback.CallForwardingIndicatorListener {
-
+    private class CallNotifierPhoneStateListener extends PhoneStateListener {
         private final int mSubId;
 
-        CallNotifierTelephonyCallback(int subId) {
+        CallNotifierPhoneStateListener(int subId) {
             super();
             this.mSubId = subId;
         }
@@ -792,7 +790,7 @@ public class CallNotifier extends Handler {
             mCFIStatus.put(this.mSubId, visible);
             updatePhoneStateListeners(false, UPDATE_TYPE_CFI, this.mSubId);
         }
-    }
+    };
 
     private void log(String msg) {
         Log.d(LOG_TAG, msg);

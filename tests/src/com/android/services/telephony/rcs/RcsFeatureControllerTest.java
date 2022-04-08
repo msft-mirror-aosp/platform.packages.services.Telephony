@@ -31,7 +31,6 @@ import static org.mockito.Mockito.verify;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.ims.ImsException;
 import android.telephony.ims.ImsReasonInfo;
-import android.telephony.ims.ImsRegistrationAttributes;
 import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsRegistrationCallback;
@@ -57,8 +56,6 @@ import java.util.concurrent.Executor;
 
 @RunWith(AndroidJUnit4.class)
 public class RcsFeatureControllerTest extends TelephonyTestBase {
-
-    private static final int TEST_SUB_ID = 1;
 
     private static final ImsReasonInfo REASON_DISCONNECTED = new ImsReasonInfo(
             ImsReasonInfo.CODE_LOCAL_IMS_SERVICE_DOWN, 0, "test");
@@ -98,13 +95,12 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         // Connect the RcsFeatureManager
         mConnectorListener.getValue().connectionReady(mFeatureManager);
 
-        verify(mFeatureManager).updateCapabilities(TEST_SUB_ID);
+        verify(mFeatureManager).updateCapabilities();
         verify(mFeatureManager).registerImsRegistrationCallback(any());
         verify(mMockFeature).onRcsConnected(mFeatureManager);
 
         // Disconnect
-        mConnectorListener.getValue().connectionUnavailable(
-                FeatureConnector.UNAVAILABLE_REASON_DISCONNECTED);
+        mConnectorListener.getValue().connectionUnavailable();
 
         verify(mFeatureManager).unregisterImsRegistrationCallback(any());
         verify(mMockFeature, times(2)).onRcsDisconnected();
@@ -134,31 +130,29 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         mConnectorListener.getValue().connectionReady(mFeatureManager);
 
         try {
-            controller.registerImsRegistrationCallback(TEST_SUB_ID, regCb);
-            controller.registerRcsAvailabilityCallback(TEST_SUB_ID, capCb);
+            controller.registerImsRegistrationCallback(0 /*subId*/, regCb);
+            controller.registerRcsAvailabilityCallback(0 /*subId*/, capCb);
             controller.isCapable(RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE,
                     ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
-            controller.isAvailable(RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE,
-                    ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
+            controller.isAvailable(RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE);
             controller.getRegistrationTech(integer -> {
             });
-            verify(mFeatureManager).registerImsRegistrationCallback(TEST_SUB_ID, regCb);
-            verify(mFeatureManager).registerRcsAvailabilityCallback(TEST_SUB_ID, capCb);
+            verify(mFeatureManager).registerImsRegistrationCallback(0, regCb);
+            verify(mFeatureManager).registerRcsAvailabilityCallback(0, capCb);
             verify(mFeatureManager).isCapable(
                     RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE,
                     ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
             verify(mFeatureManager).isAvailable(
-                    RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE,
-                    ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
+                    RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE);
             verify(mFeatureManager).getImsRegistrationTech(any());
         } catch (ImsException e) {
             fail("ImsException not expected.");
         }
 
-        controller.unregisterImsRegistrationCallback(TEST_SUB_ID, regCb);
-        controller.unregisterRcsAvailabilityCallback(TEST_SUB_ID, capCb);
-        verify(mFeatureManager).unregisterImsRegistrationCallback(TEST_SUB_ID, regCb);
-        verify(mFeatureManager).unregisterRcsAvailabilityCallback(TEST_SUB_ID, capCb);
+        controller.unregisterImsRegistrationCallback(0, regCb);
+        controller.unregisterRcsAvailabilityCallback(0, capCb);
+        verify(mFeatureManager).unregisterImsRegistrationCallback(0, regCb);
+        verify(mFeatureManager).unregisterRcsAvailabilityCallback(0, capCb);
     }
 
     @Test
@@ -178,9 +172,7 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         });
         verify(mRegistrationCallback).handleImsUnregistered(REASON_DISCONNECTED);
 
-        ImsRegistrationAttributes attr = new ImsRegistrationAttributes.Builder(
-                ImsRegistrationImplBase.REGISTRATION_TECH_LTE).build();
-        captor.getValue().onRegistering(attr);
+        captor.getValue().onRegistering(ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
         controller.getRegistrationState(result -> {
             assertNotNull(result);
             assertEquals(RegistrationManager.REGISTRATION_STATE_REGISTERING, result.intValue());
@@ -188,7 +180,7 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         verify(mRegistrationCallback).handleImsRegistering(
                 AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
 
-        captor.getValue().onRegistered(attr);
+        captor.getValue().onRegistered(ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
         controller.getRegistrationState(result -> {
             assertNotNull(result);
             assertEquals(RegistrationManager.REGISTRATION_STATE_REGISTERED, result.intValue());
@@ -201,8 +193,7 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
     public void testFeatureManagerDisconnectedAddFeature() {
         RcsFeatureController controller = createFeatureController();
         // Disconnect the RcsFeatureManager
-        mConnectorListener.getValue().connectionUnavailable(
-                FeatureConnector.UNAVAILABLE_REASON_DISCONNECTED);
+        mConnectorListener.getValue().connectionUnavailable();
         controller.addFeature(mMockFeature, RcsFeatureController.Feature.class);
 
         verify(mMockFeature).onRcsDisconnected();
@@ -214,17 +205,16 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         IImsRegistrationCallback regCb = mock(IImsRegistrationCallback.class);
         IImsCapabilityCallback capCb = mock(IImsCapabilityCallback.class);
         // Disconnect the RcsFeatureManager
-        mConnectorListener.getValue().connectionUnavailable(
-                FeatureConnector.UNAVAILABLE_REASON_DISCONNECTED);
+        mConnectorListener.getValue().connectionUnavailable();
 
         try {
-            controller.registerImsRegistrationCallback(TEST_SUB_ID, null /*callback*/);
+            controller.registerImsRegistrationCallback(0 /*subId*/, null /*callback*/);
             fail("ImsException expected for IMS registration.");
         } catch (ImsException e) {
             //expected
         }
         try {
-            controller.registerRcsAvailabilityCallback(TEST_SUB_ID, null /*callback*/);
+            controller.registerRcsAvailabilityCallback(0 /*subId*/, null /*callback*/);
             fail("ImsException expected for availability");
         } catch (ImsException e) {
             //expected
@@ -237,8 +227,7 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
             //expected
         }
         try {
-            controller.isAvailable(RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE,
-                    ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
+            controller.isAvailable(RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE);
             fail("ImsException expected for availability check");
         } catch (ImsException e) {
             //expected
@@ -247,25 +236,10 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
             assertNotNull(integer);
             assertEquals(ImsRegistrationImplBase.REGISTRATION_TECH_NONE, integer.intValue());
         });
-        controller.unregisterImsRegistrationCallback(TEST_SUB_ID, regCb);
-        controller.unregisterRcsAvailabilityCallback(TEST_SUB_ID, capCb);
-        verify(mFeatureManager, never()).unregisterImsRegistrationCallback(TEST_SUB_ID, regCb);
-        verify(mFeatureManager, never()).unregisterRcsAvailabilityCallback(TEST_SUB_ID, capCb);
-    }
-
-    @Test
-    public void testCarrierConfigChanged() throws Exception {
-        RcsFeatureController controller = createFeatureController();
-        // Connect the RcsFeatureManager
-        mConnectorListener.getValue().connectionReady(mFeatureManager);
-        verify(mFeatureManager).updateCapabilities(TEST_SUB_ID);
-        controller.addFeature(mMockFeature, RcsFeatureController.Feature.class);
-
-        controller.onCarrierConfigChangedForSubscription();
-
-        verify(mFeatureManager, times(2)).updateCapabilities(TEST_SUB_ID);
-        verify(mMockFeature).onCarrierConfigChanged();
-        verify(mMockFeature, never()).onAssociatedSubscriptionUpdated(anyInt());
+        controller.unregisterImsRegistrationCallback(0, regCb);
+        controller.unregisterRcsAvailabilityCallback(0, capCb);
+        verify(mFeatureManager, never()).unregisterImsRegistrationCallback(0, regCb);
+        verify(mFeatureManager, never()).unregisterRcsAvailabilityCallback(0, capCb);
     }
 
     @Test
@@ -273,13 +247,13 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
         RcsFeatureController controller = createFeatureController();
         // Connect the RcsFeatureManager
         mConnectorListener.getValue().connectionReady(mFeatureManager);
-        verify(mFeatureManager).updateCapabilities(TEST_SUB_ID);
+        verify(mFeatureManager).updateCapabilities();
         controller.addFeature(mMockFeature, RcsFeatureController.Feature.class);
 
-        controller.updateAssociatedSubscription(2 /*new subId*/);
+        controller.updateAssociatedSubscription(1 /*new sub id*/);
 
-        verify(mFeatureManager).updateCapabilities(2 /*new subId*/);
-        verify(mMockFeature).onAssociatedSubscriptionUpdated(2 /*new subId*/);
+        verify(mFeatureManager, times(2)).updateCapabilities();
+        verify(mMockFeature).onAssociatedSubscriptionUpdated(1 /*new sub id*/);
     }
 
     @Test
@@ -298,7 +272,7 @@ public class RcsFeatureControllerTest extends TelephonyTestBase {
 
     private RcsFeatureController createFeatureController() {
         RcsFeatureController controller = new RcsFeatureController(mContext, 0 /*slotId*/,
-                TEST_SUB_ID, mRegistrationFactory);
+                mRegistrationFactory);
         controller.setFeatureConnectorFactory(mFeatureFactory);
         doReturn(mFeatureConnector).when(mFeatureFactory).create(any(), anyInt(),
                 mConnectorListener.capture(), any(), any());

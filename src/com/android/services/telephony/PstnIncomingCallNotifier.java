@@ -25,10 +25,8 @@ import android.os.SystemClock;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
-import android.telephony.ims.ImsCallProfile;
 import android.text.TextUtils;
 
-import com.android.ims.ImsCall;
 import com.android.internal.telephony.Call;
 import com.android.internal.telephony.CallStateException;
 import com.android.internal.telephony.Connection;
@@ -41,7 +39,6 @@ import com.android.internal.telephony.imsphone.ImsExternalConnection;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.NumberVerificationManager;
 import com.android.phone.PhoneUtils;
-import com.android.phone.callcomposer.CallComposerPictureManager;
 import com.android.telephony.Rlog;
 
 import java.util.List;
@@ -67,12 +64,6 @@ final class PstnIncomingCallNotifier {
      * verification signal so that the call doesn't go to voicemail.
      */
     private static final int MAX_NUMBER_VERIFICATION_HANGUP_DELAY_MILLIS = 10000;
-
-    /**
-     * Hardcoded extra for a call that's used to provide metrics information to the dialer app.
-     */
-    private static final String EXTRA_CALL_CREATED_TIME_MILLIS =
-            "android.telecom.extra.CALL_CREATED_TIME_MILLIS";
 
     /** The phone object to listen to. */
     private final Phone mPhone;
@@ -225,9 +216,6 @@ final class PstnIncomingCallNotifier {
             Call call = connection.getCall();
             if (call != null && call.getState().isAlive()) {
                 addNewUnknownCall(connection);
-            } else {
-                Log.i(this, "Skipping new unknown connection because its call is null or dead."
-                        + " connection=" + connection);
             }
         }
     }
@@ -254,7 +242,8 @@ final class PstnIncomingCallNotifier {
             }
 
             // Specifies the time the call was added. This is used by the dialer for analytics.
-            extras.putLong(EXTRA_CALL_CREATED_TIME_MILLIS, SystemClock.elapsedRealtime());
+            extras.putLong(TelecomManager.EXTRA_CALL_CREATED_TIME_MILLIS,
+                    SystemClock.elapsedRealtime());
 
             PhoneAccountHandle handle = findCorrectPhoneAccountHandle();
             if (handle == null) {
@@ -284,7 +273,8 @@ final class PstnIncomingCallNotifier {
         }
 
         // Specifies the time the call was added. This is used by the dialer for analytics.
-        extras.putLong(EXTRA_CALL_CREATED_TIME_MILLIS, SystemClock.elapsedRealtime());
+        extras.putLong(TelecomManager.EXTRA_CALL_CREATED_TIME_MILLIS,
+                SystemClock.elapsedRealtime());
 
         if (connection.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS) {
             if (((ImsPhoneConnection) connection).isRttEnabledForCall()) {
@@ -292,34 +282,7 @@ final class PstnIncomingCallNotifier {
             }
             if (((ImsPhoneConnection) connection).isIncomingCallAutoRejected()) {
                 extras.putString(TelecomManager.EXTRA_CALL_DISCONNECT_MESSAGE,
-                        TelecomManager.CALL_AUTO_DISCONNECT_MESSAGE_STRING);
-            }
-            ImsCall imsCall = ((ImsPhoneConnection) connection).getImsCall();
-            if (imsCall != null) {
-                ImsCallProfile imsCallProfile = imsCall.getCallProfile();
-                if (imsCallProfile != null) {
-                    if (CallComposerPictureManager.sTestMode) {
-                        imsCallProfile.setCallExtra(ImsCallProfile.EXTRA_PICTURE_URL,
-                                CallComposerPictureManager.FAKE_SERVER_URL);
-                        imsCallProfile.setCallExtraInt(ImsCallProfile.EXTRA_PRIORITY,
-                                TelecomManager.PRIORITY_URGENT);
-                        imsCallProfile.setCallExtra(ImsCallProfile.EXTRA_CALL_SUBJECT,
-                                CallComposerPictureManager.FAKE_SUBJECT);
-                        imsCallProfile.setCallExtraParcelable(ImsCallProfile.EXTRA_LOCATION,
-                                CallComposerPictureManager.FAKE_LOCATION);
-                    }
-
-                    extras.putInt(TelecomManager.EXTRA_PRIORITY,
-                            imsCallProfile.getCallExtraInt(ImsCallProfile.EXTRA_PRIORITY));
-                    extras.putString(TelecomManager.EXTRA_CALL_SUBJECT,
-                            imsCallProfile.getCallExtra(ImsCallProfile.EXTRA_CALL_SUBJECT));
-                    extras.putParcelable(TelecomManager.EXTRA_LOCATION,
-                            imsCallProfile.getCallExtraParcelable(ImsCallProfile.EXTRA_LOCATION));
-                    if (!TextUtils.isEmpty(
-                            imsCallProfile.getCallExtra(ImsCallProfile.EXTRA_PICTURE_URL))) {
-                        extras.putBoolean(TelecomManager.EXTRA_HAS_PICTURE, true);
-                    }
-                }
+                        "Call Dropped by lower layers");
             }
         }
 

@@ -26,7 +26,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.os.Bundle;
 import android.os.UserHandle;
-import android.permission.LegacyPermissionManager;
+import android.permission.PermissionManager;
 import android.service.euicc.EuiccService;
 import android.telephony.euicc.EuiccManager;
 import android.util.Log;
@@ -55,15 +55,14 @@ public class EuiccUiDispatcherActivity extends Activity {
             PackageManager.MATCH_SYSTEM_ONLY | PackageManager.MATCH_DEBUG_TRIAGED_MISSING
                     | PackageManager.GET_RESOLVED_FILTER;
 
-    private LegacyPermissionManager mPermissionManager;
+    private PermissionManager mPermissionManager;
     private boolean mGrantPermissionDone = false;
     private ThreadPoolExecutor mExecutor;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mPermissionManager = (LegacyPermissionManager) getSystemService(
-                Context.LEGACY_PERMISSION_SERVICE);
+        mPermissionManager = (PermissionManager) getSystemService(Context.PERMISSION_SERVICE);
         mExecutor = new ThreadPoolExecutor(
                 1 /* corePoolSize */,
                 1 /* maxPoolSize */,

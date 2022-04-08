@@ -30,9 +30,6 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.HandlerExecutor;
-import android.os.Looper;
 import android.os.PersistableBundle;
 import android.os.UserManager;
 import android.preference.Preference;
@@ -43,8 +40,8 @@ import android.provider.Settings;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
+import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionManager;
-import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.feature.ImsFeature;
@@ -106,7 +103,6 @@ public class CallFeaturesSetting extends PreferenceActivity
     private ImsManager mImsMgr;
     private SubscriptionInfoHelper mSubscriptionInfoHelper;
     private TelecomManager mTelecomManager;
-    private TelephonyCallback mTelephonyCallback;
 
     private SwitchPreference mButtonAutoRetry;
     private PreferenceScreen mVoicemailSettingsScreen;
@@ -267,7 +263,6 @@ public class CallFeaturesSetting extends PreferenceActivity
         mSubscriptionInfoHelper.setActionBarTitle(
                 getActionBar(), getResourcesForSubId(), R.string.call_settings_with_label);
         mTelecomManager = getSystemService(TelecomManager.class);
-        mTelephonyCallback = new CallFeaturesTelephonyCallback();
     }
 
     private void updateImsManager(Phone phone) {
@@ -284,18 +279,13 @@ public class CallFeaturesSetting extends PreferenceActivity
     private void listenPhoneState(boolean listen) {
         TelephonyManager telephonyManager = getSystemService(TelephonyManager.class)
                 .createForSubscriptionId(mPhone.getSubId());
-        if (listen) {
-            telephonyManager.registerTelephonyCallback(
-                    new HandlerExecutor(new Handler(Looper.getMainLooper())), mTelephonyCallback);
-        } else {
-            telephonyManager.unregisterTelephonyCallback(mTelephonyCallback);
-        }
+        telephonyManager.listen(mPhoneStateListener, listen
+                ? PhoneStateListener.LISTEN_CALL_STATE : PhoneStateListener.LISTEN_NONE);
     }
 
-    private final class CallFeaturesTelephonyCallback extends TelephonyCallback implements
-            TelephonyCallback.CallStateListener {
+    private final PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
         @Override
-        public void onCallStateChanged(int state) {
+        public void onCallStateChanged(int state, String incomingNumber) {
             if (DBG) log("PhoneStateListener onCallStateChanged: state is " + state);
             boolean isCallStateIdle = state == TelephonyManager.CALL_STATE_IDLE;
             if (mEnableVideoCalling != null) {
@@ -305,7 +295,7 @@ public class CallFeaturesSetting extends PreferenceActivity
                 mButtonWifiCalling.setEnabled(isCallStateIdle);
             }
         }
-    }
+    };
 
     private final ProvisioningManager.Callback mProvisioningCallback =
             new ProvisioningManager.Callback() {
@@ -398,8 +388,7 @@ public class CallFeaturesSetting extends PreferenceActivity
             cdmaOptions.setIntent(mSubscriptionInfoHelper.getIntent(CdmaCallOptions.class));
             gsmOptions.setIntent(mSubscriptionInfoHelper.getIntent(GsmUmtsCallOptions.class));
         } else {
-            // Remove GSM options and repopulate the preferences in this Activity if phone type is
-            // GSM.
+            prefSet.removePreference(cdmaOptions);
             prefSet.removePreference(gsmOptions);
 
             int phoneType = mPhone.getPhoneType();
@@ -407,16 +396,16 @@ public class CallFeaturesSetting extends PreferenceActivity
                 prefSet.removePreference(fdnButton);
             } else {
                 if (phoneType == PhoneConstants.PHONE_TYPE_CDMA) {
-                    // For now, just keep CdmaCallOptions as one entity. Eventually CDMA should
-                    // follow the same pattern as GSM below, where VP and Call forwarding are
-                    // populated here and Call waiting is populated in another "Additional Settings"
-                    // submenu for CDMA.
                     prefSet.removePreference(fdnButton);
-                    cdmaOptions.setSummary(null);
-                    cdmaOptions.setTitle(R.string.additional_gsm_call_settings);
-                    cdmaOptions.setIntent(mSubscriptionInfoHelper.getIntent(CdmaCallOptions.class));
+
+                    if (!carrierConfig.getBoolean(
+                            CarrierConfigManager.KEY_VOICE_PRIVACY_DISABLE_UI_BOOL)) {
+                        addPreferencesFromResource(R.xml.cdma_call_privacy);
+                        CdmaVoicePrivacySwitchPreference buttonVoicePrivacy =
+                                (CdmaVoicePrivacySwitchPreference) findPreference(BUTTON_VP_KEY);
+                        buttonVoicePrivacy.setPhone(mPhone);
+                    }
                 } else if (phoneType == PhoneConstants.PHONE_TYPE_GSM) {
-                    prefSet.removePreference(cdmaOptions);
                     if (mPhone.getIccCard() == null || !mPhone.getIccCard().getIccFdnAvailable()) {
                         prefSet.removePreference(fdnButton);
                     }

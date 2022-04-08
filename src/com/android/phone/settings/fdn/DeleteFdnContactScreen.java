@@ -16,24 +16,57 @@
 
 package com.android.phone.settings.fdn;
 
+import static android.view.Window.PROGRESS_VISIBILITY_OFF;
+import static android.view.Window.PROGRESS_VISIBILITY_ON;
+
+import android.app.Activity;
+import android.content.AsyncQueryHandler;
+import android.content.ContentResolver;
 import android.content.Intent;
+import android.database.Cursor;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
 import android.text.TextUtils;
+import android.util.Log;
+import android.view.Window;
+import android.widget.Toast;
 
+import com.android.phone.PhoneGlobals;
 import com.android.phone.R;
+import com.android.phone.SubscriptionInfoHelper;
 
 /**
  * Activity to let the user delete an FDN contact.
  */
-public class DeleteFdnContactScreen extends BaseFdnContactScreen {
+public class DeleteFdnContactScreen extends Activity {
+    private static final String LOG_TAG = PhoneGlobals.LOG_TAG;
+    private static final boolean DBG = false;
+
+    private static final String INTENT_EXTRA_NAME = "name";
+    private static final String INTENT_EXTRA_NUMBER = "number";
+
+    private static final int PIN2_REQUEST_CODE = 100;
+
+    private SubscriptionInfoHelper mSubscriptionInfoHelper;
+
+    private String mName;
+    private String mNumber;
+    private String mPin2;
+
+    protected QueryHandler mQueryHandler;
+
+    private Handler mHandler = new Handler();
 
     @Override
     protected void onCreate(Bundle icicle) {
         super.onCreate(icicle);
 
-        // Starts PIN2 authentication only for the first time.
-        if (icicle == null) authenticatePin2();
+        resolveIntent();
+
+        authenticatePin2();
+
+        getWindow().requestFeature(Window.FEATURE_INDETERMINATE_PROGRESS);
         setContentView(R.layout.delete_fdn_contact_screen);
     }
 
@@ -46,7 +79,9 @@ public class DeleteFdnContactScreen extends BaseFdnContactScreen {
                 Bundle extras = (intent != null) ? intent.getExtras() : null;
                 if (extras != null) {
                     mPin2 = extras.getString("pin2");
-                    processPin2(mPin2);
+                    showStatus(getResources().getText(
+                            R.string.deleting_fdn_contact));
+                    deleteContact();
                 } else {
                     // if they cancelled, then we just cancel too.
                     if (DBG) log("onActivityResult: CANCELLED");
@@ -57,9 +92,13 @@ public class DeleteFdnContactScreen extends BaseFdnContactScreen {
         }
     }
 
-    @Override
-    protected void resolveIntent() {
-        super.resolveIntent();
+    private void resolveIntent() {
+        Intent intent = getIntent();
+
+        mSubscriptionInfoHelper = new SubscriptionInfoHelper(this, intent);
+
+        mName =  intent.getStringExtra(INTENT_EXTRA_NAME);
+        mNumber =  intent.getStringExtra(INTENT_EXTRA_NUMBER);
 
         if (TextUtils.isEmpty(mNumber)) {
             finish();
@@ -87,8 +126,29 @@ public class DeleteFdnContactScreen extends BaseFdnContactScreen {
         displayProgress(true);
     }
 
-    @Override
-    protected void handleResult(boolean success) {
+    private void authenticatePin2() {
+        Intent intent = new Intent();
+        intent.setClass(this, GetPin2Screen.class);
+        intent.setData(FdnList.getContentUri(mSubscriptionInfoHelper));
+        startActivityForResult(intent, PIN2_REQUEST_CODE);
+    }
+
+    private void displayProgress(boolean flag) {
+        getWindow().setFeatureInt(
+                Window.FEATURE_INDETERMINATE_PROGRESS,
+                flag ? PROGRESS_VISIBILITY_ON : PROGRESS_VISIBILITY_OFF);
+    }
+
+    // Replace the status field with a toast to make things appear similar
+    // to the rest of the settings.  Removed the useless status field.
+    private void showStatus(CharSequence statusMsg) {
+        if (statusMsg != null) {
+            Toast.makeText(this, statusMsg, Toast.LENGTH_SHORT)
+            .show();
+        }
+    }
+
+    private void handleResult(boolean success) {
         if (success) {
             if (DBG) log("handleResult: success!");
             showStatus(getResources().getText(R.string.fdn_contact_deleted));
@@ -96,12 +156,43 @@ public class DeleteFdnContactScreen extends BaseFdnContactScreen {
             if (DBG) log("handleResult: failed!");
             showStatus(getResources().getText(R.string.pin2_invalid));
         }
-        mHandler.postDelayed(() -> finish(), 2000);
+
+        mHandler.postDelayed(new Runnable() {
+            @Override
+            public void run() {
+                finish();
+            }
+        }, 2000);
+
     }
 
-    @Override
-    protected void pin2AuthenticationSucceed() {
-        showStatus(getResources().getText(R.string.deleting_fdn_contact));
-        deleteContact();
+    private class QueryHandler extends AsyncQueryHandler {
+        public QueryHandler(ContentResolver cr) {
+            super(cr);
+        }
+
+        @Override
+        protected void onQueryComplete(int token, Object cookie, Cursor c) {
+        }
+
+        @Override
+        protected void onInsertComplete(int token, Object cookie, Uri uri) {
+        }
+
+        @Override
+        protected void onUpdateComplete(int token, Object cookie, int result) {
+        }
+
+        @Override
+        protected void onDeleteComplete(int token, Object cookie, int result) {
+            if (DBG) log("onDeleteComplete");
+            displayProgress(false);
+            handleResult(result > 0);
+        }
+
+    }
+
+    private void log(String msg) {
+        Log.d(LOG_TAG, "[DeleteFdnContact] " + msg);
     }
 }
