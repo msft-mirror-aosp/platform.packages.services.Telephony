@@ -293,7 +293,10 @@ public class ImsStateCallbackController {
 
         @Override
         public void connectionReady(ImsManager manager, int subId) {
-            logd(mLogPrefix + "connectionReady");
+            logd(mLogPrefix + "connectionReady " + subId);
+
+            mSubId = subId;
+            if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) return;
 
             mState = STATE_READY;
             mReason = AVAILABLE;
@@ -435,7 +438,10 @@ public class ImsStateCallbackController {
 
         @Override
         public void connectionReady(RcsFeatureManager manager, int subId) {
-            logd(mLogPrefix + "connectionReady");
+            logd(mLogPrefix + "connectionReady " + subId);
+
+            mSubId = subId;
+            if (subId == SubscriptionManager.INVALID_SUBSCRIPTION_ID) return;
 
             mState = STATE_READY;
             mReason = AVAILABLE;
@@ -640,7 +646,7 @@ public class ImsStateCallbackController {
         }
 
         void notifyInactive() {
-            if (VDBG) logv("CallbackWrapper notifyInactive subId=" + mSubId);
+            logd("CallbackWrapper notifyInactive subId=" + mSubId);
 
             try {
                 mCallback.onUnavailable(REASON_SUBSCRIPTION_INACTIVE);
@@ -834,19 +840,21 @@ public class ImsStateCallbackController {
 
         if (wrapper.mRequiredFeature == FEATURE_MMTEL) {
             for (int i = 0; i < mMmTelFeatureListeners.size(); i++) {
-                MmTelFeatureListener l = mMmTelFeatureListeners.valueAt(i);
-                if (l.mSubId == wrapper.mSubId
-                        && !l.notifyState(wrapper)) {
-                    mWrappers.remove(wrapper.mBinder);
+                if (wrapper.mSubId == getSubId(i)) {
+                    MmTelFeatureListener l = mMmTelFeatureListeners.valueAt(i);
+                    if (!l.notifyState(wrapper)) {
+                        mWrappers.remove(wrapper.mBinder);
+                    }
                     break;
                 }
             }
         } else if (wrapper.mRequiredFeature == FEATURE_RCS) {
             for (int i = 0; i < mRcsFeatureListeners.size(); i++) {
-                RcsFeatureListener l = mRcsFeatureListeners.valueAt(i);
-                if (l.mSubId == wrapper.mSubId
-                        && !l.notifyState(wrapper)) {
-                    mWrappers.remove(wrapper.mBinder);
+                if (wrapper.mSubId == getSubId(i)) {
+                    RcsFeatureListener l = mRcsFeatureListeners.valueAt(i);
+                    if (!l.notifyState(wrapper)) {
+                        mWrappers.remove(wrapper.mBinder);
+                    }
                     break;
                 }
             }
