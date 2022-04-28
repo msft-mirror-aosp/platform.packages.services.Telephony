@@ -915,11 +915,10 @@
     <string name="phone_info_label" product="default" msgid="1784175881556791433">"Telefooninformatie"</string>
     <string name="carrier_provisioning" msgid="2668065041869578376">"Gegevens voor providerregistratie"</string>
     <string name="trigger_carrier_provisioning" msgid="1301829588620638234">"Providerregistratie activeren"</string>
+    <string name="provisioning_info_wfc_entitlement_id" msgid="8845188780811890910">"WFC-toegangsrecht-ID:"</string>
+    <string name="update_provisioning_info_wfc_entitlement_id" msgid="7044171908781134221">"Updaten"</string>
+    <string name="refresh_provisioning_info_wfc_entitlement_id" msgid="738894335351353407">"Vernieuwen"</string>
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Het bluetooth-signaal is zwak. Schakel over naar bellen op luidspreker."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Melding over gesprekskwaliteit"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Beëindigde SIP-accounts"</string>
-    <string name="limited_service_alert_dialog_description" msgid="6686928033670697313">"<xliff:g id="SPN">%s</xliff:g> biedt geen ondersteuning voor noodoproepen via wifi. \n\nNoodoproepen worden geplaatst via een mobiel netwerk. Als er beperkte mobiele dekking is, kan je noodoproep mislukken."</string>
-    <string name="do_not_show_again" msgid="8923026903375124550">"Niet meer tonen"</string>
-    <string name="turn_off_wfc" msgid="2346229945400554258">"Bellen via wifi uitzetten"</string>
-    <string name="unavailable_emergency_calls_notification_name" msgid="4390236789690885552">"Noodoproepen zijn misschien niet beschikbaar"</string>
 </resources>

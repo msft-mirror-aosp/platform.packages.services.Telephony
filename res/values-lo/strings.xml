@@ -915,11 +915,10 @@
     <string name="phone_info_label" product="default" msgid="1784175881556791433">"ຂໍ້​ມູນ​ໂທລະ​ສັບ"</string>
     <string name="carrier_provisioning" msgid="2668065041869578376">"ຂໍ້ມູນການເປີດນຳໃຊ້ເຄືອຂ່າຍ"</string>
     <string name="trigger_carrier_provisioning" msgid="1301829588620638234">"ກະຕຸ້ນການຈັດຫາຜູ້ໃຫ້ບໍລິການ"</string>
+    <string name="provisioning_info_wfc_entitlement_id" msgid="8845188780811890910">"ລະຫັດ ID ສິດ ຂອງ WFC:"</string>
+    <string name="update_provisioning_info_wfc_entitlement_id" msgid="7044171908781134221">"ອັບເດດ"</string>
+    <string name="refresh_provisioning_info_wfc_entitlement_id" msgid="738894335351353407">"ໂຫຼດຂໍ້ມູນຄືນໃໝ່"</string>
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"ສັນຍານ Bluetooth ຂອງທ່ານອ່ອນ. ລອງສະຫຼັບລຳໂພງໂທລະສັບ."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"ການແຈ້ງເຕືອນຄຸນນະພາບການໂທ"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"ບັນຊີ SIP ທີ່ເຊົາສະໜັບສະໜູນ"</string>
-    <string name="limited_service_alert_dialog_description" msgid="6686928033670697313">"<xliff:g id="SPN">%s</xliff:g> ບໍ່ຮອງຮັບການໂທ​ສຸກ​ເສີນຜ່ານ Wi-Fi. \n\nການໂທ​ສຸກ​ເສີນຈະເກີດຂຶ້ນຜ່ານເຄືອຂ່າຍມືຖື. ຫາກມີສັນຍານມືຖືຈຳກັດ, ການໂທ​ສຸກ​ເສີນຂອງທ່ານອາດບໍ່ສຳເລັດ."</string>
-    <string name="do_not_show_again" msgid="8923026903375124550">"ບໍ່ຕ້ອງສະແດງອີກ"</string>
-    <string name="turn_off_wfc" msgid="2346229945400554258">"ປິດການ​ໂທ Wi-Fi ໄວ້"</string>
-    <string name="unavailable_emergency_calls_notification_name" msgid="4390236789690885552">"ການໂທ​ສຸກ​ເສີນອາດບໍ່ສາມາດໃຊ້ໄດ້"</string>
 </resources>
