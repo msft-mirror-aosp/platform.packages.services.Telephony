@@ -16,6 +16,8 @@
 
 package com.android.phone;
 
+import static android.telephony.ims.ImsRcsManager.CAPABILITY_TYPE_OPTIONS_UCE;
+import static android.telephony.ims.ImsRcsManager.CAPABILITY_TYPE_PRESENCE_UCE;
 import static android.telephony.ims.ProvisioningManager.KEY_EAB_PROVISIONING_STATUS;
 import static android.telephony.ims.ProvisioningManager.KEY_VOICE_OVER_WIFI_ENABLED_OVERRIDE;
 import static android.telephony.ims.ProvisioningManager.KEY_VOLTE_PROVISIONING_STATUS;
@@ -29,8 +31,6 @@ import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPAB
 import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_UT;
 import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VIDEO;
 import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE;
-import static android.telephony.ims.feature.RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_OPTIONS_UCE;
-import static android.telephony.ims.feature.RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE;
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
 import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE;
@@ -124,14 +124,14 @@ public class ImsProvisioningController {
      * CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_VIDEO_INT
      * CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_UT_INT
      * CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_SMS_INT
-     * CarrierConfigManager.Ims.KEY_CAPABILITY_CALL_COMPOSER_INT
+     * CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_CALL_COMPOSER_INT
      */
     private static final Map<Integer, String> KEYS_MMTEL_CAPABILITY = Map.of(
             CAPABILITY_TYPE_VOICE, Ims.KEY_CAPABILITY_TYPE_VOICE_INT_ARRAY,
             CAPABILITY_TYPE_VIDEO, Ims.KEY_CAPABILITY_TYPE_VIDEO_INT_ARRAY,
             CAPABILITY_TYPE_UT, Ims.KEY_CAPABILITY_TYPE_UT_INT_ARRAY,
             CAPABILITY_TYPE_SMS, Ims.KEY_CAPABILITY_TYPE_SMS_INT_ARRAY,
-            CAPABILITY_TYPE_CALL_COMPOSER, Ims.KEY_CAPABILITY_CALL_COMPOSER_INT_ARRAY
+            CAPABILITY_TYPE_CALL_COMPOSER, Ims.KEY_CAPABILITY_TYPE_CALL_COMPOSER_INT_ARRAY
     );
 
     /**
@@ -202,7 +202,7 @@ public class ImsProvisioningController {
     /**
      * This class contains the provisioning status to notify changes.
      * {{@link MmTelCapabilities.MmTelCapability} for MMTel services}
-     * {{@link RcsImsCapabilities.RcsImsCapabilityFlag} for RCS services}
+     * {{@link android.telephony.ims.ImsRcsManager.RcsImsCapabilityFlag} for RCS services}
      * {{@link ImsRegistrationImplBase.ImsRegistrationTech} for Registration tech}
      */
     private static final class FeatureProvisioningData {
@@ -992,9 +992,6 @@ public class ImsProvisioningController {
             try {
                 // set key and value to vendor ImsService for MmTel
                 mMmTelFeatureListenersSlotMap.get(slotId).setProvisioningValue(key, value);
-
-                // notify provisioning status changed to ImsManager
-                updateImsServiceConfig(subId);
             } catch (NullPointerException e) {
                 loge("can not access MmTelFeatureListener with capability " + capability);
             }
@@ -1114,11 +1111,6 @@ public class ImsProvisioningController {
         // update and notify provisioning status changed capability and tech from key
         updateCapabilityTechFromKey(subId, key, value);
 
-        if (key != KEY_EAB_PROVISIONING_STATUS) {
-            // notify provisioning status changed to ImsManager
-            updateImsServiceConfig(subId);
-        }
-
         return retVal;
     }
 
@@ -1136,8 +1128,6 @@ public class ImsProvisioningController {
      */
     @VisibleForTesting
     public int getProvisioningValue(int subId, int key) {
-        log("getProvisioningValue");
-
         // check key value
         if (!Arrays.stream(LOCAL_IMS_CONFIG_KEYS).anyMatch(keyValue -> keyValue == key)) {
             log("not matched key " + key);
@@ -1164,6 +1154,7 @@ public class ImsProvisioningController {
                         capability, tech);
             }
             if (result != ImsProvisioningLoader.STATUS_NOT_SET) {
+                log("getProvisioningValue from loader : key " + key + " result " + result);
                 return result;
             }
         }
@@ -1176,6 +1167,8 @@ public class ImsProvisioningController {
                         + capability);
                 return result;
             }
+            log("getProvisioningValue from vendor : key " + key + " result " + result);
+
             setAndNotifyRcsProvisioningValueForAllTech(subId, capability, getBoolValue(result));
             return result;
         } else {
@@ -1185,6 +1178,8 @@ public class ImsProvisioningController {
                         + capability);
                 return result;
             }
+            log("getProvisioningValue from vendor : key " + key + " result " + result);
+
             setAndNotifyMmTelProvisioningValue(subId, capability, tech, getBoolValue(result));
             return result;
         }
@@ -1453,17 +1448,6 @@ public class ImsProvisioningController {
         }
 
         return isChanged;
-    }
-
-    private void updateImsServiceConfig(int subId) {
-        try {
-            ImsManager imsManager = mMmTelFeatureListenersSlotMap.get(getSlotId(subId))
-                    .getImsManager();
-            imsManager.updateImsServiceConfig();
-            log("updateImsServiceConfig");
-        } catch (NullPointerException e) {
-            loge("updateImsServiceConfig : ImsService not ready");
-        }
     }
 
     protected boolean isValidSubId(int subId) {
