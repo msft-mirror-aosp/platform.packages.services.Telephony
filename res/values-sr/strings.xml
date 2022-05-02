@@ -857,7 +857,7 @@
     <string name="radioInfo_phone_offhook" msgid="7564601639749936170">"Позив је у току"</string>
     <string name="radioInfo_data_disconnected" msgid="8085447971880814541">"Веза је прекинута"</string>
     <string name="radioInfo_data_connecting" msgid="925092271092152472">"Повезује се"</string>
-    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Повезано је"</string>
+    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Повезано"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"Суспендовано"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"Непознато"</string>
     <string name="radioInfo_display_packets" msgid="6794302192441084157">"пак."</string>
@@ -915,11 +915,10 @@
     <string name="phone_info_label" product="default" msgid="1784175881556791433">"Информације о телефону"</string>
     <string name="carrier_provisioning" msgid="2668065041869578376">"Информације о додели мобилног оператера"</string>
     <string name="trigger_carrier_provisioning" msgid="1301829588620638234">"Покретање доделе мобилног оператера"</string>
+    <string name="provisioning_info_wfc_entitlement_id" msgid="8845188780811890910">"ИД права на WFC:"</string>
+    <string name="update_provisioning_info_wfc_entitlement_id" msgid="7044171908781134221">"Ажурирај"</string>
+    <string name="refresh_provisioning_info_wfc_entitlement_id" msgid="738894335351353407">"Освежи"</string>
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Bluetooth сигнал је слаб. Пробајте да пређете на спикерфон."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Обавештење о квалитету позива"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Застарели SIP налози"</string>
-    <string name="limited_service_alert_dialog_description" msgid="6686928033670697313">"<xliff:g id="SPN">%s</xliff:g> не подржава хитне позиве преко WiFi-ја. \n\nХитни позиви се упућују преко мобилне мреже. Ако немате домет, хитни позив неће успети."</string>
-    <string name="do_not_show_again" msgid="8923026903375124550">"Не приказуј поново"</string>
-    <string name="turn_off_wfc" msgid="2346229945400554258">"Искључи позивање преко WiFi-ја"</string>
-    <string name="unavailable_emergency_calls_notification_name" msgid="4390236789690885552">"Хитни позиви можда нису доступни"</string>
 </resources>

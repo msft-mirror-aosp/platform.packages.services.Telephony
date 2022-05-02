@@ -915,11 +915,10 @@
     <string name="phone_info_label" product="default" msgid="1784175881556791433">"Հեռախոսի տեղեկություններ"</string>
     <string name="carrier_provisioning" msgid="2668065041869578376">"Օպերատորի նախապատրաստման տվյալներ"</string>
     <string name="trigger_carrier_provisioning" msgid="1301829588620638234">"Գործարկել օպերատորի նախապատրաստումը"</string>
+    <string name="provisioning_info_wfc_entitlement_id" msgid="8845188780811890910">"WFC թույլտվության ID՝"</string>
+    <string name="update_provisioning_info_wfc_entitlement_id" msgid="7044171908781134221">"Թարմացնել"</string>
+    <string name="refresh_provisioning_info_wfc_entitlement_id" msgid="738894335351353407">"Թարմացնել"</string>
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Ձեր Bluetooth-ի ազդանշանը թույլ է։ Փորձեք միացնել բարձրախոսը։"</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Զանգի որակի մասին ծանուցում"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Հնացած SIP հաշիվներ"</string>
-    <string name="limited_service_alert_dialog_description" msgid="6686928033670697313">"<xliff:g id="SPN">%s</xliff:g> օպերատորը չի աջակցում շտապ կանչեր Wi-Fi-ի միջոցով։ \n\nՇտապ կանչերը կկատարվեն բջջային ցանցի միջոցով։ Եթե բջջային ցանցի ծածկույթը սահմանափակ լինի, շտապ կանչերը կարող են չկատարվել։"</string>
-    <string name="do_not_show_again" msgid="8923026903375124550">"Այլևս ցույց չտալ"</string>
-    <string name="turn_off_wfc" msgid="2346229945400554258">"Անջատել Wi-Fi-ով զանգերը"</string>
-    <string name="unavailable_emergency_calls_notification_name" msgid="4390236789690885552">"Շտապ կանչերը կարող են անհասանելի լինել"</string>
 </resources>
