@@ -75,6 +75,7 @@ import android.telecom.TelecomManager;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.ActivityStatsTechSpecificInfo;
 import android.telephony.Annotation.ApnType;
+import android.telephony.Annotation.DataActivityType;
 import android.telephony.Annotation.ThermalMitigationResult;
 import android.telephony.CallForwardingInfo;
 import android.telephony.CarrierConfigManager;
@@ -132,8 +133,6 @@ import android.telephony.ims.aidl.IImsRegistration;
 import android.telephony.ims.aidl.IImsRegistrationCallback;
 import android.telephony.ims.aidl.IRcsConfigCallback;
 import android.telephony.ims.feature.ImsFeature;
-import android.telephony.ims.feature.MmTelFeature;
-import android.telephony.ims.feature.RcsFeature;
 import android.telephony.ims.stub.ImsConfigImplBase;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
@@ -155,7 +154,6 @@ import com.android.internal.telephony.CarrierResolver;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
-import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.GbaManager;
 import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.HalVersion;
@@ -3016,17 +3014,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public int getDataActivity() {
+    public @DataActivityType int getDataActivity() {
         return getDataActivityForSubId(mSubscriptionController.getDefaultDataSubId());
     }
 
     @Override
-    public int getDataActivityForSubId(int subId) {
+    public @DataActivityType int getDataActivityForSubId(int subId) {
         final long identity = Binder.clearCallingIdentity();
         try {
             final Phone phone = getPhone(subId);
             if (phone != null) {
-                return DefaultPhoneNotifier.convertDataActivityState(phone.getDataActivityState());
+                return phone.getDataActivityState();
             } else {
                 return TelephonyManager.DATA_ACTIVITY_NONE;
             }
@@ -4641,10 +4639,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             throw new IllegalArgumentException("Invalid Subscription ID: " + subId);
         }
 
-        ImsProvisioningController.getInstance()
-                .addFeatureProvisioningChangedCallback(subId, callback);
-
-        Binder.restoreCallingIdentity(identity);
+        try {
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
+                        "Device does not support IMS");
+            }
+            controller.addFeatureProvisioningChangedCallback(subId, callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     @Override
@@ -4658,34 +4662,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             throw new IllegalArgumentException("Invalid Subscription ID: " + subId);
         }
 
-        ImsProvisioningController.getInstance()
-                .removeFeatureProvisioningChangedCallback(subId, callback);
-
-        Binder.restoreCallingIdentity(identity);
+        try {
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("unregisterFeatureProvisioningChangedCallback: Device does not support IMS");
+                return;
+            }
+            controller.removeFeatureProvisioningChangedCallback(subId, callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     private void checkModifyPhoneStatePermission(int subId, String message) {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp, subId,
                 message);
-    }
-
-    private boolean isImsProvisioningRequired(int subId, int capability,
-            boolean isMmtelCapability) {
-        Phone phone = getPhone(subId);
-        if (phone == null) {
-            loge("phone instance null for subid " + subId);
-            return false;
-        }
-        if (isMmtelCapability) {
-            if (!doesImsCapabilityRequireProvisioning(phone.getContext(), subId, capability)) {
-                return false;
-            }
-        } else {
-            if (!doesRcsCapabilityRequireProvisioning(phone.getContext(), subId, capability)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     @Override
@@ -4695,9 +4686,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            ImsProvisioningController.getInstance()
-                    .setRcsProvisioningStatusForCapability(subId, capability, tech, isProvisioned);
-            return;
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("setRcsProvisioningStatusForCapability: Device does not support IMS");
+                return;
+            }
+            controller.setRcsProvisioningStatusForCapability(
+                    subId, capability, tech, isProvisioned);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4711,8 +4706,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            return ImsProvisioningController.getInstance()
-                    .getRcsProvisioningStatusForCapability(subId, capability, tech);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("getRcsProvisioningStatusForCapability: Device does not support IMS");
+
+                // device does not support IMS, this method will return true always.
+                return true;
+            }
+            return controller.getRcsProvisioningStatusForCapability(subId, capability, tech);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4725,8 +4726,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            ImsProvisioningController.getInstance()
-                    .setImsProvisioningStatusForCapability(subId, capability, tech, isProvisioned);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("setImsProvisioningStatusForCapability: Device does not support IMS");
+                return;
+            }
+            controller.setImsProvisioningStatusForCapability(
+                    subId, capability, tech, isProvisioned);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4739,9 +4745,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            return ImsProvisioningController.getInstance()
-                    .getImsProvisioningStatusForCapability(subId, capability, tech);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("getImsProvisioningStatusForCapability: Device does not support IMS");
 
+                // device does not support IMS, this method will return true always.
+                return true;
+            }
+            return controller.getImsProvisioningStatusForCapability(subId, capability, tech);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4754,8 +4765,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            return ImsProvisioningController.getInstance()
-                    .isImsProvisioningRequiredForCapability(subId, capability, tech);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("isProvisioningRequiredForCapability: Device does not support IMS");
+
+                // device does not support IMS, this method will return false
+                return false;
+            }
+            return controller.isImsProvisioningRequiredForCapability(subId, capability, tech);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4768,76 +4785,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            return ImsProvisioningController.getInstance()
-                    .isRcsProvisioningRequiredForCapability(subId, capability, tech);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("isRcsProvisioningRequiredForCapability: Device does not support IMS");
+
+                // device does not support IMS, this method will return false
+                return false;
+            }
+            return controller.isRcsProvisioningRequiredForCapability(subId, capability, tech);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
-    }
-
-    private static String getMmTelProvisioningKey(int subId, int tech) {
-        // resulting key is provision_ims_mmtel_{subId}_{tech}
-        return PREF_PROVISION_IMS_MMTEL_PREFIX + subId + "_" + tech;
-    }
-
-    /**
-     * Query CarrierConfig to see if the specified capability requires provisioning for the
-     * carrier associated with the subscription id.
-     */
-    private boolean doesImsCapabilityRequireProvisioning(Context context, int subId,
-            int capability) {
-        CarrierConfigManager configManager = new CarrierConfigManager(context);
-        PersistableBundle c = configManager.getConfigForSubId(subId);
-        boolean requireUtProvisioning = c.getBoolean(
-                CarrierConfigManager.KEY_CARRIER_SUPPORTS_SS_OVER_UT_BOOL, false)
-                && c.getBoolean(CarrierConfigManager.KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL,
-                false);
-        boolean requireVoiceVtProvisioning = c.getBoolean(
-                CarrierConfigManager.KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, false);
-
-        // First check to make sure that the capability requires provisioning.
-        switch (capability) {
-            case MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE:
-                // intentional fallthrough
-            case MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VIDEO: {
-                if (requireVoiceVtProvisioning) {
-                    // Voice and Video requires provisioning
-                    return true;
-                }
-                break;
-            }
-            case MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_UT: {
-                if (requireUtProvisioning) {
-                    // UT requires provisioning
-                    return true;
-                }
-                break;
-            }
-        }
-        return false;
-    }
-
-    private boolean doesRcsCapabilityRequireProvisioning(Context context, int subId,
-            int capability) {
-        CarrierConfigManager configManager = new CarrierConfigManager(context);
-        PersistableBundle c = configManager.getConfigForSubId(subId);
-
-        boolean requireRcsProvisioning = c.getBoolean(
-                CarrierConfigManager.KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL, false);
-
-        // First check to make sure that the capability requires provisioning.
-        switch (capability) {
-            case RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_PRESENCE_UCE:
-                // intentional fallthrough
-            case RcsFeature.RcsImsCapabilities.CAPABILITY_TYPE_OPTIONS_UCE: {
-                if (requireRcsProvisioning) {
-                    // OPTION or PRESENCE requires provisioning
-                    return true;
-                }
-                break;
-            }
-        }
-        return false;
     }
 
     @Override
@@ -4858,7 +4816,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 return ImsConfigImplBase.CONFIG_RESULT_UNKNOWN;
             }
 
-            int retVal = ImsProvisioningController.getInstance().getProvisioningValue(subId, key);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("getImsProvisioningInt: Device does not support IMS");
+
+                // device does not support IMS, this method will return CONFIG_RESULT_UNKNOWN.
+                return ImsConfigImplBase.CONFIG_RESULT_UNKNOWN;
+            }
+            int retVal = controller.getProvisioningValue(subId, key);
             if (retVal != ImsConfigImplBase.CONFIG_RESULT_UNKNOWN) {
                 return retVal;
             }
@@ -4918,8 +4883,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 return ImsConfigImplBase.CONFIG_RESULT_FAILED;
             }
 
-            int retVal = ImsProvisioningController.getInstance()
-                    .setProvisioningValue(subId, key, value);
+            ImsProvisioningController controller = ImsProvisioningController.getInstance();
+            if (controller == null) {
+                loge("setImsProvisioningInt: Device does not support IMS");
+
+                // device does not support IMS, this method will return CONFIG_RESULT_FAILED.
+                return ImsConfigImplBase.CONFIG_RESULT_FAILED;
+            }
+            int retVal = controller.setProvisioningValue(subId, key, value);
             if (retVal != ImsConfigImplBase.CONFIG_RESULT_UNKNOWN) {
                 return retVal;
             }
@@ -11252,7 +11223,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         if (!hasFinePermission
                 || !TelephonyPermissions.checkLastKnownCellIdAccessPermission(mApp)) {
             throw new SecurityException("getLastKnownCellIdentity need ACCESS_FINE_LOCATION "
-                    + "and BIND_CONNECTION_SERVICE permission.");
+                    + "and ACCESS_LAST_KNOWN_CELL_ID permission.");
         }
 
         final long identity = Binder.clearCallingIdentity();
