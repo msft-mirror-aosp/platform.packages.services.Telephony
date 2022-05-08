@@ -726,7 +726,7 @@ public class ImsStateCallbackControllerTest {
         verify(mCallback2, times(2)).onUnavailable(anyInt());
         verify(mCallback3, times(2)).onUnavailable(anyInt());
 
-        mMmTelConnectorListenerSlot1.getValue().connectionReady(null, SLOT_0_SUB_ID);
+        mMmTelConnectorListenerSlot1.getValue().connectionReady(null, SLOT_1_SUB_ID);
         processAllMessages();
         verify(mCallback0, times(1)).onAvailable();
         verify(mCallback1, times(1)).onAvailable();
@@ -737,7 +737,7 @@ public class ImsStateCallbackControllerTest {
         verify(mCallback2, times(2)).onUnavailable(anyInt());
         verify(mCallback3, times(2)).onUnavailable(anyInt());
 
-        mRcsConnectorListenerSlot1.getValue().connectionReady(null, SLOT_0_SUB_ID);
+        mRcsConnectorListenerSlot1.getValue().connectionReady(null, SLOT_1_SUB_ID);
         processAllMessages();
         verify(mCallback0, times(1)).onAvailable();
         verify(mCallback1, times(1)).onAvailable();
@@ -820,6 +820,58 @@ public class ImsStateCallbackControllerTest {
         // no change in slot 0
         verify(mMmTelFeatureConnectorSlot0, times(0)).disconnect();
         verify(mRcsFeatureConnectorSlot0, times(0)).disconnect();
+    }
+
+    @Test
+    @SmallTest
+    public void testMmTelConnectionReadyWhenReEnableSim() throws Exception {
+        createController(1);
+
+        // MMTEL feature
+        mMmTelConnectorListenerSlot0.getValue().connectionReady(null, SLOT_0_SUB_ID);
+        processAllMessages();
+        mMmTelConnectorListenerSlot0.getValue()
+                .connectionUnavailable(UNAVAILABLE_REASON_DISCONNECTED);
+        processAllMessages();
+        mMmTelConnectorListenerSlot0.getValue().connectionReady(null,
+                SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+        processAllMessages();
+        mImsStateCallbackController
+                .registerImsStateCallback(SLOT_0_SUB_ID, FEATURE_MMTEL, mCallback0, "callback0");
+        processAllMessages();
+
+        assertTrue(mImsStateCallbackController.isRegistered(mCallback0));
+        verify(mCallback0, times(1)).onUnavailable(REASON_IMS_SERVICE_DISCONNECTED);
+        verify(mCallback0, times(0)).onAvailable();
+
+        mImsStateCallbackController.unregisterImsStateCallback(mCallback0);
+        processAllMessages();
+        assertFalse(mImsStateCallbackController.isRegistered(mCallback0));
+
+        // RCS feature
+        // TelephonyRcsService notifying active features
+        mImsStateCallbackController.notifyExternalRcsStateChanged(SLOT_0, false, true);
+        processAllMessages();
+        // RcsFeatureController notifying STATE_READY
+        mImsStateCallbackController.notifyExternalRcsStateChanged(SLOT_0, true, true);
+        processAllMessages();
+        mRcsConnectorListenerSlot0.getValue()
+                .connectionUnavailable(UNAVAILABLE_REASON_DISCONNECTED);
+        processAllMessages();
+        mRcsConnectorListenerSlot0.getValue().connectionReady(null,
+                SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+        processAllMessages();
+        mImsStateCallbackController
+                .registerImsStateCallback(SLOT_0_SUB_ID, FEATURE_RCS, mCallback1, "callback1");
+        processAllMessages();
+
+        assertTrue(mImsStateCallbackController.isRegistered(mCallback1));
+        verify(mCallback1, times(1)).onUnavailable(REASON_IMS_SERVICE_DISCONNECTED);
+        verify(mCallback1, times(0)).onAvailable();
+
+        mImsStateCallbackController.unregisterImsStateCallback(mCallback1);
+        processAllMessages();
+        assertFalse(mImsStateCallbackController.isRegistered(mCallback1));
     }
 
     private void createController(int slotCount) throws Exception {
