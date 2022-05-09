@@ -637,8 +637,8 @@
     <string name="phone_in_ecm_notification_title" msgid="6825016389926367946">"Modalità di richiamata di emergenza"</string>
     <string name="phone_in_ecm_call_notification_text" msgid="653972232922670335">"Connessione dati disabilitata"</string>
     <string name="phone_in_ecm_notification_complete_time" msgid="7341624337163082759">"Nessuna connessione dati fino alle ore <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <!-- format error in translation for alert_dialog_exit_ecm (7661603870224398025) -->
-    <!-- format error in translation for alert_dialog_not_avaialble_in_ecm (8717711120099503279) -->
+    <string name="alert_dialog_exit_ecm" msgid="7661603870224398025">"{count,plural, =1{Il telefono sarà in modalità Richiamata di emergenza per un minuto. In questa modalità non è possibile utilizzare app che impiegano una connessione dati. Vuoi uscire ora?}other{Il telefono sarà in modalità Richiamata di emergenza per %s minuti. In questa modalità non è possibile utilizzare app che impiegano una connessione dati. Vuoi uscire ora?}}"</string>
+    <string name="alert_dialog_not_avaialble_in_ecm" msgid="8717711120099503279">"{count,plural, =1{L\'azione selezionata non è disponibile in modalità Richiamata di emergenza. Il telefono sarà in questa modalità per un minuto. Vuoi uscire ora?}other{L\'azione selezionata non è disponibile in modalità Richiamata di emergenza. Il telefono sarà in questa modalità per %s minuti. Vuoi uscire ora?}}"</string>
     <string name="alert_dialog_in_ecm_call" msgid="1207545603149771978">"L\'azione selezionata non è disponibile in modalità di chiamata di emergenza."</string>
     <string name="progress_dialog_exiting_ecm" msgid="9159080081676927217">"Uscita dalla modalità di richiamata di emergenza"</string>
     <string name="alert_dialog_yes" msgid="3532525979632841417">"Sì"</string>
@@ -646,7 +646,7 @@
     <string name="alert_dialog_dismiss" msgid="1336356286354517054">"Ignora"</string>
     <string name="phone_in_ecm_call_notification_text_without_data_restriction_hint" msgid="3747860785153531225">"Il telefono è in modalità di richiamata di emergenza"</string>
     <string name="phone_in_ecm_notification_complete_time_without_data_restriction_hint" msgid="3690292264812050858">"Fino alle ore <xliff:g id="COMPLETETIME">%s</xliff:g>"</string>
-    <!-- format error in translation for alert_dialog_exit_ecm_without_data_restriction_hint (7549850847524907932) -->
+    <string name="alert_dialog_exit_ecm_without_data_restriction_hint" msgid="7549850847524907932">"{count,plural, =1{Il telefono sarà in modalità di richiamata di emergenza per un minuto.\nVuoi uscire ora?}other{Il telefono sarà in modalità di richiamata di emergenza per %s minuti.\nVuoi uscire ora?}}"</string>
     <string name="voicemail_provider" msgid="4158806657253745294">"Servizio"</string>
     <string name="voicemail_settings" msgid="4451045613238972776">"Configurazione"</string>
     <string name="voicemail_number_not_set" msgid="8831561283386938155">"&lt;Non impostato&gt;"</string>
@@ -674,7 +674,6 @@
     <string name="accessibility_settings_activity_title" msgid="7883415189273700298">"Accessibilità"</string>
     <string name="status_hint_label_incoming_wifi_call" msgid="2606052595898044071">"Chiamata Wi-Fi da"</string>
     <string name="status_hint_label_wifi_call" msgid="942993035689809853">"Chiamata Wi-Fi"</string>
-    <string name="emergency_action_launch_hint" msgid="2762016865340891314">"Tocca di nuovo per aprire"</string>
     <string name="message_decode_error" msgid="1061856591500290887">"Si è verificato un errore durante la decodifica del messaggio."</string>
     <string name="callFailed_cdma_activation" msgid="5392057031552253550">"Una scheda SIM ha attivato il tuo servizio e ha aggiornato le funzionalità di roaming del telefono."</string>
     <string name="callFailed_cdma_call_limit" msgid="1074219746093031412">"Ci sono troppe chiamate attive. Termina o unisci le chiamate esistenti prima di effettuarne una nuova."</string>
@@ -890,6 +889,7 @@
     <string name="radio_info_band_mode_label" msgid="23480556225515290">"Seleziona banda radio"</string>
     <string name="radio_info_voice_network_type_label" msgid="2395347336419593265">"Tipo di rete vocale:"</string>
     <string name="radio_info_data_network_type_label" msgid="8886597029237501929">"Tipo di rete di dati:"</string>
+    <string name="radio_info_override_network_type_label" msgid="4176280017221092005">"Override del tipo di rete:"</string>
     <string name="phone_index_label" msgid="6222406512768964268">"Seleziona indice telefonico"</string>
     <string name="radio_info_set_perferred_label" msgid="7408131389363136210">"Imposta tipo di rete preferito:"</string>
     <string name="radio_info_ping_hostname_v4" msgid="6951237885381284790">"Ping nome host (www.google.com) IPv4:"</string>
@@ -901,10 +901,10 @@
     <string name="radio_info_smsc_refresh_label" msgid="8409923721451604560">"Aggiorna"</string>
     <string name="radio_info_toggle_dns_check_label" msgid="1394078554927787350">"Attiva o disattiva verifica DNS"</string>
     <string name="oem_radio_info_label" msgid="2914167475119997456">"Info/impostazioni specifiche OEM"</string>
-    <string name="radio_info_endc_available" msgid="4410653375290113436">"EN-DC disponibile:"</string>
-    <string name="radio_info_dcnr_restricted" msgid="2469125498066960807">"DCNR con limitazioni:"</string>
-    <string name="radio_info_nr_available" msgid="1321318331361249997">"NR disponibile:"</string>
-    <string name="radio_info_nr_state" msgid="1337571996788535356">"Stato NR:"</string>
+    <string name="radio_info_endc_available" msgid="2983767110681230019">"EN-DC disponibile (NSA):"</string>
+    <string name="radio_info_dcnr_restricted" msgid="7147511536420148173">"DCNR con limitazioni (NSA):"</string>
+    <string name="radio_info_nr_available" msgid="3383388088451237182">"NR disponibile (NSA):"</string>
+    <string name="radio_info_nr_state" msgid="4158805093187555149">"Stato NR (NSA):"</string>
     <string name="radio_info_nr_frequency" msgid="1201156032796584128">"Frequenza NR:"</string>
     <string name="band_mode_title" msgid="7988822920724576842">"Imposta modalità banda radio"</string>
     <string name="band_mode_loading" msgid="795923726636735967">"Caricamento elenco bande…"</string>
