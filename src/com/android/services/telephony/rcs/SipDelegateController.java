@@ -34,6 +34,7 @@ import android.util.Log;
 import android.util.Pair;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.util.IndentingPrintWriter;
 
 import java.io.PrintWriter;
@@ -77,6 +78,7 @@ public class SipDelegateController {
     }
 
     private final int mSubId;
+    private final int mUid;
     private final String mPackageName;
     private final DelegateRequest mInitialRequest;
     private final ScheduledExecutorService mExecutorService;
@@ -88,12 +90,13 @@ public class SipDelegateController {
     private DelegateBinderStateManager mBinderConnection;
     private Set<String> mTrackedFeatureTags;
 
-    public SipDelegateController(int subId, DelegateRequest initialRequest, String packageName,
-            ISipTransport transportImpl, IImsRegistration registrationImpl,
+    public SipDelegateController(int subId, int uid, DelegateRequest initialRequest,
+            String packageName, ISipTransport transportImpl, IImsRegistration registrationImpl,
             ScheduledExecutorService executorService,
             ISipDelegateConnectionStateCallback stateCallback,
             ISipDelegateMessageCallback messageCallback) {
         mSubId = subId;
+        mUid = uid;
         mPackageName = packageName;
         mInitialRequest = initialRequest;
         mExecutorService = executorService;
@@ -101,20 +104,22 @@ public class SipDelegateController {
 
         mMessageTransportWrapper = new MessageTransportWrapper(mSubId, executorService,
                 messageCallback);
-        mDelegateStateTracker = new DelegateStateTracker(mSubId, stateCallback,
-                mMessageTransportWrapper.getDelegateConnection());
+
+        mDelegateStateTracker = new DelegateStateTracker(mSubId, mUid, stateCallback,
+                mMessageTransportWrapper.getDelegateConnection(), RcsStats.getInstance());
     }
 
     /**
      * Inject dependencies for testing only.
      */
     @VisibleForTesting
-    public SipDelegateController(int subId, DelegateRequest initialRequest, String packageName,
-            ScheduledExecutorService executorService,
+    public SipDelegateController(int subId, int uid, DelegateRequest initialRequest,
+            String packageName, ScheduledExecutorService executorService,
             MessageTransportWrapper messageTransportWrapper,
             DelegateStateTracker delegateStateTracker,
             DelegateBinderStateManager.Factory connectionFactory) {
         mSubId = subId;
+        mUid = uid;
         mInitialRequest = initialRequest;
         mPackageName = packageName;
         mExecutorService = executorService;
@@ -191,7 +196,7 @@ public class SipDelegateController {
                     .collect(Collectors.toSet()));
             mMessageTransportWrapper.openTransport(resultPair.first, allowedTags,
                     resultPair.second);
-            mDelegateStateTracker.sipDelegateConnected(resultPair.second);
+            mDelegateStateTracker.sipDelegateConnected(allowedTags, resultPair.second);
             return true;
         });
     }

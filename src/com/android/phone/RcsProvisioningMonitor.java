@@ -16,6 +16,10 @@
 
 package com.android.phone;
 
+import static com.android.internal.telephony.TelephonyStatsLog.RCS_ACS_PROVISIONING_STATS__RESPONSE_TYPE__PROVISIONING_XML;
+import static com.android.internal.telephony.TelephonyStatsLog.RCS_CLIENT_PROVISIONING_STATS__EVENT__DMA_CHANGED;
+import static com.android.internal.telephony.TelephonyStatsLog.RCS_CLIENT_PROVISIONING_STATS__EVENT__TRIGGER_RCS_RECONFIGURATION;
+
 import android.Manifest;
 import android.app.role.OnRoleHoldersChangedListener;
 import android.app.role.RoleManager;
@@ -47,6 +51,8 @@ import com.android.ims.FeatureConnector;
 import com.android.ims.FeatureUpdates;
 import com.android.ims.RcsFeatureManager;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.telephony.metrics.RcsStats;
+import com.android.internal.telephony.metrics.RcsStats.RcsProvisioningCallback;
 import com.android.internal.telephony.util.HandlerExecutor;
 import com.android.internal.util.CollectionUtils;
 import com.android.telephony.Rlog;
@@ -75,6 +81,10 @@ public class RcsProvisioningMonitor {
     private static final int EVENT_RESET = 8;
     private static final int EVENT_FEATURE_ENABLED_OVERRIDE = 9;
 
+    // indicate that the carrier single registration capable is initial value as
+    // carrier config is not ready yet.
+    private static final int MASK_CAP_CARRIER_INIT = 0xF000;
+
     private final PhoneGlobals mPhone;
     private final Handler mHandler;
     // Cache the RCS provsioning info and related sub id
@@ -95,6 +105,8 @@ public class RcsProvisioningMonitor {
     private final TelephonyRegistryManager mTelephonyRegistryManager;
     private final RoleManagerAdapter mRoleManager;
     private FeatureConnectorFactory<RcsFeatureManager> mFeatureFactory;
+
+    private RcsStats mRcsStats;
 
     private static RcsProvisioningMonitor sInstance;
 
@@ -129,7 +141,6 @@ public class RcsProvisioningMonitor {
         public void onRoleHoldersChanged(String role, UserHandle user) {
             if (RoleManager.ROLE_SMS.equals(role)) {
                 logv("default messaging application changed.");
-                String packageName = getDmaPackageName();
                 mHandler.sendEmptyMessage(EVENT_DMA_CHANGED);
             }
         }
@@ -221,7 +232,23 @@ public class RcsProvisioningMonitor {
         }
 
         void setSingleRegistrationCapability(int singleRegistrationCapability) {
-            mSingleRegistrationCapability = singleRegistrationCapability;
+            if (mSingleRegistrationCapability != singleRegistrationCapability) {
+                mSingleRegistrationCapability = singleRegistrationCapability;
+                notifyDma();
+
+                // update whether single registration supported.
+                mRcsStats.setEnableSingleRegistration(mSubId,
+                        mSingleRegistrationCapability == ProvisioningManager.STATUS_CAPABLE);
+            }
+        }
+
+        void notifyDma() {
+            // notify only if capable value has been updated when carrier config ready.
+            if ((mSingleRegistrationCapability & MASK_CAP_CARRIER_INIT) != MASK_CAP_CARRIER_INIT) {
+                logi("notify default messaging app for sub:" + mSubId + " with capability:"
+                        + mSingleRegistrationCapability);
+                notifyDmaForSub(mSubId, mSingleRegistrationCapability);
+            }
         }
 
         int getSingleRegistrationCapability() {
@@ -323,6 +350,9 @@ public class RcsProvisioningMonitor {
                     } else {
                         notifyRcsAutoConfigurationReceived();
                     }
+
+                    // check callback for metrics if not registered, register callback
+                    registerMetricsCallback();
                 } else {
                     // clear callbacks if rcs disconnected
                     clearCallbacks();
@@ -382,6 +412,18 @@ public class RcsProvisioningMonitor {
                 }
             }
         }
+
+        private void registerMetricsCallback() {
+            RcsProvisioningCallback rcsProvisioningCallback = mRcsStats.getRcsProvisioningCallback(
+                    mSubId, mSingleRegistrationCapability == ProvisioningManager.STATUS_CAPABLE);
+
+            // if not yet registered, register callback and set registered value
+            if (rcsProvisioningCallback != null && !rcsProvisioningCallback.getRegistered()) {
+                if (addRcsConfigCallback(rcsProvisioningCallback)) {
+                    rcsProvisioningCallback.setRegistered(true);
+                }
+            }
+        }
     }
 
     @VisibleForTesting
@@ -425,7 +467,7 @@ public class RcsProvisioningMonitor {
         }
 
         @Override
-        public void connectionReady(RcsFeatureManager manager) {
+        public void connectionReady(RcsFeatureManager manager, int subId) {
             mRcsFeatureManager = manager;
             mRcsProvisioningInfos.forEach(v -> v.onRcsStatusChanged(manager.getConfig()));
         }
@@ -439,7 +481,7 @@ public class RcsProvisioningMonitor {
 
     @VisibleForTesting
     public RcsProvisioningMonitor(PhoneGlobals app, Looper looper, RoleManagerAdapter roleManager,
-            FeatureConnectorFactory<RcsFeatureManager> factory) {
+            FeatureConnectorFactory<RcsFeatureManager> factory, RcsStats rcsStats) {
         mPhone = app;
         mHandler = new MyHandler(looper);
         mCarrierConfigManager = mPhone.getSystemService(CarrierConfigManager.class);
@@ -450,6 +492,7 @@ public class RcsProvisioningMonitor {
         logv("DMA is " + mDmaPackageName);
         mDmaChangedListener = new DmaChangedListener();
         mFeatureFactory = factory;
+        mRcsStats = rcsStats;
         init();
     }
 
@@ -462,7 +505,8 @@ public class RcsProvisioningMonitor {
             HandlerThread handlerThread = new HandlerThread(TAG);
             handlerThread.start();
             sInstance = new RcsProvisioningMonitor(app, handlerThread.getLooper(),
-                    new RoleManagerAdapterImpl(app), RcsFeatureManager::getConnector);
+                    new RoleManagerAdapterImpl(app), RcsFeatureManager::getConnector,
+                    RcsStats.getInstance());
         }
         return sInstance;
     }
@@ -676,6 +720,8 @@ public class RcsProvisioningMonitor {
             logv("new default messaging application " + mDmaPackageName);
 
             mRcsProvisioningInfos.forEach((k, v) -> {
+                v.notifyDma();
+
                 byte[] cachedConfig = v.getConfig();
                 //clear old callbacks
                 v.clear();
@@ -687,6 +733,10 @@ public class RcsProvisioningMonitor {
                     logv("acs not used, set cached config and notify.");
                     v.setConfig(cachedConfig);
                 }
+
+                // store RCS metrics - DMA changed event
+                mRcsStats.onRcsClientProvisioningStats(k,
+                        RCS_CLIENT_PROVISIONING_STATS__EVENT__DMA_CHANGED);
             });
         }
     }
@@ -714,17 +764,20 @@ public class RcsProvisioningMonitor {
         return b.getBoolean(CarrierConfigManager.KEY_USE_ACS_FOR_RCS_BOOL);
     }
 
-    private boolean isSingleRegistrationRequiredByCarrier(int subId) {
+    private int getSingleRegistrationRequiredByCarrier(int subId) {
         Boolean enabledByOverride = mCarrierSingleRegistrationEnabledOverride.get(subId);
         if (enabledByOverride != null) {
-            return enabledByOverride;
+            return enabledByOverride ? ProvisioningManager.STATUS_CAPABLE
+                    : ProvisioningManager.STATUS_CARRIER_NOT_CAPABLE;
         }
 
         PersistableBundle b = mCarrierConfigManager.getConfigForSubId(subId);
-        if (b == null) {
-            return false;
+        if (!CarrierConfigManager.isConfigForIdentifiedCarrier(b)) {
+            return MASK_CAP_CARRIER_INIT;
         }
-        return b.getBoolean(CarrierConfigManager.Ims.KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL);
+        return b.getBoolean(CarrierConfigManager.Ims.KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL)
+                ? ProvisioningManager.STATUS_CAPABLE
+                : ProvisioningManager.STATUS_CARRIER_NOT_CAPABLE;
     }
 
     private int getSingleRegistrationCapableValue(int subId) {
@@ -734,10 +787,9 @@ public class RcsProvisioningMonitor {
                 : mPhone.getPackageManager().hasSystemFeature(
                         PackageManager.FEATURE_TELEPHONY_IMS_SINGLE_REGISTRATION);
 
-        int value = (isSingleRegistrationEnabledOnDevice ? 0
-                : ProvisioningManager.STATUS_DEVICE_NOT_CAPABLE) | (
-                isSingleRegistrationRequiredByCarrier(subId) ? 0
-                : ProvisioningManager.STATUS_CARRIER_NOT_CAPABLE);
+        int value = (isSingleRegistrationEnabledOnDevice ? ProvisioningManager.STATUS_CAPABLE
+                : ProvisioningManager.STATUS_DEVICE_NOT_CAPABLE)
+                | getSingleRegistrationRequiredByCarrier(subId);
         logv("SingleRegistrationCapableValue : " + value);
         return value;
     }
@@ -745,11 +797,8 @@ public class RcsProvisioningMonitor {
     private void onCarrierConfigChange() {
         logv("onCarrierConfigChange");
         mRcsProvisioningInfos.forEach((subId, info) -> {
-            int value = getSingleRegistrationCapableValue(subId);
-            if (value != info.getSingleRegistrationCapability()) {
-                info.setSingleRegistrationCapability(value);
-                notifyDmaForSub(subId, value);
-            }
+            info.setSingleRegistrationCapability(
+                    getSingleRegistrationCapableValue(subId));
         });
     }
 
@@ -764,9 +813,8 @@ public class RcsProvisioningMonitor {
                 byte[] data = loadConfigForSub(i);
                 int capability = getSingleRegistrationCapableValue(i);
                 logv("new info is created for sub : " + i + ", single registration capability :"
-                        + capability + ", rcs config : " + data);
+                        + capability + ", rcs config : " + Arrays.toString(data));
                 mRcsProvisioningInfos.put(i, new RcsProvisioningInfo(i, capability, data));
-                notifyDmaForSub(i, capability);
             }
         }
 
@@ -782,8 +830,20 @@ public class RcsProvisioningMonitor {
         logv("onConfigReceived, subId:" + subId + ", config:"
                 + config + ", isCompressed:" + isCompressed);
         RcsProvisioningInfo info = mRcsProvisioningInfos.get(subId);
+        if (info == null) {
+            logd("sub[" + subId + "] has been removed");
+            return;
+        }
         info.setConfig(isCompressed ? RcsConfig.decompressGzip(config) : config);
         updateConfigForSub(subId, config, isCompressed);
+
+        // Supporting ACS means config data comes from ACS
+        // store RCS metrics - received provisioning event
+        if (isAcsUsed(subId)) {
+            mRcsStats.onRcsAcsProvisioningStats(subId, 200,
+                    RCS_ACS_PROVISIONING_STATS__RESPONSE_TYPE__PROVISIONING_XML,
+                    isRcsVolteSingleRegistrationEnabled(subId));
+        }
     }
 
     private void onReconfigRequest(int subId) {
@@ -795,6 +855,10 @@ public class RcsProvisioningMonitor {
             updateConfigForSub(subId, null, true);
             info.triggerRcsReconfiguration();
         }
+
+        // store RCS metrics - reconfig event
+        mRcsStats.onRcsClientProvisioningStats(subId,
+                RCS_CLIENT_PROVISIONING_STATS__EVENT__TRIGGER_RCS_RECONFIGURATION);
     }
 
     private void notifyDmaForSub(int subId, int capability) {
@@ -803,7 +867,7 @@ public class RcsProvisioningMonitor {
         intent.setPackage(mDmaPackageName);
         intent.putExtra(ProvisioningManager.EXTRA_SUBSCRIPTION_ID, subId);
         intent.putExtra(ProvisioningManager.EXTRA_STATUS, capability);
-        logv("notify " + intent);
+        logv("notify " + intent + ", sub:" + subId + ", capability:" + capability);
         // Only send permission to the default sms app if it has the correct permissions
         // except test mode enabled
         if (!mTestModeEnabled) {
@@ -849,6 +913,10 @@ public class RcsProvisioningMonitor {
         if (DBG) {
             Rlog.d(TAG, msg);
         }
+    }
+
+    private static void logi(String msg) {
+        Rlog.i(TAG, msg);
     }
 
     private static void logd(String msg) {

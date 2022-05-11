@@ -58,13 +58,14 @@ import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.PhoneFactory;
-import com.android.internal.telephony.PhoneSwitcher;
 import com.android.internal.telephony.RIL;
 import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.d2d.Communicator;
+import com.android.internal.telephony.data.PhoneSwitcher;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
+import com.android.phone.FrameworksUtils;
 import com.android.phone.MMIDialogActivity;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
@@ -498,7 +499,8 @@ public class TelephonyConnectionService extends ConnectionService {
 
         IntentFilter intentFilter = new IntentFilter(
                 TelecomManager.ACTION_TTY_PREFERRED_MODE_CHANGED);
-        registerReceiver(mTtyBroadcastReceiver, intentFilter);
+        registerReceiver(mTtyBroadcastReceiver, intentFilter,
+                android.Manifest.permission.MODIFY_PHONE_STATE, null, Context.RECEIVER_EXPORTED);
     }
 
     @Override
@@ -1199,9 +1201,9 @@ public class TelephonyConnectionService extends ConnectionService {
             return connection;
         }
 
-        com.android.internal.telephony.Connection originalConnection =
-                call.getState() == Call.State.WAITING ?
-                    call.getLatestConnection() : call.getEarliestConnection();
+        // If there are multiple Connections tracked in a call, grab the latest, since it is most
+        // likely to be the incoming call.
+        com.android.internal.telephony.Connection originalConnection = call.getLatestConnection();
         if (isOriginalConnectionKnown(originalConnection)) {
             Log.i(this, "onCreateIncomingConnection, original connection already registered");
             return Connection.createCanceledConnection();
@@ -1728,18 +1730,20 @@ public class TelephonyConnectionService extends ConnectionService {
                         }
                     }
                 }
-                connection.registerForCallEvents(phone);
                 originalConnection = phone.dial(number, new ImsPhone.ImsDialArgs.Builder()
                         .setVideoState(videoState)
                         .setIntentExtras(extras)
                         .setRttTextStream(connection.getRttTextStream())
-                        .build());
+                        .build(),
+                        // We need to wait until the phone has been chosen in GsmCdmaPhone to
+                        // register for the associated TelephonyConnection call event listeners.
+                        connection::registerForCallEvents);
             } else {
                 originalConnection = null;
             }
         } catch (CallStateException e) {
             Log.e(this, e, "placeOutgoingConnection, phone.dial exception: " + e);
-            connection.unregisterForCallEvents(phone);
+            connection.unregisterForCallEvents();
             handleCallStateException(e, connection, phone);
             return;
         }
@@ -1762,17 +1766,22 @@ public class TelephonyConnectionService extends ConnectionService {
                 startActivity(intent);
             }
             Log.d(this, "placeOutgoingConnection, phone.dial returned null");
-            connection.unregisterForCallEvents(phone);
             connection.setTelephonyConnectionDisconnected(
                     mDisconnectCauseFactory.toTelecomDisconnectCause(telephonyDisconnectCause,
                             "Connection is null", phone.getPhoneId()));
             connection.close();
         } else {
-            getMainThreadHandler().post(() -> {
-                if (connection.getOriginalConnection() == null) {
-                    connection.setOriginalConnection(originalConnection);
-                }
-            });
+            if (!getMainThreadHandler().getLooper().isCurrentThread()) {
+                Log.w(this, "placeOriginalConnection - Unexpected, this call "
+                        + "should always be on the main thread.");
+                getMainThreadHandler().post(() -> {
+                    if (connection.getOriginalConnection() == null) {
+                        connection.setOriginalConnection(originalConnection);
+                    }
+                });
+            } else {
+                connection.setOriginalConnection(originalConnection);
+            }
         }
     }
 
@@ -2077,8 +2086,7 @@ public class TelephonyConnectionService extends ConnectionService {
             if (phone.getEmergencyNumberTracker() != null) {
                 if (phone.getEmergencyNumberTracker().isEmergencyNumber(
                         emergencyNumberAddress, true)) {
-                    if (phone.getHalVersion().greaterOrEqual(RIL.RADIO_HAL_VERSION_1_4)
-                            || isAvailableForEmergencyCalls(phone)) {
+                    if (isAvailableForEmergencyCalls(phone)) {
                         // a)
                         if (phone.getPhoneId() == defaultVoicePhoneId) {
                             Log.i(this, "getPhoneForEmergencyCall, Phone Id that supports"
@@ -2201,12 +2209,6 @@ public class TelephonyConnectionService extends ConnectionService {
                 // Only sort if there are enough elements to do so.
                 if (phoneSlotStatus.size() > 1) {
                     Collections.sort(phoneSlotStatus, (o1, o2) -> {
-                        if (!o1.hasDialedEmergencyNumber && o2.hasDialedEmergencyNumber) {
-                            return -1;
-                        }
-                        if (o1.hasDialedEmergencyNumber && !o2.hasDialedEmergencyNumber) {
-                            return 1;
-                        }
                         // Sort by non-absent SIM.
                         if (o1.simState == TelephonyManager.SIM_STATE_ABSENT
                                 && o2.simState != TelephonyManager.SIM_STATE_ABSENT) {
@@ -2223,6 +2225,13 @@ public class TelephonyConnectionService extends ConnectionService {
                             return -1;
                         }
                         if (o2.isLocked && !o1.isLocked) {
+                            return 1;
+                        }
+                        // Prefer slots where the number is considered emergency.
+                        if (!o1.hasDialedEmergencyNumber && o2.hasDialedEmergencyNumber) {
+                            return -1;
+                        }
+                        if (o1.hasDialedEmergencyNumber && !o2.hasDialedEmergencyNumber) {
                             return 1;
                         }
                         // sort by number of RadioAccessFamily Capabilities.
@@ -2452,7 +2461,7 @@ public class TelephonyConnectionService extends ConnectionService {
                 if (showDialog) {
                     Log.d(this, "Creating UT Data enable dialog");
                     String message = SuppServicesUiUtil.makeMessage(context, suppKey, phone);
-                    AlertDialog.Builder builder = new AlertDialog.Builder(context);
+                    AlertDialog.Builder builder = FrameworksUtils.makeAlertDialogBuilder(context);
                     DialogInterface.OnClickListener networkSettingsClickListener =
                             new Dialog.OnClickListener() {
                                 @Override

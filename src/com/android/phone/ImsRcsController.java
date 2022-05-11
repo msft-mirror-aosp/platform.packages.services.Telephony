@@ -17,9 +17,13 @@
 package com.android.phone;
 
 import android.Manifest;
+import android.app.compat.CompatChanges;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.pm.PackageManager;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Build;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.os.UserHandle;
@@ -71,6 +75,15 @@ public class ImsRcsController extends IImsRcsController.Stub {
     private ImsResolver mImsResolver;
     // set by shell cmd phone src set-device-enabled true/false
     private Boolean mSingleRegistrationOverride;
+
+    /**
+     * For apps targeting Android T and above, support the publishing state on APIs, such as
+     * {@code RcsUceAdapter#PUBLISH_STATE_PUBLISHING}
+     * @hide
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.S)
+    public static final long SUPPORT_PUBLISHING_STATE = 202894742;
 
     /**
      * Initialize the singleton ImsRcsController instance.
@@ -316,7 +329,9 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public @PublishState int getUcePublishState(int subId) {
         enforceReadPrivilegedPermission("getUcePublishState");
+        final int uid = Binder.getCallingUid();
         final long token = Binder.clearCallingIdentity();
+        boolean isSupportPublishingState = false;
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
                     UceControllerManager.class);
@@ -324,7 +339,10 @@ public class ImsRcsController extends IImsRcsController.Stub {
                 throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                         "This subscription does not support UCE.");
             }
-            return uceCtrlManager.getUcePublishState();
+            if (CompatChanges.isChangeEnabled(SUPPORT_PUBLISHING_STATE, uid)) {
+                isSupportPublishingState = true;
+            }
+            return uceCtrlManager.getUcePublishState(isSupportPublishingState);
         } catch (ImsException e) {
             throw new ServiceSpecificException(e.getCode(), e.getMessage());
         } finally {
@@ -435,7 +453,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
     // Used for SHELL command only right now.
     public boolean removeUceRequestDisallowedStatus(int subId) throws ImsException {
         try {
-            UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
+            UceControllerManager uceCtrlManager = getRcsFeatureController(subId, true).getFeature(
                     UceControllerManager.class);
             if (uceCtrlManager == null) {
                 return false;
@@ -452,7 +470,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
     // Used for SHELL command only right now.
     public boolean setCapabilitiesRequestTimeout(int subId, long timeoutAfter) throws ImsException {
         try {
-            UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
+            UceControllerManager uceCtrlManager = getRcsFeatureController(subId, true).getFeature(
                     UceControllerManager.class);
             if (uceCtrlManager == null) {
                 return false;
@@ -466,7 +484,9 @@ public class ImsRcsController extends IImsRcsController.Stub {
     @Override
     public void registerUcePublishStateCallback(int subId, IRcsUcePublishStateCallback c) {
         enforceReadPrivilegedPermission("registerUcePublishStateCallback");
+        final int uid = Binder.getCallingUid();
         final long token = Binder.clearCallingIdentity();
+        boolean isSupportPublishingState = false;
         try {
             UceControllerManager uceCtrlManager = getRcsFeatureController(subId).getFeature(
                     UceControllerManager.class);
@@ -474,7 +494,11 @@ public class ImsRcsController extends IImsRcsController.Stub {
                 throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                         "This subscription does not support UCE.");
             }
-            uceCtrlManager.registerPublishStateCallback(c);
+
+            if (CompatChanges.isChangeEnabled(SUPPORT_PUBLISHING_STATE, uid)) {
+                isSupportPublishingState = true;
+            }
+            uceCtrlManager.registerPublishStateCallback(c, isSupportPublishingState);
         } catch (ImsException e) {
             throw new ServiceSpecificException(e.getCode(), e.getMessage());
         } finally {
@@ -582,6 +606,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
             throw new SecurityException("Passed in PackageName can not be found on device");
         }
 
+        final int uid = Binder.getCallingUid();
         final long identity = Binder.clearCallingIdentity();
         SipTransportController transport = getRcsFeatureController(subId).getFeature(
                 SipTransportController.class);
@@ -590,7 +615,7 @@ public class ImsRcsController extends IImsRcsController.Stub {
                     "This subscription does not support the creation of SIP delegates");
         }
         try {
-            transport.createSipDelegate(subId, request, packageName, delegateState,
+            transport.createSipDelegate(subId, uid, request, packageName, delegateState,
                     delegateMessage);
         } catch (ImsException e) {
             throw new ServiceSpecificException(e.getCode(), e.getMessage());
@@ -601,8 +626,11 @@ public class ImsRcsController extends IImsRcsController.Stub {
 
     @Override
     public void destroySipDelegate(int subId, ISipDelegate connection, int reason) {
-        enforceImsSingleRegistrationPermission("destroySipDelegate");
-
+        // Do not check permissions here - the caller needs to have a connection already from the
+        // create method to call this method.
+        if (connection == null) {
+            return;
+        }
         final long identity = Binder.clearCallingIdentity();
         try {
             SipTransportController transport = getRcsFeatureController(subId).getFeature(
@@ -730,6 +758,18 @@ public class ImsRcsController extends IImsRcsController.Stub {
      * @throws ServiceSpecificException if getting RcsFeatureManager instance failed.
      */
     private RcsFeatureController getRcsFeatureController(int subId) {
+        return getRcsFeatureController(subId, false /* skipVerifyingConfig */);
+    }
+
+    /**
+     * Retrieve RcsFeatureManager instance.
+     *
+     * @param subId the subscription ID
+     * @param skipVerifyingConfig If the RCS configuration can be skip.
+     * @return The RcsFeatureManager instance
+     * @throws ServiceSpecificException if getting RcsFeatureManager instance failed.
+     */
+    private RcsFeatureController getRcsFeatureController(int subId, boolean skipVerifyingConfig) {
         if (!ImsManager.isImsSupportedOnDevice(mApp)) {
             throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,
                     "IMS is not available on device.");
@@ -744,7 +784,9 @@ public class ImsRcsController extends IImsRcsController.Stub {
                     "Invalid subscription Id: " + subId);
         }
         int slotId = phone.getPhoneId();
-        verifyImsRcsConfiguredOrThrow(slotId);
+        if (!skipVerifyingConfig) {
+            verifyImsRcsConfiguredOrThrow(slotId);
+        }
         RcsFeatureController c = mRcsService.getFeatureController(slotId);
         if (c == null) {
             throw new ServiceSpecificException(ImsException.CODE_ERROR_UNSUPPORTED_OPERATION,

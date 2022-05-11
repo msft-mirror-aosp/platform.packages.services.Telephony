@@ -16,32 +16,29 @@
 
 package com.android.phone;
 
-import com.android.internal.telephony.CommandException;
-import com.android.internal.telephony.CommandsInterface;
-import com.android.internal.telephony.Phone;
-
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.res.TypedArray;
 import android.os.AsyncResult;
 import android.os.Handler;
 import android.os.Message;
 import android.preference.Preference;
-import android.preference.PreferenceActivity;
 import android.util.AttributeSet;
 import android.util.Log;
+
+import com.android.internal.telephony.CommandException;
+import com.android.internal.telephony.CommandsInterface;
+import com.android.internal.telephony.Phone;
 
 public class CdmaCallWaitingPreference extends Preference {
     private static final String LOG_TAG = "CdmaCallWaitingPreference";
     private static final boolean DBG = (PhoneGlobals.DBG_LEVEL >= 2);
 
-    private int mButtonClicked;
     private Context mContext;
     private Phone mPhone;
-    private SubscriptionInfoHelper mSubscriptionInfoHelper;
     private TimeConsumingPreferenceListener mTcpListener;
     private MyHandler mHandler = new MyHandler();
+    private boolean mIsActionAvailable = true;
 
     public CdmaCallWaitingPreference(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
@@ -67,11 +64,21 @@ public class CdmaCallWaitingPreference extends Preference {
         }
     }
 
+    /**
+     * Enables this preference if Call waiting is available in the platform. If not, this will
+     * override all attempts to enable the preference from the associated
+     * TimeConsumingPreferenceActivity.
+     */
+    public void setActionAvailable(boolean isAvailable) {
+        mIsActionAvailable = isAvailable;
+        super.setEnabled(mIsActionAvailable);
+    }
+
     @Override
     public void onClick() {
         super.onClick();
 
-        AlertDialog.Builder builder = new AlertDialog.Builder(mContext);
+        AlertDialog.Builder builder = FrameworksUtils.makeAlertDialogBuilder(mContext);
         builder.setTitle(mContext.getText(R.string.cdma_call_waiting));
         builder.setMessage(mContext.getText(R.string.enable_cdma_call_waiting_setting));
         builder.setPositiveButton(R.string.enable_cdma_cw, new DialogInterface.OnClickListener() {
@@ -93,6 +100,14 @@ public class CdmaCallWaitingPreference extends Preference {
             }
         });
         builder.create().show();
+    }
+
+    @Override
+    public void setEnabled(boolean enabled) {
+        // If this action is currently disabled due to configuration changes, do not allow anything
+        // to enable it.
+        if (!mIsActionAvailable) return;
+        super.setEnabled(enabled);
     }
 
     private class MyHandler extends Handler {
