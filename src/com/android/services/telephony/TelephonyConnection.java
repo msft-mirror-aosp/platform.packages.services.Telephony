@@ -2707,6 +2707,10 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         capabilities = changeBitmask(capabilities, CAPABILITY_SUPPORTS_VT_LOCAL_BIDIRECTIONAL,
                 isLocalVideoSupported);
 
+        capabilities = changeBitmask(capabilities, CAPABILITY_REMOTE_PARTY_SUPPORTS_RTT,
+                (mOriginalConnectionCapabilities & Capability.SUPPORTS_RTT_REMOTE)
+                == Capability.SUPPORTS_RTT_REMOTE);
+
         return capabilities;
     }
 
@@ -3809,5 +3813,14 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
             set.add(new Communicator.Message(internalMessageType, internalMessageValue));
             mCommunicator.sendMessages(set);
         }
+    }
+
+    /**
+     * Returns the current telephony connection listeners for test purposes.
+     * @return list of telephony connection listeners.
+     */
+    @VisibleForTesting
+    public List<TelephonyConnectionListener> getTelephonyConnectionListeners() {
+        return new ArrayList<>(mTelephonyListeners);
     }
 }
