@@ -496,8 +496,15 @@ public class ImsProvisioningController {
             int value = ImsProvisioningLoader.STATUS_NOT_SET;
 
             // updating KEY_VOLTE_PROVISIONING_STATUS
-            required = isProvisioningRequired(subId, CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_LTE,
-                    /*isMmTel*/true);
+            try {
+                required = isImsProvisioningRequiredForCapability(subId, CAPABILITY_TYPE_VOICE,
+                        REGISTRATION_TECH_LTE);
+            } catch (IllegalArgumentException e) {
+                logw("setInitialProvisioningKeys: KEY_VOLTE_PROVISIONING_STATUS failed for"
+                        + " subId=" + subId + ", exception: " + e.getMessage());
+                return;
+            }
+
             log(LOG_PREFIX, mSlotId,
                     "setInitialProvisioningKeys provisioning required(voice, lte) " + required);
             if (required) {
@@ -511,8 +518,15 @@ public class ImsProvisioningController {
             }
 
             // updating KEY_VT_PROVISIONING_STATUS
-            required = isProvisioningRequired(subId, CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_LTE,
-                    /*isMmTel*/true);
+            try {
+                required = isImsProvisioningRequiredForCapability(subId, CAPABILITY_TYPE_VIDEO,
+                        REGISTRATION_TECH_LTE);
+            } catch (IllegalArgumentException e) {
+                logw("setInitialProvisioningKeys: KEY_VT_PROVISIONING_STATUS failed for"
+                        + " subId=" + subId + ", exception: " + e.getMessage());
+                return;
+            }
+
             log(LOG_PREFIX, mSlotId,
                     "setInitialProvisioningKeys provisioning required(video, lte) " + required);
             if (required) {
@@ -526,8 +540,15 @@ public class ImsProvisioningController {
             }
 
             // updating KEY_VOICE_OVER_WIFI_ENABLED_OVERRIDE
-            required = isProvisioningRequired(subId, CAPABILITY_TYPE_VOICE,
-                    REGISTRATION_TECH_IWLAN, /*isMmTel*/true);
+            try {
+                required = isImsProvisioningRequiredForCapability(subId, CAPABILITY_TYPE_VOICE,
+                        REGISTRATION_TECH_IWLAN);
+            } catch (IllegalArgumentException e) {
+                logw("setInitialProvisioningKeys: KEY_VOICE_OVER_WIFI_ENABLED_OVERRIDE failed"
+                        + " for subId=" + subId + ", exception: " + e.getMessage());
+                return;
+            }
+
             log(LOG_PREFIX, mSlotId,
                     "setInitialProvisioningKeys provisioning required(voice, iwlan) " + required);
             if (required) {
@@ -681,7 +702,14 @@ public class ImsProvisioningController {
             // Assume that all radio techs have the same provisioning value
             int tech = REGISTRATION_TECH_LTE;
 
-            required = isProvisioningRequired(subId, capability, tech, /*isMmTel*/false);
+            try {
+                required = isRcsProvisioningRequiredForCapability(subId, capability, tech);
+            } catch (IllegalArgumentException e) {
+                logw("setInitialProvisioningKeys: KEY_EAB_PROVISIONING_STATUS failed for"
+                        + " subId=" + subId + ", exception: " + e.getMessage());
+                return;
+            }
+
             if (required) {
                 value = mImsProvisioningLoader.getProvisioningStatus(subId, FEATURE_RCS,
                         capability, tech);
@@ -889,7 +917,26 @@ public class ImsProvisioningController {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
 
+        // check new carrier config first KEY_MMTEL_REQUIRES_PROVISIONING_BUNDLE
         boolean retVal = isProvisioningRequired(subId, capability, tech, /*isMmTel*/true);
+
+        // if that returns false, check deprecated carrier config
+        // KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL, KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL
+        if (!retVal && (capability == CAPABILITY_TYPE_VOICE
+                || capability == CAPABILITY_TYPE_VIDEO
+                || capability == CAPABILITY_TYPE_UT)) {
+            String key = CarrierConfigManager.KEY_CARRIER_VOLTE_PROVISIONING_REQUIRED_BOOL;
+            if (capability == CAPABILITY_TYPE_UT) {
+                key = CarrierConfigManager.KEY_CARRIER_UT_PROVISIONING_REQUIRED_BOOL;
+            }
+
+            PersistableBundle imsCarrierConfigs = mCarrierConfigManager.getConfigForSubId(subId);
+            if (imsCarrierConfigs != null) {
+                retVal = imsCarrierConfigs.getBoolean(key);
+            } else {
+                retVal = CarrierConfigManager.getDefaultConfig().getBoolean(key);
+            }
+        }
 
         log("isImsProvisioningRequiredForCapability capability " + capability
                 + " tech " + tech + " return value " + retVal);
@@ -920,7 +967,21 @@ public class ImsProvisioningController {
             throw new IllegalArgumentException("Registration technology '" + tech + "' is invalid");
         }
 
+        // check new carrier config first KEY_RCS_REQUIRES_PROVISIONING_BUNDLE
         boolean retVal = isProvisioningRequired(subId, capability, tech, /*isMmTel*/false);
+
+        // if that returns false, check deprecated carrier config
+        // KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL
+        if (!retVal) {
+            PersistableBundle imsCarrierConfigs = mCarrierConfigManager.getConfigForSubId(subId);
+            if (imsCarrierConfigs != null) {
+                retVal = imsCarrierConfigs.getBoolean(
+                        CarrierConfigManager.KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL);
+            } else {
+                retVal = CarrierConfigManager.getDefaultConfig().getBoolean(
+                        CarrierConfigManager.KEY_CARRIER_RCS_PROVISIONING_REQUIRED_BOOL);
+            }
+        }
 
         log("isRcsProvisioningRequiredForCapability capability " + capability
                 + " tech " + tech + " return value " + retVal);
@@ -1212,8 +1273,7 @@ public class ImsProvisioningController {
         return false;
     }
 
-    @VisibleForTesting
-    protected int[] getTechsFromCarrierConfig(int subId, int capability, boolean isMmTel) {
+    private int[] getTechsFromCarrierConfig(int subId, int capability, boolean isMmTel) {
         String featureKey;
         String capabilityKey;
         if (isMmTel) {
