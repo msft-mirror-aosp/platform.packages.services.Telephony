@@ -38,8 +38,6 @@ import com.android.internal.telephony.PhoneConstants;
 import com.android.internal.telephony.cdma.CdmaCallWaitingNotification;
 import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsExternalConnection;
-import com.android.internal.telephony.imsphone.ImsPhone;
-import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.phone.NumberVerificationManager;
 import com.android.phone.PhoneUtils;
@@ -99,12 +97,6 @@ final class PstnIncomingCallNotifier {
                     break;
             }
         }
-
-        @Override
-        public String toString() {
-            return String.format("[PstnIncomingCallNotifierHandler; phoneId=[%s]",
-                    getPhoneIdAsString());
-        }
     };
 
     /**
@@ -131,7 +123,7 @@ final class PstnIncomingCallNotifier {
      */
     private void registerForNotifications() {
         if (mPhone != null) {
-            Log.i(this, "Registering: [%s]", getPhoneIdAsString());
+            Log.i(this, "Registering: %s", mPhone);
             mPhone.registerForNewRingingConnection(mHandler, EVENT_NEW_RINGING_CONNECTION, null);
             mPhone.registerForCallWaiting(mHandler, EVENT_CDMA_CALL_WAITING, null);
             mPhone.registerForUnknownConnection(mHandler, EVENT_UNKNOWN_CONNECTION, null);
@@ -140,7 +132,7 @@ final class PstnIncomingCallNotifier {
 
     private void unregisterForNotifications() {
         if (mPhone != null) {
-            Log.i(this, "Unregistering: [%s]", getPhoneIdAsString());
+            Log.i(this, "Unregistering: %s", mPhone);
             mPhone.unregisterForNewRingingConnection(mHandler);
             mPhone.unregisterForCallWaiting(mHandler);
             mPhone.unregisterForUnknownConnection(mHandler);
@@ -153,7 +145,7 @@ final class PstnIncomingCallNotifier {
      * @param asyncResult The result object from the new ringing event.
      */
     private void handleNewRingingConnection(AsyncResult asyncResult) {
-        Log.i(this, "handleNewRingingConnection: phoneId=[%s]", getPhoneIdAsString());
+        Log.d(this, "handleNewRingingConnection");
         Connection connection = (Connection) asyncResult.result;
         if (connection != null) {
             Call call = connection.getCall();
@@ -183,7 +175,7 @@ final class PstnIncomingCallNotifier {
     }
 
     private void handleCdmaCallWaiting(AsyncResult asyncResult) {
-        Log.i(this, "handleCdmaCallWaiting: phoneId=[%s]", getPhoneIdAsString());
+        Log.d(this, "handleCdmaCallWaiting");
         CdmaCallWaitingNotification ccwi = (CdmaCallWaitingNotification) asyncResult.result;
         Call call = mPhone.getRingingCall();
         if (call.getState() == Call.State.WAITING) {
@@ -197,7 +189,7 @@ final class PstnIncomingCallNotifier {
                     // Presentation of number not allowed, but the presentation of the Connection
                     // and the call waiting presentation match.
                     Log.i(this, "handleCdmaCallWaiting: inform telecom of waiting call; "
-                            + "presentation = %d", presentation);
+                                    + "presentation = %d", presentation);
                     sendIncomingCallIntent(connection);
                 } else if (!TextUtils.isEmpty(number) && Objects.equals(number, ccwi.number)) {
                     // Presentation of the number is allowed, so we ensure the number matches the
@@ -206,7 +198,7 @@ final class PstnIncomingCallNotifier {
                             + "number = %s", Rlog.pii(LOG_TAG, number));
                     sendIncomingCallIntent(connection);
                 } else {
-                    Log.i(this, "handleCdmaCallWaiting: presentation or number do not match, not"
+                    Log.w(this, "handleCdmaCallWaiting: presentation or number do not match, not"
                             + " informing telecom of call: %s", ccwi);
                 }
             }
@@ -214,9 +206,9 @@ final class PstnIncomingCallNotifier {
     }
 
     private void handleNewUnknownConnection(AsyncResult asyncResult) {
-        Log.i(this, "handleNewUnknownConnection: phoneId=[%s]", getPhoneIdAsString());
+        Log.i(this, "handleNewUnknownConnection");
         if (!(asyncResult.result instanceof Connection)) {
-            Log.i(this, "handleNewUnknownConnection called with non-Connection object");
+            Log.w(this, "handleNewUnknownConnection called with non-Connection object");
             return;
         }
         Connection connection = (Connection) asyncResult.result;
@@ -408,7 +400,7 @@ final class PstnIncomingCallNotifier {
             Log.i(this, "Receiving MT call in ECM. Using Emergency PhoneAccount Instead.");
             return emergencyHandle;
         }
-        Log.i(this, "PhoneAccount not found.");
+        Log.w(this, "PhoneAccount not found.");
         return null;
     }
 
@@ -455,12 +447,11 @@ final class PstnIncomingCallNotifier {
             if (unknown instanceof ImsExternalConnection &&
                     !(telephonyConnection
                             .getOriginalConnection() instanceof ImsExternalConnection)) {
-                Log.i(this, "maybeSwapWithUnknownConnection - not swapping "
-                        + "regular connection with external connection.");
+                Log.v(this, "maybeSwapWithUnknownConnection - not swapping regular connection " +
+                        "with external connection.");
                 return false;
             }
 
-            Log.i(this, "maybeSwapWithUnknownConnection: swapping %s with %s", original, unknown);
             telephonyConnection.setOriginalConnection(unknown);
 
             // Do not call hang up if the original connection is an ImsExternalConnection, it is
@@ -478,25 +469,9 @@ final class PstnIncomingCallNotifier {
                 phone.getCallTracker().cleanupCalls();
                 Log.i(this, "maybeSwapWithUnknownConnection - Invoking call tracker cleanup "
                         + "for connection: " + original);
-            } else if (original.getCall() != null && original.getCall().getPhone() != null
-                    && original.getCall().getPhone() instanceof ImsPhone
-                    && original instanceof ImsPhoneConnection) {
-                // We're replacing an existing ImsPhoneConnection; ensure we don't orhan the
-                // original connection.
-                ImsPhone phone = (ImsPhone) original.getCall().getPhone();
-                ImsPhoneCallTracker tracker = (ImsPhoneCallTracker) phone.getCallTracker();
-                tracker.cleanupAndRemoveConnection((ImsPhoneConnection) original);
-                Log.i(this, "maybeSwapWithUnknownConnection - cleanup/remove: " + original);
             }
             return true;
         }
         return false;
-    }
-
-    private String getPhoneIdAsString() {
-        if (mPhone == null) {
-            return "-1";
-        }
-        return String.valueOf(mPhone.getPhoneId());
     }
 }

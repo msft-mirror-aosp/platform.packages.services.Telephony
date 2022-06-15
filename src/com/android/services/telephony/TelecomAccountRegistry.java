@@ -16,7 +16,6 @@
 
 package com.android.services.telephony;
 
-import android.app.PropertyInvalidatedCache;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -832,7 +831,6 @@ public class TelecomAccountRegistry {
                     // torn down.
                     return;
                 }
-
                 boolean isVideoPresenceSupported = isCarrierVideoPresenceSupported();
                 if (mIsVideoPresenceSupported != isVideoPresenceSupported) {
                     Log.i(this, "updateVideoPresenceCapability for subId=" + mPhone.getSubId()
@@ -843,64 +841,30 @@ public class TelecomAccountRegistry {
         }
 
         public void updateRttCapability() {
-            synchronized (mAccountsLock) {
-                if (!mAccounts.contains(this)) {
-                    // Account has already been torn down, don't try to register it again.
-                    // This handles the case where teardown has already happened, and we got a Ims
-                    // registartion update that lost the race for the mAccountsLock.  In such a
-                    // scenario by the time we get here, the original phone account could have been
-                    // torn down.
-                    return;
-                }
-
-                boolean isRttEnabled = isRttCurrentlySupported();
-                if (isRttEnabled != mIsRttCapable) {
-                    Log.i(this, "updateRttCapability - changed, new value: " + isRttEnabled);
-                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
-                }
+            boolean isRttEnabled = isRttCurrentlySupported();
+            if (isRttEnabled != mIsRttCapable) {
+                Log.i(this, "updateRttCapability - changed, new value: " + isRttEnabled);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
             }
         }
 
         public void updateCallComposerCapability(MmTelFeature.MmTelCapabilities capabilities) {
-            synchronized (mAccountsLock) {
-                if (!mAccounts.contains(this)) {
-                    // Account has already been torn down, don't try to register it again.
-                    // This handles the case where teardown has already happened, and we got a Ims
-                    // registartion update that lost the race for the mAccountsLock.  In such a
-                    // scenario by the time we get here, the original phone account could have been
-                    // torn down.
-                    return;
-                }
-
-                boolean isCallComposerCapable = capabilities.isCapable(
-                        MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_CALL_COMPOSER);
-                if (isCallComposerCapable != mIsCallComposerCapable) {
-                    mIsCallComposerCapable = isCallComposerCapable;
-                    Log.i(this, "updateCallComposerCapability - changed, new value: "
-                            + isCallComposerCapable);
-                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
-                }
+            boolean isCallComposerCapable = capabilities.isCapable(
+                    MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_CALL_COMPOSER);
+            if (isCallComposerCapable != mIsCallComposerCapable) {
+                mIsCallComposerCapable = isCallComposerCapable;
+                Log.i(this, "updateCallComposerCapability - changed, new value: "
+                        + isCallComposerCapable);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
             }
         }
 
         public void updateDefaultDataSubId(int activeDataSubId) {
-            synchronized (mAccountsLock) {
-                if (!mAccounts.contains(this)) {
-                    // Account has already been torn down, don't try to register it again.
-                    // This handles the case where teardown has already happened, and we got a Ims
-                    // registartion update that lost the race for the mAccountsLock.  In such a
-                    // scenario by the time we get here, the original phone account could have been
-                    // torn down.
-                    return;
-                }
-
-                boolean isEmergencyPreferred = isEmergencyPreferredAccount(mPhone.getSubId(),
-                        activeDataSubId);
-                if (isEmergencyPreferred != mIsEmergencyPreferred) {
-                    Log.i(this,
-                            "updateDefaultDataSubId - changed, new value: " + isEmergencyPreferred);
-                    mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
-                }
+            boolean isEmergencyPreferred = isEmergencyPreferredAccount(mPhone.getSubId(),
+                    activeDataSubId);
+            if (isEmergencyPreferred != mIsEmergencyPreferred) {
+                Log.i(this, "updateDefaultDataSubId - changed, new value: " + isEmergencyPreferred);
+                mAccount = registerPstnPhoneAccount(mIsEmergency, mIsTestAccount);
             }
         }
 
@@ -1422,8 +1386,7 @@ public class TelecomAccountRegistry {
 
         // We also need to listen for changes to the service state (e.g. emergency -> in service)
         // because this could signal a removal or addition of a SIM in a single SIM phone.
-        mTelephonyManager.registerTelephonyCallback(TelephonyManager.INCLUDE_LOCATION_DATA_NONE,
-                new HandlerExecutor(mHandler),
+        mTelephonyManager.registerTelephonyCallback(new HandlerExecutor(mHandler),
                 mTelephonyCallback);
 
         // Listen for user switches.  When the user switches, we need to ensure that if the current
@@ -1595,9 +1558,6 @@ public class TelecomAccountRegistry {
             }
             mAccounts.clear();
         }
-        // Invalidate the TelephonyManager cache which maps phone account handles to sub ids since
-        // all the phone account handles are being recreated at this point.
-        PropertyInvalidatedCache.invalidateCache(TelephonyManager.CACHE_KEY_PHONE_ACCOUNT_TO_SUBID);
     }
 
     /**

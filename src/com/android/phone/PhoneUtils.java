@@ -468,8 +468,7 @@ public class PhoneUtils {
                     };
 
                 // build the dialog
-                final AlertDialog newDialog =
-                        FrameworksUtils.makeAlertDialogBuilder(contextThemeWrapper)
+                final AlertDialog newDialog = new AlertDialog.Builder(contextThemeWrapper)
                         .setMessage(text)
                         .setView(dialogView)
                         .setPositiveButton(R.string.send_button, mUSSDDialogListener)
@@ -547,9 +546,7 @@ public class PhoneUtils {
             // R.array.config_defaultNotificationVibePattern is not defined.
             long[] pattern = getLongArray(context.getResources(),
                     R.array.config_defaultNotificationVibePattern, DEFAULT_VIBRATE_PATTERN);
-            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1),
-                    new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION)
-                            .build());
+            vibrator.vibrate(VibrationEffect.createWaveform(pattern, -1));
         }
     }
 
@@ -718,7 +715,7 @@ public class PhoneUtils {
         // TODO: Should use some sort of special hidden flag to decorate this account as
         // an emergency-only account
         String id = isEmergency ? EMERGENCY_ACCOUNT_HANDLE_ID : prefix +
-                String.valueOf(phone.getSubId());
+                String.valueOf(phone.getFullIccSerialNumber());
         return makePstnPhoneAccountHandleWithPrefix(id, prefix, isEmergency);
     }
 
@@ -746,7 +743,7 @@ public class PhoneUtils {
 
     public static Phone getPhoneForPhoneAccountHandle(PhoneAccountHandle handle) {
         if (handle != null && handle.getComponentName().equals(getPstnConnectionServiceName())) {
-            return getPhoneFromSubId(handle.getId());
+            return getPhoneFromIccId(handle.getId());
         }
         return null;
     }
@@ -761,18 +758,18 @@ public class PhoneUtils {
      * {@code false} otherwise.
      */
     public static boolean isPhoneAccountActive(SubscriptionManager sm, PhoneAccountHandle handle) {
-        return sm.getActiveSubscriptionInfo(Integer.parseInt(handle.getId())) != null;
+        return sm.getActiveSubscriptionInfoForIcc(handle.getId()) != null;
     }
 
     private static ComponentName getPstnConnectionServiceName() {
         return PSTN_CONNECTION_SERVICE_COMPONENT;
     }
 
-    private static Phone getPhoneFromSubId(String subId) {
-        if (!TextUtils.isEmpty(subId)) {
+    private static Phone getPhoneFromIccId(String iccId) {
+        if (!TextUtils.isEmpty(iccId)) {
             for (Phone phone : PhoneFactory.getPhones()) {
-                String phoneSubId = Integer.toString(phone.getSubId());
-                if (subId.equals(phoneSubId)) {
+                String phoneIccId = phone.getFullIccSerialNumber();
+                if (iccId.equals(phoneIccId)) {
                     return phone;
                 }
             }

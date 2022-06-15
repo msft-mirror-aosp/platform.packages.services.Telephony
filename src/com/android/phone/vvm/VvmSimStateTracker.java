@@ -88,7 +88,7 @@ public class VvmSimStateTracker extends BroadcastReceiver {
                 VvmLog.e(TAG, "Cannot create TelephonyManager from " + mPhoneAccountHandle);
                 return;
             }
-            telephonyManager.registerTelephonyCallback(TelephonyManager.INCLUDE_LOCATION_DATA_NONE,
+            telephonyManager.registerTelephonyCallback(
                     new HandlerExecutor(new Handler(Looper.getMainLooper())), this);
         }
 

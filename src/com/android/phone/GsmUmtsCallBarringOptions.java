@@ -236,13 +236,8 @@ public class GsmUmtsCallBarringOptions extends TimeConsumingPreferenceActivity
                                     "change password for call barring failed with exception: "
                                             + ar.exception);
                         }
-                        CommandException commandException = (CommandException) ar.exception;
-                        onException(mButtonChangePW, commandException);
-                        if (commandException.getCommandError()
-                                != CommandException.Error.FDN_CHECK_FAILURE) {
-                            // Not a FDN_CHECK_FAILURE, enable mButtonChangePW
-                            mButtonChangePW.setEnabled(true);
-                        }
+                        onException(mButtonChangePW, (CommandException) ar.exception);
+                        mButtonChangePW.setEnabled(true);
                     } else if (ar.userObj instanceof Throwable) {
                         onError(mButtonChangePW, RESPONSE_ERROR);
                     } else {
