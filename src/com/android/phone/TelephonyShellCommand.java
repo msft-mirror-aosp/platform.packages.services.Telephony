@@ -734,7 +734,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         switch (arg) {
             case ENABLE: {
                 try {
-                    mInterface.enableDataConnectivity();
+                    mInterface.enableDataConnectivity(mContext.getOpPackageName());
                 } catch (RemoteException ex) {
                     Log.w(LOG_TAG, "data enable, error " + ex.getMessage());
                     errPw.println("Exception: " + ex.getMessage());
@@ -744,7 +744,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             }
             case DISABLE: {
                 try {
-                    mInterface.disableDataConnectivity();
+                    mInterface.disableDataConnectivity(mContext.getOpPackageName());
                 } catch (RemoteException ex) {
                     Log.w(LOG_TAG, "data disable, error " + ex.getMessage());
                     errPw.println("Exception: " + ex.getMessage());
@@ -1629,7 +1629,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         String tag = CARRIER_CONFIG_SUBCOMMAND + " " + CC_SET_VALUES_FROM_XML + ": ";
 
         // Parse all options
-        CcOptionParseResult options = parseCcOptions(tag, false);
+        CcOptionParseResult options = parseCcOptions(tag, true);
         if (options == null) {
             return -1;
         }
