@@ -73,6 +73,7 @@ import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telecom.TelecomManager;
 import android.telephony.Annotation.ApnType;
+import android.telephony.Annotation.DataActivityType;
 import android.telephony.Annotation.ThermalMitigationResult;
 import android.telephony.CallForwardingInfo;
 import android.telephony.CarrierConfigManager;
@@ -113,7 +114,6 @@ import android.telephony.UiccSlotInfo;
 import android.telephony.UiccSlotMapping;
 import android.telephony.UssdResponse;
 import android.telephony.VisualVoicemailSmsFilterSettings;
-import android.telephony.data.ApnSetting;
 import android.telephony.data.NetworkSlicingConfig;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.gba.GbaAuthRequest;
@@ -154,7 +154,6 @@ import com.android.internal.telephony.CarrierResolver;
 import com.android.internal.telephony.CellNetworkScanResult;
 import com.android.internal.telephony.CommandException;
 import com.android.internal.telephony.CommandsInterface;
-import com.android.internal.telephony.DefaultPhoneNotifier;
 import com.android.internal.telephony.GbaManager;
 import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.HalVersion;
@@ -184,6 +183,7 @@ import com.android.internal.telephony.SmsPermissions;
 import com.android.internal.telephony.SubscriptionController;
 import com.android.internal.telephony.TelephonyIntents;
 import com.android.internal.telephony.TelephonyPermissions;
+import com.android.internal.telephony.data.DataUtils;
 import com.android.internal.telephony.dataconnection.ApnSettingUtils;
 import com.android.internal.telephony.emergency.EmergencyNumberTracker;
 import com.android.internal.telephony.euicc.EuiccConnector;
@@ -194,7 +194,6 @@ import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
-import com.android.internal.telephony.uicc.IccRecords;
 import com.android.internal.telephony.uicc.IccUtils;
 import com.android.internal.telephony.uicc.SIMRecords;
 import com.android.internal.telephony.uicc.UiccCard;
@@ -751,10 +750,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             IccOpenLogicalChannelResponse.STATUS_NO_ERROR, selectResponse);
 
                         uiccPort = getUiccPortFromRequest(request);
-                        IccLogicalChannelRequest channelRequest =
-                                (IccLogicalChannelRequest) request.argument;
-                        channelRequest.channel = channelId;
-                        uiccPort.onLogicalChannelOpened(channelRequest);
+                        if (uiccPort == null) {
+                            loge("EVENT_OPEN_CHANNEL_DONE: UiccPort is null");
+                        } else {
+                            IccLogicalChannelRequest channelRequest =
+                                    (IccLogicalChannelRequest) request.argument;
+                            channelRequest.channel = channelId;
+                            uiccPort.onLogicalChannelOpened(channelRequest);
+                        }
                     } else {
                         if (ar.result == null) {
                             loge("iccOpenLogicalChannel: Empty response");
@@ -798,8 +801,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     if (ar.exception == null) {
                         request.result = true;
                         uiccPort = getUiccPortFromRequest(request);
-                        final int channelId = (Integer) request.argument;
-                        uiccPort.onLogicalChannelClosed(channelId);
+                        if (uiccPort == null) {
+                            loge("EVENT_CLOSE_CHANNEL_DONE: UiccPort is null");
+                        } else {
+                            final int channelId = (Integer) request.argument;
+                            uiccPort.onLogicalChannelClosed(channelId);
+                        }
                     } else {
                         request.result = false;
                         if (ar.exception instanceof CommandException) {
@@ -2366,7 +2373,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 ? getDefaultPhone() : getPhone(subId);
     }
 
-    private UiccPort getUiccPortFromRequest(MainThreadRequest request) {
+    @Nullable
+    private UiccPort getUiccPortFromRequest(@NonNull MainThreadRequest request) {
         Phone phone = getPhoneFromRequest(request);
         return phone == null ? null :
                 UiccController.getInstance().getUiccPort(phone.getPhoneId());
@@ -2841,7 +2849,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     // FIXME: subId version needed
     @Override
-    public boolean enableDataConnectivity() {
+    public boolean enableDataConnectivity(String callingPackage) {
         enforceModifyPermission();
 
         final long identity = Binder.clearCallingIdentity();
@@ -2851,7 +2859,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 if (phone.isUsingNewDataStack()) {
                     phone.getDataSettingsManager().setDataEnabled(
-                            TelephonyManager.DATA_ENABLED_REASON_USER, true);
+                            TelephonyManager.DATA_ENABLED_REASON_USER, true, callingPackage);
                 } else {
                     phone.getDataEnabledSettings().setDataEnabled(
                             TelephonyManager.DATA_ENABLED_REASON_USER, true);
@@ -2867,7 +2875,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     // FIXME: subId version needed
     @Override
-    public boolean disableDataConnectivity() {
+    public boolean disableDataConnectivity(String callingPackage) {
         enforceModifyPermission();
 
         final long identity = Binder.clearCallingIdentity();
@@ -2877,7 +2885,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 if (phone.isUsingNewDataStack()) {
                     phone.getDataSettingsManager().setDataEnabled(
-                            TelephonyManager.DATA_ENABLED_REASON_USER, false);
+                            TelephonyManager.DATA_ENABLED_REASON_USER, false, callingPackage);
                 } else {
                     phone.getDataEnabledSettings().setDataEnabled(
                             TelephonyManager.DATA_ENABLED_REASON_USER, false);
@@ -2897,7 +2905,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             final Phone phone = getPhone(subId);
             if (phone != null) {
-                return phone.isDataAllowed(ApnSetting.TYPE_DEFAULT);
+                return phone.isDataAllowed();
             } else {
                 return false;
             }
@@ -3011,17 +3019,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public int getDataActivity() {
+    public @DataActivityType int getDataActivity() {
         return getDataActivityForSubId(mSubscriptionController.getDefaultDataSubId());
     }
 
     @Override
-    public int getDataActivityForSubId(int subId) {
+    public @DataActivityType int getDataActivityForSubId(int subId) {
         final long identity = Binder.clearCallingIdentity();
         try {
             final Phone phone = getPhone(subId);
             if (phone != null) {
-                return DefaultPhoneNotifier.convertDataActivityState(phone.getDataActivityState());
+                return phone.getDataActivityState();
             } else {
                 return TelephonyManager.DATA_ACTIVITY_NONE;
             }
@@ -7614,7 +7622,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public void factoryReset(int subId) {
+    public void factoryReset(int subId, String callingPackage) {
         enforceSettingsPermission();
         if (mUserManager.hasUserRestriction(UserManager.DISALLOW_NETWORK_RESET)) {
             return;
@@ -7630,7 +7638,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (SubscriptionManager.isUsableSubIdValue(subId) && !mUserManager.hasUserRestriction(
                     UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
                 setDataEnabledForReason(subId, TelephonyManager.DATA_ENABLED_REASON_USER,
-                        getDefaultDataEnabled());
+                        getDefaultDataEnabled(), callingPackage);
                 setNetworkSelectionModeAutomatic(subId);
                 Phone phone = getPhone(subId);
                 cleanUpAllowedNetworkTypes(phone, subId);
@@ -8346,13 +8354,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     /**
      * Policy control of data connection with reason {@@TelephonyManager.DataEnabledReason}
      * @param subId Subscription index
-     * @param reason the reason the data enable change is taking place
+     * @param reason The reason the data enable change is taking place.
      * @param enabled True if enabling the data, otherwise disabling.
+     * @param callingPackage The package that changed the data enabled state.
      * @hide
      */
     @Override
     public void setDataEnabledForReason(int subId, @TelephonyManager.DataEnabledReason int reason,
-            boolean enabled) {
+            boolean enabled, String callingPackage) {
         if (reason == TelephonyManager.DATA_ENABLED_REASON_USER
                 || reason == TelephonyManager.DATA_ENABLED_REASON_CARRIER) {
             try {
@@ -8373,7 +8382,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     phone.carrierActionSetMeteredApnsEnabled(enabled);
                 } else {
                     if (phone.isUsingNewDataStack()) {
-                        phone.getDataSettingsManager().setDataEnabled(reason, enabled);
+                        phone.getDataSettingsManager().setDataEnabled(
+                                reason, enabled, callingPackage);
                     } else {
                         phone.getDataEnabledSettings().setDataEnabled(reason, enabled);
                     }
@@ -9601,11 +9611,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = getPhone(subId);
             if (phone == null) return false;
 
-            boolean isMetered = ApnSettingUtils.isMeteredApnType(apnType, phone);
+            boolean isMetered;
             boolean isDataEnabled;
             if (phone.isUsingNewDataStack()) {
+                isMetered = phone.getDataNetworkController().getDataConfigManager()
+                        .isMeteredCapability(DataUtils.apnTypeToNetworkCapability(apnType),
+                                phone.getServiceState().getDataRoaming());
                 isDataEnabled = phone.getDataSettingsManager().isDataEnabled(apnType);
             } else {
+                isMetered = ApnSettingUtils.isMeteredApnType(apnType, phone);
                 isDataEnabled = phone.getDataEnabledSettings().isDataEnabled(apnType);
             }
             return !isMetered || isDataEnabled;
@@ -9623,6 +9637,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             Phone phone = getPhone(subId);
             if (phone == null) return true; // By default return true.
+            if (phone.isUsingNewDataStack()) {
+                return phone.getDataNetworkController().getDataConfigManager().isMeteredCapability(
+                        DataUtils.apnTypeToNetworkCapability(apnType),
+                        phone.getServiceState().getDataRoaming());
+            }
 
             return ApnSettingUtils.isMeteredApnType(apnType, phone);
         } finally {
@@ -9684,15 +9703,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     @Override
-    public boolean isMvnoMatched(int subId, int mvnoType, @NonNull String mvnoMatchData) {
+    public boolean isMvnoMatched(int slotIndex, int mvnoType, @NonNull String mvnoMatchData) {
         enforceReadPrivilegedPermission("isMvnoMatched");
-        IccRecords iccRecords = UiccController.getInstance().getIccRecords(
-                SubscriptionManager.getPhoneId(subId), UiccController.APP_FAM_3GPP);
-        if (iccRecords == null) {
-            Log.d(LOG_TAG, "isMvnoMatched# IccRecords is null");
-            return false;
-        }
-        return ApnSettingUtils.mvnoMatches(iccRecords, mvnoType, mvnoMatchData);
+        return UiccController.getInstance().mvnoMatches(slotIndex, mvnoType, mvnoMatchData);
     }
 
     @Override
@@ -10095,7 +10108,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     private int handleDataThrottlingRequest(int subId,
-            DataThrottlingRequest dataThrottlingRequest) {
+            DataThrottlingRequest dataThrottlingRequest, String callingPackage) {
         boolean isDataThrottlingSupported = isRadioInterfaceCapabilitySupported(
                 TelephonyManager.CAPABILITY_THERMAL_MITIGATION_DATA_THROTTLING);
         if (!isDataThrottlingSupported && dataThrottlingRequest.getDataThrottlingAction()
@@ -10109,7 +10122,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return TelephonyManager.THERMAL_MITIGATION_RESULT_MODEM_NOT_AVAILABLE;
         }
 
-        setDataEnabledForReason(subId, TelephonyManager.DATA_ENABLED_REASON_THERMAL, true);
+        setDataEnabledForReason(
+                subId, TelephonyManager.DATA_ENABLED_REASON_THERMAL, true, callingPackage);
 
         if (isDataThrottlingSupported) {
             int thermalMitigationResult =
@@ -10211,7 +10225,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 case ThermalMitigationRequest.THERMAL_MITIGATION_ACTION_DATA_THROTTLING:
                     thermalMitigationResult =
                         handleDataThrottlingRequest(subId,
-                                thermalMitigationRequest.getDataThrottlingRequest());
+                                thermalMitigationRequest.getDataThrottlingRequest(),
+                                callingPackage);
                     break;
                 case ThermalMitigationRequest.THERMAL_MITIGATION_ACTION_VOICE_ONLY:
                     if (thermalMitigationRequest.getDataThrottlingRequest() != null) {
@@ -10228,7 +10243,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     }
 
                     setDataEnabledForReason(subId, TelephonyManager.DATA_ENABLED_REASON_THERMAL,
-                            false);
+                            false, callingPackage);
                     thermalMitigationResult = TelephonyManager.THERMAL_MITIGATION_RESULT_SUCCESS;
                     break;
                 case ThermalMitigationRequest.THERMAL_MITIGATION_ACTION_RADIO_OFF:
@@ -11163,7 +11178,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         if (!hasFinePermission
                 || !TelephonyPermissions.checkLastKnownCellIdAccessPermission(mApp)) {
             throw new SecurityException("getLastKnownCellIdentity need ACCESS_FINE_LOCATION "
-                    + "and BIND_CONNECTION_SERVICE permission.");
+                    + "and ACCESS_LAST_KNOWN_CELL_ID permission.");
         }
 
         final long identity = Binder.clearCallingIdentity();
