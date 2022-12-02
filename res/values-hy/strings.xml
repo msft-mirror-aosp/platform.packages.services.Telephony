@@ -575,7 +575,7 @@
     <string name="fire_type_description" msgid="6565200468934914930">"Հրշեջ ծառայություն"</string>
     <string name="description_concat_format" msgid="2014471565101724088">"%1$s, %2$s"</string>
     <string name="dialerKeyboardHintText" msgid="1115266533703764049">"Օգտագործեք ստեղնաշարը՝ համարհավաքման համար"</string>
-    <string name="onscreenHoldText" msgid="4025348842151665191">"Պահել"</string>
+    <string name="onscreenHoldText" msgid="4025348842151665191">"Սպասման մեջ դնել"</string>
     <string name="onscreenEndCallText" msgid="6138725377654842757">"Ավարտել"</string>
     <string name="onscreenShowDialpadText" msgid="658465753816164079">"Թվաշար"</string>
     <string name="onscreenMuteText" msgid="5470306116733843621">"Խլացնել"</string>
@@ -919,4 +919,8 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Ձեր Bluetooth-ի ազդանշանը թույլ է։ Փորձեք միացնել բարձրախոսը։"</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Զանգի որակի մասին ծանուցում"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Հնացած SIP հաշիվներ"</string>
+    <string name="limited_service_alert_dialog_description" msgid="6686928033670697313">"<xliff:g id="SPN">%s</xliff:g> օպերատորը չի աջակցում շտապ կանչեր Wi-Fi-ի միջոցով։ \n\nՇտապ կանչերը կկատարվեն բջջային ցանցի միջոցով։ Եթե բջջային ցանցի ծածկույթը սահմանափակ լինի, շտապ կանչերը կարող են չկատարվել։"</string>
+    <string name="do_not_show_again" msgid="8923026903375124550">"Այլևս ցույց չտալ"</string>
+    <string name="turn_off_wfc" msgid="2346229945400554258">"Անջատել Wi-Fi-ով զանգերը"</string>
+    <string name="unavailable_emergency_calls_notification_name" msgid="4390236789690885552">"Շտապ կանչերը կարող են անհասանելի լինել"</string>
 </resources>

@@ -380,6 +380,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private SharedPreferences mTelephonySharedPreferences;
     private PhoneConfigurationManager mPhoneConfigurationManager;
     private final RadioInterfaceCapabilityController mRadioInterfaceCapabilities;
+    private final Telephony2gUpdater mTelephony2gUpdater;
 
     /** User Activity */
     private AtomicBoolean mNotifyUserActivity;
@@ -2347,6 +2348,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mRadioInterfaceCapabilities = RadioInterfaceCapabilityController.getInstance();
         mNotifyUserActivity = new AtomicBoolean(false);
         PropertyInvalidatedCache.invalidateCache(TelephonyManager.CACHE_KEY_PHONE_ACCOUNT_TO_SUBID);
+        mTelephony2gUpdater = new Telephony2gUpdater(
+                Executors.newSingleThreadExecutor(), mApp);
+        mTelephony2gUpdater.init();
         publish();
     }
 
@@ -6499,6 +6503,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             @TelephonyManager.NetworkTypeBitMask long allowedNetworkTypes) {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "setAllowedNetworkTypesForReason");
+        // If the caller only has carrier privileges, then they should not be able to override
+        // any network types which were set for security reasons.
+        if (mApp.checkCallingOrSelfPermission(Manifest.permission.MODIFY_PHONE_STATE)
+                != PERMISSION_GRANTED
+                && (reason == TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G
+                || reason == TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_USER_RESTRICTIONS)) {
+            throw new SecurityException(
+                    "setAllowedNetworkTypesForReason cannot be called with carrier privileges for"
+                            + " reason "
+                            + reason);
+        }
         if (!TelephonyManager.isValidAllowedNetworkTypesReason(reason)) {
             loge("setAllowedNetworkTypesForReason: Invalid allowed network type reason: " + reason);
             return false;
