@@ -78,12 +78,12 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
@@ -507,7 +507,7 @@ public class TelephonyConnectionService extends ConnectionService {
         IntentFilter intentFilter = new IntentFilter(
                 TelecomManager.ACTION_TTY_PREFERRED_MODE_CHANGED);
         registerReceiver(mTtyBroadcastReceiver, intentFilter,
-                android.Manifest.permission.MODIFY_PHONE_STATE, null);
+                android.Manifest.permission.MODIFY_PHONE_STATE, null, Context.RECEIVER_EXPORTED);
     }
 
     @Override
@@ -1139,6 +1139,11 @@ public class TelephonyConnectionService extends ConnectionService {
                             android.telephony.DisconnectCause.OUTGOING_FAILURE,
                             "Invalid phone type",
                             phone.getPhoneId()));
+        }
+        if (!Objects.equals(request.getAccountHandle(), accountHandle)) {
+            Log.i(this, "onCreateOutgoingConnection, update phoneAccountHandle, accountHandle = "
+                    + accountHandle);
+            connection.setPhoneAccountHandle(accountHandle);
         }
         connection.setAddress(handle, PhoneConstants.PRESENTATION_ALLOWED);
         connection.setTelephonyConnectionInitializing();
@@ -2538,9 +2543,7 @@ public class TelephonyConnectionService extends ConnectionService {
                        return;
                    }
 
-                   c.sendMessages(new HashSet<Communicator.Message>() {{
-                       add(new Communicator.Message(message, value));
-                   }});
+                   c.sendMessages(Set.of(new Communicator.Message(message, value)));
 
                });
     }
