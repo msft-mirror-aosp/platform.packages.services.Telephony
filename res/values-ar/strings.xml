@@ -566,7 +566,7 @@
     <string name="emergency_enable_radio_dialog_message" msgid="1695305158151408629">"جارٍ تفعيل اللاسلكي..."</string>
     <string name="emergency_enable_radio_dialog_retry" msgid="4329131876852608587">"لا تتوفر خدمة. جارٍ إعادة المحاولة…"</string>
     <string name="radio_off_during_emergency_call" msgid="8011154134040481609">"لا يمكن دخول وضع الطيران أثناء إجراء مكالمة طوارئ."</string>
-    <string name="dial_emergency_error" msgid="825822413209026039">"يتعذر الاتصال. لا يعد <xliff:g id="NON_EMERGENCY_NUMBER">%s</xliff:g> رقم طوارئ."</string>
+    <string name="dial_emergency_error" msgid="825822413209026039">"يتعذر الاتصال. <xliff:g id="NON_EMERGENCY_NUMBER">%s</xliff:g> ليس رقم طوارئ."</string>
     <string name="dial_emergency_empty_error" msgid="2785803395047793634">"يتعذر الاتصال. يمكنك طلب رقم طوارئ."</string>
     <string name="dial_emergency_calling_not_available" msgid="6485846193794727823">"مكالمة الطوارئ غير متوفرة"</string>
     <string name="pin_puk_system_user_only" msgid="1045147220686867922">"‏يمكن لمالك الجهاز فقط إدخال رمزَي PIN/PUK."</string>
@@ -674,7 +674,6 @@
     <string name="accessibility_settings_activity_title" msgid="7883415189273700298">"إعدادات تمكين الوصول"</string>
     <string name="status_hint_label_incoming_wifi_call" msgid="2606052595898044071">"‏مكالمة Wi-Fi من"</string>
     <string name="status_hint_label_wifi_call" msgid="942993035689809853">"‏مكالمة عبر Wi-Fi"</string>
-    <string name="emergency_action_launch_hint" msgid="2762016865340891314">"انقر مرة أخرى للفتح."</string>
     <string name="message_decode_error" msgid="1061856591500290887">"حدث خطأ أثناء فك ترميز الرسالة."</string>
     <string name="callFailed_cdma_activation" msgid="5392057031552253550">"‏نشطت شريحة SIM خدمتك وحدّثت إمكانات التجوال لهاتفك."</string>
     <string name="callFailed_cdma_call_limit" msgid="1074219746093031412">"هناك الكثير من المكالمات النشطة. يرجى إنهاء أو دمج المكالمات الموجودة قبل إجراء مكالمة جديدة."</string>
@@ -836,6 +835,7 @@
     <string name="dsds_dialog_message" msgid="4047480385678538850">"عليك إعادة تشغيل جهازك لتغيير هذا الإعداد."</string>
     <string name="dsds_dialog_confirm" msgid="9032004888134129885">"إعادة التشغيل"</string>
     <string name="dsds_dialog_cancel" msgid="3245958947099586655">"إلغاء"</string>
+    <string name="removable_esim_string" msgid="7931369811671787649">"‏ضبط شريحة eSIM القابلة للإزالة كشريحة تلقائية"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"طاقة اللاسلكي للجوّال"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"‏عرض دفتر عناوين SIM"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"عرض أرقام الطلب الثابت"</string>
