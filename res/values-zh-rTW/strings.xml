@@ -837,6 +837,7 @@
     <string name="dsds_dialog_cancel" msgid="3245958947099586655">"取消"</string>
     <string name="removable_esim_string" msgid="7931369811671787649">"將可移除的 eSIM 卡設為預設 eSIM 卡"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"行動無線電電源"</string>
+    <string name="simulate_out_of_service_string" msgid="7787925611727597193">"模擬無法使用服務的情況 (僅限偵錯版本)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"查看 SIM 通訊錄"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"查看固定撥號"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"查看服務撥號號碼"</string>
@@ -861,6 +862,7 @@
     <string name="radioInfo_data_connected" msgid="7637335645634239508">"已連線"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"待命"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"不明"</string>
+    <string name="radioInfo_imei_primary" msgid="5948747378637224400">"主要"</string>
     <string name="radioInfo_display_packets" msgid="6794302192441084157">"pkts"</string>
     <string name="radioInfo_display_bytes" msgid="7701006329222413797">"位元組"</string>
     <string name="radioInfo_display_dbm" msgid="7491944975710865703">"dBm"</string>

@@ -64,6 +64,7 @@ import com.android.internal.telephony.ExponentialBackoff;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.SubscriptionController;
+import com.android.internal.telephony.subscription.SubscriptionManagerService;
 import com.android.phone.PhoneGlobals;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
@@ -72,6 +73,7 @@ import com.android.telephony.Rlog;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.function.Predicate;
 
@@ -273,6 +275,8 @@ public class TelecomAccountRegistry {
 
         private PhoneAccount registerPstnPhoneAccount(boolean isEmergency, boolean isTestAccount) {
             PhoneAccount account = buildPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+            Log.i(this, "registerPstnPhoneAccount: Registering account=%s with "
+                    + "Telecom. subId=%d", account, getSubId());
             // Register with Telecom and put into the account entry.
             mTelecomManager.registerPhoneAccount(account);
             return account;
@@ -284,13 +288,18 @@ public class TelecomAccountRegistry {
         private PhoneAccount buildPstnPhoneAccount(boolean isEmergency, boolean isTestAccount) {
             String testPrefix = isTestAccount ? "Test " : "";
 
+            // Check if we are registering another user. If we are, ensure that the account
+            // is registered to that user handle.
+            int subId = mPhone.getSubId();
+            // Get user handle from phone's sub id (if we get null, then system user will be used)
+            UserHandle userToRegister = mPhone.getUserHandle();
+
             // Build the Phone account handle.
             PhoneAccountHandle phoneAccountHandle =
                     PhoneUtils.makePstnPhoneAccountHandleWithPrefix(
-                            mPhone, testPrefix, isEmergency);
+                            mPhone, testPrefix, isEmergency, userToRegister);
 
             // Populate the phone account data.
-            int subId = mPhone.getSubId();
             String subscriberId = mPhone.getSubscriberId();
             int color = PhoneAccount.NO_HIGHLIGHT_COLOR;
             int slotId = SubscriptionManager.INVALID_SIM_SLOT_INDEX;
@@ -303,8 +312,8 @@ public class TelecomAccountRegistry {
                 subNumber = "";
             }
 
-            String label;
-            String description;
+            String label = "";
+            String description = "";
             Icon icon = null;
 
             // We can only get the real slotId from the SubInfoRecord, we can't calculate the
@@ -320,7 +329,9 @@ public class TelecomAccountRegistry {
             } else if (mTelephonyManager.getPhoneCount() == 1) {
                 // For single-SIM devices, we show the label and description as whatever the name of
                 // the network is.
-                description = label = tm.getNetworkOperatorName();
+                if (record != null) {
+                    description = label = String.valueOf(record.getDisplayName());
+                }
             } else {
                 CharSequence subDisplayName = null;
 
@@ -354,8 +365,12 @@ public class TelecomAccountRegistry {
 
             // By default all SIM phone accounts can place emergency calls.
             int capabilities = PhoneAccount.CAPABILITY_SIM_SUBSCRIPTION |
-                    PhoneAccount.CAPABILITY_CALL_PROVIDER |
-                    PhoneAccount.CAPABILITY_MULTI_USER;
+                    PhoneAccount.CAPABILITY_CALL_PROVIDER;
+
+            // This is enabled by default. To support work profiles, it should not be enabled.
+            if (userToRegister == null) {
+                capabilities |= PhoneAccount.CAPABILITY_MULTI_USER;
+            }
 
             if (mContext.getResources().getBoolean(R.bool.config_pstnCanPlaceEmergencyCalls)) {
                 capabilities |= PhoneAccount.CAPABILITY_PLACE_EMERGENCY_CALLS;
@@ -535,18 +550,37 @@ public class TelecomAccountRegistry {
                 return false;
             }
 
-            SubscriptionController controller = SubscriptionController.getInstance();
-            if (controller == null) {
-                Log.d(this, "isEmergencyPreferredAccount: SubscriptionController not available.");
-                return false;
-            }
-            // Only set an emergency preference on devices with multiple active subscriptions
-            // (include opportunistic subscriptions) in this check.
-            // API says never null, but this can return null in testing.
-            int[] activeSubIds = controller.getActiveSubIdList(false);
-            if (activeSubIds == null || activeSubIds.length <= 1) {
-                Log.d(this, "isEmergencyPreferredAccount: one or less active subscriptions.");
-                return false;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                if (SubscriptionManagerService.getInstance() == null) {
+                    Log.d(this,
+                            "isEmergencyPreferredAccount: SubscriptionManagerService not "
+                                    + "available.");
+                    return false;
+                }
+                // Only set an emergency preference on devices with multiple active subscriptions
+                // (include opportunistic subscriptions) in this check.
+                // API says never null, but this can return null in testing.
+                int[] activeSubIds = SubscriptionManagerService.getInstance()
+                        .getActiveSubIdList(false);
+                if (activeSubIds == null || activeSubIds.length <= 1) {
+                    Log.d(this, "isEmergencyPreferredAccount: one or less active subscriptions.");
+                    return false;
+                }
+            } else {
+                SubscriptionController controller = SubscriptionController.getInstance();
+                if (controller == null) {
+                    Log.d(this,
+                            "isEmergencyPreferredAccount: SubscriptionController not available.");
+                    return false;
+                }
+                // Only set an emergency preference on devices with multiple active subscriptions
+                // (include opportunistic subscriptions) in this check.
+                // API says never null, but this can return null in testing.
+                int[] activeSubIds = controller.getActiveSubIdList(false);
+                if (activeSubIds == null || activeSubIds.length <= 1) {
+                    Log.d(this, "isEmergencyPreferredAccount: one or less active subscriptions.");
+                    return false;
+                }
             }
             // Check to see if this PhoneAccount is associated with the default Data subscription.
             if (!SubscriptionManager.isValidSubscriptionId(subId)) {
@@ -554,10 +588,21 @@ public class TelecomAccountRegistry {
                         + "valid.");
                 return false;
             }
-            int userDefaultData = controller.getDefaultDataSubId();
+            int userDefaultData = SubscriptionManager.getDefaultDataSubscriptionId();
             boolean isActiveDataValid = SubscriptionManager.isValidSubscriptionId(activeDataSubId);
-            boolean isActiveDataOpportunistic = isActiveDataValid
-                    && controller.isOpportunistic(activeDataSubId);
+
+            boolean isActiveDataOpportunistic;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                SubscriptionInfo subInfo;
+                subInfo = SubscriptionManagerService.getInstance()
+                        .getSubscriptionInfo(activeDataSubId);
+                isActiveDataOpportunistic = isActiveDataValid && subInfo != null
+                        && subInfo.isOpportunistic();
+            } else {
+                isActiveDataOpportunistic = isActiveDataValid
+                        && SubscriptionController.getInstance().isOpportunistic(activeDataSubId);
+            }
+
             // compare the activeDataSubId to the subId specified only if it is valid and not an
             // opportunistic subscription (only supports data). If not, use the current default
             // defined by the user.
@@ -924,7 +969,7 @@ public class TelecomAccountRegistry {
                 // Next check whether we're in or near a country that supports it
                 String country =
                         mPhone.getServiceStateTracker().getLocaleTracker()
-                                .getLastKnownCountryIso().toLowerCase();
+                                .getLastKnownCountryIso().toLowerCase(Locale.ROOT);
 
                 String[] supportedCountries = mContext.getResources().getStringArray(
                         R.array.config_simless_emergency_rtt_supported_countries);
@@ -1132,7 +1177,10 @@ public class TelecomAccountRegistry {
         @Override
         public void onServiceStateChanged(ServiceState serviceState) {
             int newState = serviceState.getState();
+            Log.i(this, "onServiceStateChanged: newState=%d, mServiceState=%d",
+                    newState, mServiceState);
             if (newState == ServiceState.STATE_IN_SERVICE && mServiceState != newState) {
+                Log.i(this, "onServiceStateChanged: Tearing down and re-setting up accounts.");
                 tearDownAccounts();
                 setupAccounts();
             } else {
@@ -1579,6 +1627,7 @@ public class TelecomAccountRegistry {
 
             // Add a fake account entry.
             if (DBG && phones.length > 0 && "TRUE".equals(System.getProperty("test_sim"))) {
+                Log.i(this, "setupAccounts: adding a fake AccountEntry");
                 mAccounts.add(new AccountEntry(phones[0], false /* emergency */,
                         true /* isTest */));
             }

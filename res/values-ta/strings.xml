@@ -837,6 +837,7 @@
     <string name="dsds_dialog_cancel" msgid="3245958947099586655">"ரத்துசெய்"</string>
     <string name="removable_esim_string" msgid="7931369811671787649">"அகற்றக்கூடிய eSIMமை இயல்பாக அமை"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"மொபைல் ரேடியோ பவர்"</string>
+    <string name="simulate_out_of_service_string" msgid="7787925611727597193">"சாதனம் \'வேலை செய்யவில்லை\' என்பதை சிமுலேட் செய்தல் (பிழைதிருத்தப் பதிப்பில் மட்டும்)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"சிம் முகவரிப் புத்தகத்தைக் காட்டு"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"நிலையான அழைப்பு எண்களைக் காட்டு"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"சேவை அழைப்பு எண்களைக் காட்டு"</string>
@@ -861,6 +862,7 @@
     <string name="radioInfo_data_connected" msgid="7637335645634239508">"இணைக்கப்பட்டுள்ளது"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"இடைநீக்கப்பட்டது"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"தெரியாதது"</string>
+    <string name="radioInfo_imei_primary" msgid="5948747378637224400">"முதன்மை"</string>
     <string name="radioInfo_display_packets" msgid="6794302192441084157">"pkts"</string>
     <string name="radioInfo_display_bytes" msgid="7701006329222413797">"பைட்டுகள்"</string>
     <string name="radioInfo_display_dbm" msgid="7491944975710865703">"dBm"</string>

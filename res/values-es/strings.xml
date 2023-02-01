@@ -575,7 +575,7 @@
     <string name="fire_type_description" msgid="6565200468934914930">"Bomberos"</string>
     <string name="description_concat_format" msgid="2014471565101724088">"%1$s, %2$s"</string>
     <string name="dialerKeyboardHintText" msgid="1115266533703764049">"Utilizar teclado para marcar"</string>
-    <string name="onscreenHoldText" msgid="4025348842151665191">"Retener"</string>
+    <string name="onscreenHoldText" msgid="4025348842151665191">"Pausar"</string>
     <string name="onscreenEndCallText" msgid="6138725377654842757">"Finalizar"</string>
     <string name="onscreenShowDialpadText" msgid="658465753816164079">"Teclado"</string>
     <string name="onscreenMuteText" msgid="5470306116733843621">"Silenciar"</string>
@@ -837,6 +837,7 @@
     <string name="dsds_dialog_cancel" msgid="3245958947099586655">"Cancelar"</string>
     <string name="removable_esim_string" msgid="7931369811671787649">"Establecer eSIM extraíble como predeterminada"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Potencia de la señal móvil"</string>
+    <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simular fuera del servicio (solo versión de depuración)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Ver libreta de direcciones de tarjeta SIM"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Ver números de marcación fija"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Ver números de marcación de servicio"</string>
@@ -861,6 +862,7 @@
     <string name="radioInfo_data_connected" msgid="7637335645634239508">"Conectado"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"Suspendido"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"Desconocido"</string>
+    <string name="radioInfo_imei_primary" msgid="5948747378637224400">"Principal"</string>
     <string name="radioInfo_display_packets" msgid="6794302192441084157">"pqts"</string>
     <string name="radioInfo_display_bytes" msgid="7701006329222413797">"bytes"</string>
     <string name="radioInfo_display_dbm" msgid="7491944975710865703">"dBm"</string>

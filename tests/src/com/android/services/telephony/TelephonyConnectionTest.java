@@ -1,5 +1,7 @@
 package com.android.services.telephony;
 
+import static android.telecom.Connection.STATE_DISCONNECTED;
+
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertNull;
@@ -7,6 +9,9 @@ import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 import static junit.framework.TestCase.assertFalse;
 
+import static org.junit.Assert.assertNotEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -14,6 +19,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.os.Bundle;
+import android.os.PersistableBundle;
 import android.telecom.Connection;
 import android.telephony.CarrierConfigManager;
 import android.telephony.DisconnectCause;
@@ -37,6 +43,8 @@ import org.mockito.MockitoAnnotations;
 public class TelephonyConnectionTest {
     @Mock
     private ImsPhoneConnection mImsPhoneConnection;
+    @Mock
+    private TelephonyConnectionService mTelephonyConnectionService;
 
     @Before
     public void setUp() throws Exception {
@@ -211,5 +219,91 @@ public class TelephonyConnectionTest {
         } catch (ClassCastException e) {
             fail("refreshConferenceSupported threw ClassCastException");
         }
+    }
+
+    /**
+     * Tests TelephonyConnection#getCarrierConfig never returns a null given all cases that can
+     * cause a potential null.
+     */
+    @Test
+    public void testGetCarrierConfigBehaviorWithNull() throws Exception {
+        TestTelephonyConnectionSimple c = new TestTelephonyConnectionSimple();
+
+        // case: return a valid carrier config (good case)
+        when(c.mPhoneGlobals.getCarrierConfigForSubId(c.getPhone().getSubId())).
+                thenReturn(CarrierConfigManager.getDefaultConfig());
+        assertNotNull(c.getCarrierConfig());
+
+        // case: PhoneGlobals.getInstance().getCarrierConfigForSubId(int) returns null
+        when(c.mPhoneGlobals.getCarrierConfigForSubId(c.getPhone().getSubId()))
+                .thenReturn(null);
+        assertNotNull(c.getCarrierConfig());
+
+        // case: phone is null
+        c.setMockPhone(null);
+        assertNull(c.getPhone());
+        assertNotNull(c.getCarrierConfig());
+    }
+
+    /**
+     * Tests the behavior of TelephonyConnection#isRttMergeSupported(@NonNull PersistableBundle).
+     * Note, the function should be able to handle an empty PersistableBundle and should NEVER
+     * receive a null object as denoted in by @NonNull annotation.
+     */
+    @Test
+    public void testIsRttMergeSupportedBehavior() {
+        TestTelephonyConnection c = new TestTelephonyConnection();
+        //  ensure isRttMergeSupported(PersistableBundle) does not throw NPE when given an Empty PB
+        assertFalse(c.isRttMergeSupported(new PersistableBundle()));
+
+        // simulate the passing situation
+        c.getCarrierConfigBundle().putBoolean(
+                CarrierConfigManager.KEY_ALLOW_MERGING_RTT_CALLS_BOOL,
+                true);
+        assertTrue(c.isRttMergeSupported(c.getCarrierConfig()));
+    }
+
+    @Test
+    public void testDomainSelectionDisconnected() {
+        TestTelephonyConnection c = new TestTelephonyConnection();
+        c.setOriginalConnection(mImsPhoneConnection);
+        doReturn(Call.State.DISCONNECTED).when(mImsPhoneConnection)
+                .getState();
+        c.setTelephonyConnectionService(mTelephonyConnectionService);
+        c.updateState();
+
+        verify(mTelephonyConnectionService)
+                .maybeReselectDomain(any(), anyInt(), any());
+    }
+
+    @Test
+    public void testDomainSelectionDisconnected_NoRedial() {
+        TestTelephonyConnection c = new TestTelephonyConnection();
+        c.setOriginalConnection(mImsPhoneConnection);
+        doReturn(Call.State.DISCONNECTED).when(mImsPhoneConnection)
+                .getState();
+        c.setTelephonyConnectionService(mTelephonyConnectionService);
+        doReturn(false).when(mTelephonyConnectionService)
+                .maybeReselectDomain(any(), anyInt(), any());
+        c.updateState();
+
+        assertEquals(STATE_DISCONNECTED, c.getState());
+    }
+
+    @Test
+    public void testDomainSelectionDisconnected_Redial() {
+        TestTelephonyConnection c = new TestTelephonyConnection();
+        c.setOriginalConnection(mImsPhoneConnection);
+
+        doReturn(Call.State.DISCONNECTED).when(mImsPhoneConnection)
+                .getState();
+        c.setTelephonyConnectionService(mTelephonyConnectionService);
+        doReturn(true).when(mTelephonyConnectionService)
+                .maybeReselectDomain(any(), anyInt(), any());
+        c.resetOriginalConnectionCleared();
+        c.updateState();
+
+        assertNotEquals(STATE_DISCONNECTED, c.getState());
+        assertTrue(c.isOriginalConnectionCleared());
     }
 }
