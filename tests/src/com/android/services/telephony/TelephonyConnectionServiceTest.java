@@ -18,6 +18,7 @@ package com.android.services.telephony;
 
 import static android.telephony.DisconnectCause.EMERGENCY_PERM_FAILURE;
 import static android.telephony.DisconnectCause.EMERGENCY_TEMP_FAILURE;
+import static android.telephony.DisconnectCause.ERROR_UNSPECIFIED;
 import static android.telephony.DisconnectCause.NOT_DISCONNECTED;
 import static android.telephony.DomainSelectionService.SELECTOR_TYPE_CALLING;
 import static android.telephony.NetworkRegistrationInfo.DOMAIN_CS;
@@ -1949,6 +1950,213 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         DomainSelectionService.SelectionAttributes attr = attrCaptor.getValue();
 
         assertEquals(mPhone1.getPhoneId(), attr.getSlotId());
+    }
+
+    @Test
+    public void testOnSelectionTerminatedUnspecified() throws Exception {
+        setupForCallTest();
+
+        doReturn(mEmergencyCallDomainSelectionConnection).when(mDomainSelectionResolver)
+                .getDomainSelectionConnection(any(), anyInt(), eq(true));
+        doReturn(mPhone0).when(mEmergencyCallDomainSelectionConnection).getPhone();
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+
+        doReturn(true).when(mDomainSelectionResolver).isDomainSelectionSupported();
+        doReturn(mImsPhone).when(mPhone0).getImsPhone();
+
+        mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+
+        ArgumentCaptor<DomainSelectionConnection.DomainSelectionConnectionCallback> callbackCaptor =
+                ArgumentCaptor.forClass(
+                        DomainSelectionConnection.DomainSelectionConnectionCallback.class);
+
+        verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(
+                any(), callbackCaptor.capture());
+
+        DomainSelectionConnection.DomainSelectionConnectionCallback callback =
+                callbackCaptor.getValue();
+
+        assertNotNull(callback);
+
+        callback.onSelectionTerminated(ERROR_UNSPECIFIED);
+
+        verify(mEmergencyCallDomainSelectionConnection).cancelSelection();
+        verify(mEmergencyStateTracker).endCall(eq(TELECOM_CALL_ID1));
+    }
+
+    @Test
+    public void testDomainSelectionLocalHangupStartEmergencyCall() throws Exception {
+        setupForCallTest();
+
+        int selectedDomain = DOMAIN_CS;
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, true);
+
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        doReturn(future).when(mEmergencyStateTracker)
+                .startEmergencyCall(any(), anyString(), eq(false));
+
+        mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+
+        verify(mEmergencyStateTracker)
+                .startEmergencyCall(eq(mPhone0), eq(TELECOM_CALL_ID1), eq(false));
+
+        TelephonyConnection c = new TestTelephonyConnection();
+        c.setTelecomCallId(TELECOM_CALL_ID1);
+
+        // dialing is canceled
+        mTestConnectionService.onLocalHangup(c);
+
+        // startEmergencyCall has completed
+        future.complete(NOT_DISCONNECTED);
+
+        // verify that createEmergencyConnection is discarded
+        verify(mEmergencyCallDomainSelectionConnection, times(0))
+                .createEmergencyConnection(any(), any());
+    }
+
+    @Test
+    public void testDomainSelectionLocalHangupCreateEmergencyConnection() throws Exception {
+        setupForCallTest();
+
+        int selectedDomain = DOMAIN_CS;
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, true);
+
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        doReturn(future).when(mEmergencyCallDomainSelectionConnection)
+                .createEmergencyConnection(any(), any());
+
+        mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+
+        verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
+
+        TelephonyConnection c = new TestTelephonyConnection();
+        c.setTelecomCallId(TELECOM_CALL_ID1);
+
+        // dialing is canceled
+        mTestConnectionService.onLocalHangup(c);
+
+        // domain selection has completed
+        future.complete(selectedDomain);
+
+        // verify that dialing is discarded
+        verify(mPhone0, times(0)).dial(anyString(), any(), any());
+    }
+
+    @Test
+    public void testDomainSelectionRedialLocalHangupReselectDomain() throws Exception {
+        setupForCallTest();
+
+        int preciseDisconnectCause = com.android.internal.telephony.CallFailCause.ERROR_UNSPECIFIED;
+        int disconnectCause = android.telephony.DisconnectCause.ERROR_UNSPECIFIED;
+        int selectedDomain = DOMAIN_CS;
+
+        TestTelephonyConnection c = setupForReDialForDomainSelection(
+                mPhone0, selectedDomain, preciseDisconnectCause, disconnectCause, true);
+        c.setTelecomCallId(TELECOM_CALL_ID1);
+
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        doReturn(future).when(mEmergencyCallDomainSelectionConnection)
+                .reselectDomain(any());
+
+        assertTrue(mTestConnectionService.maybeReselectDomain(c, preciseDisconnectCause, null));
+        verify(mEmergencyCallDomainSelectionConnection).reselectDomain(any());
+
+        // dialing is canceled
+        mTestConnectionService.onLocalHangup(c);
+
+        // domain selection has completed
+        future.complete(selectedDomain);
+
+        // verify that dialing is discarded
+        verify(mPhone0, times(0)).dial(anyString(), any(), any());
+    }
+
+    @Test
+    public void testDomainSelectionNormalToEmergencyLocalHangupStartEmergencyCall()
+            throws Exception {
+        setupForCallTest();
+
+        int preciseDisconnectCause = com.android.internal.telephony.CallFailCause.ERROR_UNSPECIFIED;
+        int disconnectCause = android.telephony.DisconnectCause.ERROR_UNSPECIFIED;
+        int eccCategory = EMERGENCY_SERVICE_CATEGORY_POLICE;
+        int selectedDomain = DOMAIN_CS;
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, true);
+        doReturn(mPhone0).when(mImsPhone).getDefaultPhone();
+
+        TestTelephonyConnection c = setupForReDialForDomainSelection(
+                mImsPhone, selectedDomain, preciseDisconnectCause, disconnectCause, false);
+        c.setEmergencyServiceCategory(eccCategory);
+        c.setAddress(TEST_ADDRESS, TelecomManager.PRESENTATION_ALLOWED);
+        c.setTelecomCallId(TELECOM_CALL_ID1);
+
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        doReturn(future).when(mEmergencyStateTracker)
+                .startEmergencyCall(any(), anyString(), eq(false));
+
+        ImsReasonInfo reasonInfo = new ImsReasonInfo(CODE_SIP_ALTERNATE_EMERGENCY_CALL, 0, null);
+        assertTrue(mTestConnectionService.maybeReselectDomain(c,
+                  preciseDisconnectCause, reasonInfo));
+
+        verify(mEmergencyStateTracker)
+                .startEmergencyCall(eq(mPhone0), eq(TELECOM_CALL_ID1), eq(false));
+
+        // dialing is canceled
+        mTestConnectionService.onLocalHangup(c);
+
+        // startEmergencyCall has completed
+        future.complete(NOT_DISCONNECTED);
+
+        // verify that createEmergencyConnection is discarded
+        verify(mEmergencyCallDomainSelectionConnection, times(0))
+                .createEmergencyConnection(any(), any());
+    }
+
+    @Test
+    public void testDomainSelectionNormalToEmergencyLocalHangupCreateEmergencyConnection()
+            throws Exception {
+        setupForCallTest();
+
+        int preciseDisconnectCause = com.android.internal.telephony.CallFailCause.ERROR_UNSPECIFIED;
+        int disconnectCause = android.telephony.DisconnectCause.ERROR_UNSPECIFIED;
+        int eccCategory = EMERGENCY_SERVICE_CATEGORY_POLICE;
+        int selectedDomain = DOMAIN_CS;
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, true);
+        doReturn(mPhone0).when(mImsPhone).getDefaultPhone();
+
+        TestTelephonyConnection c = setupForReDialForDomainSelection(
+                mImsPhone, selectedDomain, preciseDisconnectCause, disconnectCause, false);
+        c.setEmergencyServiceCategory(eccCategory);
+        c.setAddress(TEST_ADDRESS, TelecomManager.PRESENTATION_ALLOWED);
+        c.setTelecomCallId(TELECOM_CALL_ID1);
+
+        CompletableFuture<Integer> future = new CompletableFuture<>();
+        doReturn(future).when(mEmergencyCallDomainSelectionConnection)
+                .createEmergencyConnection(any(), any());
+
+        ImsReasonInfo reasonInfo = new ImsReasonInfo(CODE_SIP_ALTERNATE_EMERGENCY_CALL, 0, null);
+        assertTrue(mTestConnectionService.maybeReselectDomain(c,
+                  preciseDisconnectCause, reasonInfo));
+
+        verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
+
+        // dialing is canceled
+        mTestConnectionService.onLocalHangup(c);
+
+        // domain selection has completed
+        future.complete(selectedDomain);
+
+        // verify that dialing is discarded
+        verify(mPhone0, times(0)).dial(anyString(), any(), any());
     }
 
     @Test
