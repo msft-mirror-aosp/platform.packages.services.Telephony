@@ -255,7 +255,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
         if (result.getAccessNetwork() == UNKNOWN) {
             if ((mPreferredNetworkScanType == SCAN_TYPE_FULL_SERVICE_FOLLOWED_BY_LIMITED_SERVICE)
-                      || (mScanType == DomainSelectionService.SCAN_TYPE_FULL_SERVICE)) {
+                      && (mScanType == DomainSelectionService.SCAN_TYPE_FULL_SERVICE)) {
                 mScanType = DomainSelectionService.SCAN_TYPE_LIMITED_SERVICE;
                 mWwanSelectorCallback.onRequestEmergencyNetworkScan(
                         mLastPreferredNetworks, mScanType, mCancelSignal,
@@ -316,7 +316,8 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
         if (mTryCsWhenPsFails) {
             mTryCsWhenPsFails = false;
-            mCsNetworkType = getSelectableCsNetworkType();
+            // Initial state was CSFB available and dial PS failed.
+            // Dial CS for CSFB instead of scanning with CS preferred network list.
             logi("reselectDomain tryCs=" + accessNetworkTypeToString(mCsNetworkType));
             if (mCsNetworkType != UNKNOWN) {
                 onWwanNetworkTypeSelected(mCsNetworkType);

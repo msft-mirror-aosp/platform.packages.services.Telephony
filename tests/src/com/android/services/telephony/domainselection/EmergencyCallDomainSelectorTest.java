@@ -38,6 +38,8 @@ import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_PREFER_IMS_EMERGENCY_WHEN_VOICE_CALLS_ON_CS_BOOL;
+import static android.telephony.CarrierConfigManager.ImsEmergency.SCAN_TYPE_FULL_SERVICE;
+import static android.telephony.CarrierConfigManager.ImsEmergency.SCAN_TYPE_FULL_SERVICE_FOLLOWED_BY_LIMITED_SERVICE;
 import static android.telephony.CarrierConfigManager.ImsEmergency.SCAN_TYPE_NO_PREFERENCE;
 import static android.telephony.CarrierConfigManager.ImsEmergency.VOWIFI_REQUIRES_NONE;
 import static android.telephony.CarrierConfigManager.ImsEmergency.VOWIFI_REQUIRES_SETTING_ENABLED;
@@ -301,6 +303,28 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
 
         verifyPsDialed();
+    }
+
+    @Test
+    public void testDefaultCombinedImsRegisteredSelectPsThenCsfb() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(EUTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS | NetworkRegistrationInfo.DOMAIN_PS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsService();
+
+        verifyPsDialed();
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        verifyCsDialed();
     }
 
     @Test
@@ -1142,6 +1166,67 @@ public class EmergencyCallDomainSelectorTest {
         processAllMessages();
 
         verifyCsDialed();
+    }
+
+    @Test
+    public void testFullService() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putInt(KEY_EMERGENCY_NETWORK_SCAN_TYPE_INT, SCAN_TYPE_FULL_SERVICE);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        mResultConsumer = null;
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(true);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UNKNOWN, REGISTRATION_STATE_UNKNOWN,
+                0, false, false, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(1)).onRequestEmergencyNetworkScan(
+                any(), eq(DomainSelectionService.SCAN_TYPE_FULL_SERVICE), any(), any());
+        assertNotNull(mResultConsumer);
+
+        mResultConsumer.accept(regResult);
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(2)).onRequestEmergencyNetworkScan(
+                any(), eq(DomainSelectionService.SCAN_TYPE_FULL_SERVICE), any(), any());
+    }
+
+    @Test
+    public void testFullServiceThenLimtedService() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putInt(KEY_EMERGENCY_NETWORK_SCAN_TYPE_INT,
+                SCAN_TYPE_FULL_SERVICE_FOLLOWED_BY_LIMITED_SERVICE);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        mResultConsumer = null;
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(true);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UNKNOWN, REGISTRATION_STATE_UNKNOWN,
+                0, false, false, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(1)).onRequestEmergencyNetworkScan(
+                any(), eq(DomainSelectionService.SCAN_TYPE_FULL_SERVICE), any(), any());
+        assertNotNull(mResultConsumer);
+
+        mResultConsumer.accept(regResult);
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(1)).onRequestEmergencyNetworkScan(
+                any(), eq(DomainSelectionService.SCAN_TYPE_LIMITED_SERVICE), any(), any());
     }
 
     @Test
