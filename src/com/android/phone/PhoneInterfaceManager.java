@@ -50,6 +50,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.LocaleList;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
@@ -3076,7 +3077,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 // Get default phone in this case.
                 phoneId = SubscriptionManager.DEFAULT_PHONE_INDEX;
             }
-            final int subId = mSubscriptionController.getSubIdUsingPhoneId(phoneId);
+            final int subId = mSubscriptionController.getSubId(phoneId);
             Phone phone = PhoneFactory.getPhone(phoneId);
             if (phone == null) return "";
             ServiceStateTracker sst = phone.getServiceStateTracker();
@@ -5809,11 +5810,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public boolean setBoundImsServiceOverride(int slotIndex, boolean isCarrierService,
             int[] featureTypes, String packageName) {
-        int[] subIds = SubscriptionManager.getSubId(slotIndex);
         TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setBoundImsServiceOverride");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
-                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "setBoundImsServiceOverride");
+                SubscriptionManager.getSubscriptionId(slotIndex), "setBoundImsServiceOverride");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5843,12 +5842,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean clearCarrierImsServiceOverride(int slotIndex) {
-        int[] subIds = SubscriptionManager.getSubId(slotIndex);
         TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
                 "clearCarrierImsServiceOverride");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
-                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "clearCarrierImsServiceOverride");
+                SubscriptionManager.getSubscriptionId(slotIndex), "clearCarrierImsServiceOverride");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5873,11 +5870,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public String getBoundImsServicePackage(int slotId, boolean isCarrierImsService,
             @ImsFeature.FeatureType int featureType) {
-        int[] subIds = SubscriptionManager.getSubId(slotId);
         TelephonyPermissions
-                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                mApp, (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "getBoundImsServicePackage");
+                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(mApp,
+                        SubscriptionManager.getSubscriptionId(slotId), "getBoundImsServicePackage");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -7691,7 +7686,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 if (!localeFromDefaultSim.getCountry().isEmpty()) {
                     if (DBG) log("Using locale from subId: " + subId + " locale: "
                             + localeFromDefaultSim);
-                    return localeFromDefaultSim.toLanguageTag();
+                    return matchLocaleFromSupportedLocaleList(phone, localeFromDefaultSim);
                 } else {
                     simLanguage = localeFromDefaultSim.getLanguage();
                 }
@@ -7704,7 +7699,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             final Locale mccLocale = LocaleUtils.getLocaleFromMcc(mApp, mcc, simLanguage);
             if (mccLocale != null) {
                 if (DBG) log("No locale from SIM, using mcc locale:" + mccLocale);
-                return mccLocale.toLanguageTag();
+                return matchLocaleFromSupportedLocaleList(phone, mccLocale);
             }
 
             if (DBG) log("No locale found - returning null");
@@ -7712,6 +7707,20 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
+    }
+
+    @VisibleForTesting
+    String matchLocaleFromSupportedLocaleList(Phone phone, @NonNull Locale inputLocale) {
+        String[] supportedLocale = com.android.internal.app.LocalePicker.getSupportedLocales(
+                phone.getContext());
+        for (String localeTag : supportedLocale) {
+            if (LocaleList.matchesLanguageAndScript(inputLocale, Locale.forLanguageTag(localeTag))
+                    && TextUtils.equals(inputLocale.getCountry(),
+                    Locale.forLanguageTag(localeTag).getCountry())) {
+                return localeTag;
+            }
+        }
+        return inputLocale.toLanguageTag();
     }
 
     private List<SubscriptionInfo> getAllSubscriptionInfoList() {
@@ -9800,14 +9809,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = getPhone(subscriptionId);
             if (phone == null) return false;
 
-            switch (policy) {
-                case TelephonyManager.MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL:
-                    return phone.getDataSettingsManager().isDataAllowedInVoiceCall();
-                case TelephonyManager.MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED:
-                    return phone.getDataSettingsManager().isMmsAlwaysAllowed();
-                default:
-                    throw new IllegalArgumentException(policy + " is not a valid policy");
-            }
+            return phone.getDataSettingsManager().isMobileDataPolicyEnabled(policy);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -9823,16 +9825,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Phone phone = getPhone(subscriptionId);
             if (phone == null) return;
 
-            switch (policy) {
-                case TelephonyManager.MOBILE_DATA_POLICY_DATA_ON_NON_DEFAULT_DURING_VOICE_CALL:
-                    phone.getDataSettingsManager().setAllowDataDuringVoiceCall(enabled);
-                    break;
-                case TelephonyManager.MOBILE_DATA_POLICY_MMS_ALWAYS_ALLOWED:
-                    phone.getDataSettingsManager().setAlwaysAllowMmsData(enabled);
-                    break;
-                default:
-                    throw new IllegalArgumentException(policy + " is not a valid policy");
-            }
+            phone.getDataSettingsManager().setMobileDataPolicy(policy, enabled);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
