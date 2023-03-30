@@ -51,7 +51,6 @@ import android.os.AsyncResult;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.DropBoxManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.ICancellationSignal;
@@ -2519,10 +2518,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * @param subId - subscriptionId
      * @return phone object associated with a subscription or default phone if null.
      */
-    private @NonNull Phone getPhoneFromSubIdOrDefault(int subId) {
+    private Phone getPhoneFromSubIdOrDefault(int subId) {
         Phone phone = getPhoneFromSubId(subId);
         if (phone == null) {
-            loge("Called with invalid subId: " + subId + ". Retrying with default phone.");
             phone = getDefaultPhone();
         }
         return phone;
@@ -2535,13 +2533,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 UiccController.getInstance().getUiccPort(phone.getPhoneId());
     }
 
-    /**
-     * @param subId The sub Id that associates the phone. If the device has no active SIM, passing
-     *              in {@link SubscriptionManager#DEFAULT_SUBSCRIPTION_ID} or any sub <=
-     *              {@link SubscriptionManager#INVALID_SUBSCRIPTION_ID} will return {@code null}.
-     * @return The Phone associated the sub Id
-     */
-    private @Nullable Phone getPhone(int subId) {
+    // returns phone associated with the subId.
+    private Phone getPhone(int subId) {
         return PhoneFactory.getPhone(SubscriptionManager.getPhoneId(subId));
     }
 
@@ -2835,7 +2828,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         WorkSource workSource = getWorkSource(Binder.getCallingUid());
         final long identity = Binder.clearCallingIdentity();
         try {
-            getPhoneFromSubIdOrDefault(getDefaultSubscription()).updateServiceLocation(workSource);
+            final Phone phone = getPhone(getDefaultSubscription());
+            if (phone != null) {
+                phone.updateServiceLocation(workSource);
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -3212,8 +3208,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            Phone phone = getPhoneFromSubIdOrDefault(getDefaultSubscription());
-            return PhoneConstantConversions.convertCallState(phone.getState());
+            Phone phone = getPhone(getDefaultSubscription());
+            return phone == null ? TelephonyManager.CALL_STATE_IDLE :
+                    PhoneConstantConversions.convertCallState(phone.getState());
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -4259,7 +4256,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public boolean isConcurrentVoiceAndDataAllowed(int subId) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            return getPhoneFromSubIdOrDefault(subId).isConcurrentVoiceAndDataAllowed();
+            final Phone phone = getPhone(subId);
+            return (phone == null ? false : phone.isConcurrentVoiceAndDataAllowed());
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -6667,8 +6665,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mNetworkScanRequestTracker.startNetworkScan(
-                    renounceFineLocationAccess, request, messenger, binder,
-                    getPhoneFromSubIdOrDefault(subId),
+                    renounceFineLocationAccess, request, messenger, binder, getPhone(subId),
                     callingUid, callingPid, callingPackage);
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -9031,16 +9028,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Check if phone is in emergency callback mode.
+     * Check if phone is in emergency callback mode
      * @return true if phone is in emergency callback mode
-     * @param subId sub Id, but the check is in fact irrlevant to sub Id.
+     * @param subId sub id
      */
     @Override
     public boolean getEmergencyCallbackMode(int subId) {
         enforceReadPrivilegedPermission("getEmergencyCallbackMode");
+        final Phone phone = getPhone(subId);
+
         final long identity = Binder.clearCallingIdentity();
         try {
-            return getPhoneFromSubIdOrDefault(subId).isInEcm();
+            if (phone != null) {
+                return phone.isInEcm();
+            } else {
+                return false;
+            }
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -11819,7 +11822,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            ServiceStateTracker sst = getPhoneFromSubIdOrDefault(subId).getServiceStateTracker();
+            Phone phone = getPhone(subId);
+            if (phone == null) return null;
+            ServiceStateTracker sst = phone.getServiceStateTracker();
             if (sst == null) return null;
             return sst.getLastKnownCellIdentity();
         } finally {
@@ -12027,49 +12032,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             }
         }
         return simState.ordinal();
-    }
-
-    private void persistEmergencyCallDiagnosticDataInternal(@NonNull String dropboxTag,
-            boolean enableLogcat,
-            long logcatStartTimestampMillis, boolean enableTelecomDump,
-            boolean enableTelephonyDump) {
-        DropBoxManager db = mApp.getSystemService(DropBoxManager.class);
-        TelephonyManager.EmergencyCallDiagnosticParams edp =
-                new TelephonyManager.EmergencyCallDiagnosticParams();
-        edp.setLogcatCollection(enableLogcat, logcatStartTimestampMillis);
-        edp.setTelephonyDumpSysCollection(enableTelephonyDump);
-        edp.setTelecomDumpSysCollection(enableTelecomDump);
-        Log.d(LOG_TAG, "persisting with Params " + edp.toString());
-        DiagnosticDataCollector ddc = new DiagnosticDataCollector(Runtime.getRuntime(),
-                Executors.newCachedThreadPool(), db,
-                mApp.getSystemService(ActivityManager.class).isLowRamDevice());
-        ddc.persistEmergencyDianosticData(new DataCollectorConfig.Adapter(), edp, dropboxTag);
-    }
-
-    /**
-     * Request telephony to persist state for debugging emergency call failures.
-     *
-     * @param dropBoxTag                 Tag to use when persisting data to dropbox service.
-     * @param enableLogcat               whether to collect logcat output
-     * @param logcatStartTimestampMillis timestamp from when logcat buffers would be persisted
-     * @param enableTelecomDump          whether to collect telecom dumpsys
-     * @param enableTelephonyDump        whether to collect telephony dumpsys
-     */
-    @Override
-    @RequiresPermission(android.Manifest.permission.DUMP)
-    public void persistEmergencyCallDiagnosticData(@NonNull String dropboxTag, boolean enableLogcat,
-            long logcatStartTimestampMillis, boolean enableTelecomDump,
-            boolean enableTelephonyDump) {
-        mApp.enforceCallingPermission(android.Manifest.permission.DUMP,
-                "persistEmergencyCallDiagnosticData");
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            persistEmergencyCallDiagnosticDataInternal(dropboxTag, enableLogcat,
-                    logcatStartTimestampMillis, enableTelecomDump, enableTelephonyDump);
-
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
     }
 
     /**
@@ -12492,6 +12454,19 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void requestTimeForNextSatelliteVisibility(int subId, @NonNull ResultReceiver result) {
         enforceSatelliteCommunicationPermission("requestTimeForNextSatelliteVisibility");
         mSatelliteController.requestTimeForNextSatelliteVisibility(subId, result);
+    }
+
+    private Phone getPhoneOrDefault(int subId, String caller) {
+        Phone phone = getPhone(subId);
+        if (phone == null) {
+            loge(caller + " called with invalid subId: " + subId
+                    + ". Retrying with default phone.");
+            phone = getDefaultPhone();
+            if (phone == null) {
+                loge(caller + " failed with no phone object.");
+            }
+        }
+        return phone;
     }
 
     /**
