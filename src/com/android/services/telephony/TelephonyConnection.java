@@ -16,6 +16,10 @@
 
 package com.android.services.telephony;
 
+import static android.telephony.ims.ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED;
+import static android.telephony.ims.ImsReasonInfo.CODE_SIP_ALTERNATE_EMERGENCY_CALL;
+import static android.telephony.ims.ImsReasonInfo.EXTRA_CODE_CALL_RETRY_EMERGENCY;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ContentResolver;
@@ -1326,6 +1330,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                     if (phone.getPhoneType() == PhoneConstants.PHONE_TYPE_IMS) {
                         ImsPhone imsPhone = (ImsPhone) phone;
                         imsPhone.holdActiveCall();
+                        mTelephonyConnectionService.maybeUnholdCallsOnOtherSubs(
+                                getPhoneAccountHandle());
                         return;
                     }
                     phone.switchHoldingAndActive();
@@ -2481,19 +2487,32 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                             ImsPhoneConnection imsPhoneConnection =
                                     (ImsPhoneConnection) mOriginalConnection;
                             reasonInfo = imsPhoneConnection.getImsReasonInfo();
-                            if (reasonInfo != null && reasonInfo.getCode()
-                                    == ImsReasonInfo.CODE_SIP_ALTERNATE_EMERGENCY_CALL) {
-                                EmergencyNumber emergencyNumber =
-                                        imsPhoneConnection.getEmergencyNumberInfo();
-                                if (emergencyNumber != null) {
-                                    mEmergencyServiceCategory =
-                                            emergencyNumber.getEmergencyServiceCategoryBitmask();
+                            if (reasonInfo != null) {
+                                int reasonCode = reasonInfo.getCode();
+                                int extraCode = reasonInfo.getExtraCode();
+                                if ((reasonCode == CODE_SIP_ALTERNATE_EMERGENCY_CALL)
+                                        || (reasonCode == CODE_LOCAL_CALL_CS_RETRY_REQUIRED
+                                                && extraCode == EXTRA_CODE_CALL_RETRY_EMERGENCY)) {
+                                    EmergencyNumber numberInfo =
+                                            imsPhoneConnection.getEmergencyNumberInfo();
+                                    if (numberInfo != null) {
+                                        mEmergencyServiceCategory =
+                                                numberInfo.getEmergencyServiceCategoryBitmask();
+                                    } else {
+                                        Log.i(this, "mEmergencyServiceCategory no EmergencyNumber");
+                                    }
+
+                                    if (mEmergencyServiceCategory != null) {
+                                        Log.i(this, "mEmergencyServiceCategory="
+                                                + mEmergencyServiceCategory);
+                                    }
                                 }
                             }
                         }
 
                         if (mTelephonyConnectionService.maybeReselectDomain(this,
                                   mOriginalConnection.getPreciseDisconnectCause(), reasonInfo)) {
+                            clearOriginalConnection();
                             break;
                         }
                     }

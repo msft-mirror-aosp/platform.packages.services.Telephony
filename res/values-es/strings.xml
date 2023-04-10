@@ -575,7 +575,7 @@
     <string name="fire_type_description" msgid="6565200468934914930">"Bomberos"</string>
     <string name="description_concat_format" msgid="2014471565101724088">"%1$s, %2$s"</string>
     <string name="dialerKeyboardHintText" msgid="1115266533703764049">"Utilizar teclado para marcar"</string>
-    <string name="onscreenHoldText" msgid="4025348842151665191">"Retener"</string>
+    <string name="onscreenHoldText" msgid="4025348842151665191">"Pausar"</string>
     <string name="onscreenEndCallText" msgid="6138725377654842757">"Finalizar"</string>
     <string name="onscreenShowDialpadText" msgid="658465753816164079">"Teclado"</string>
     <string name="onscreenMuteText" msgid="5470306116733843621">"Silenciar"</string>
@@ -889,10 +889,12 @@
     <string name="radio_info_ppp_sent_label" msgid="6542208429356199695">"Datos enviados:"</string>
     <string name="radio_info_message_waiting_label" msgid="1886549432566952078">"Mensaje en espera:"</string>
     <string name="radio_info_phone_number_label" msgid="2533852539562512203">"Número de teléfono:"</string>
-    <string name="radio_info_band_mode_label" msgid="23480556225515290">"Seleccionar banda de señal móvil"</string>
     <string name="radio_info_voice_network_type_label" msgid="2395347336419593265">"Tipo de red de voz:"</string>
     <string name="radio_info_data_network_type_label" msgid="8886597029237501929">"Tipo de red de datos:"</string>
     <string name="radio_info_override_network_type_label" msgid="4176280017221092005">"Anular tipo de red:"</string>
+    <string name="radio_info_voice_raw_registration_state_label" msgid="2822988327145825128">"Estado de registro sin procesar de Voice:"</string>
+    <string name="radio_info_data_raw_registration_state_label" msgid="2895895513822604539">"Estado de registro sin procesar de datos:"</string>
+    <string name="radio_info_wlan_data_raw_registration_state_label" msgid="6396894835757296612">"Estado de registro sin procesar de los datos de WLAN:"</string>
     <string name="phone_index_label" msgid="6222406512768964268">"Seleccionar guía telefónica"</string>
     <string name="radio_info_set_perferred_label" msgid="7408131389363136210">"Establecer tipo de red preferido:"</string>
     <string name="radio_info_ping_hostname_v4" msgid="6951237885381284790">"Hacer ping a IPv4 de nombre de host (www.google.com):"</string>
@@ -921,4 +923,8 @@
     <string name="call_quality_notification_bluetooth_details" msgid="8348950331707346711">"Tu señal de Bluetooth es débil. Prueba a cambiar al altavoz."</string>
     <string name="call_quality_notification_name" msgid="3476828289553948830">"Notificación de calidad de la llamada"</string>
     <string name="notification_channel_sip_account" msgid="1261816025156179637">"Cuentas SIP obsoletas"</string>
+    <string name="send_from_work_profile_title" msgid="9201528838448432473">"No se puede enviar el mensaje desde este perfil"</string>
+    <string name="send_from_work_profile_description" msgid="5002701841936861636">"Tu política de trabajo te permite enviar mensajes solo desde el perfil de trabajo"</string>
+    <string name="send_from_work_profile_cancel" msgid="177746511030381711">"Cancelar"</string>
+    <string name="send_from_work_profile_action_str" msgid="6892775562934243337">"Cambiar al perfil de trabajo"</string>
 </resources>

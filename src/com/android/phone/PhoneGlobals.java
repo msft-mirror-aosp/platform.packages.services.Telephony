@@ -74,6 +74,7 @@ import com.android.internal.telephony.emergency.EmergencyStateTracker;
 import com.android.internal.telephony.ims.ImsResolver;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
+import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.internal.telephony.uicc.UiccPort;
 import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.util.IndentingPrintWriter;
@@ -510,6 +511,10 @@ public class PhoneGlobals extends ContextWrapper {
             // status bar icons and control other status bar behavior.
             notificationMgr = NotificationMgr.init(this);
 
+            // Create the SatelliteController singleton, which acts as a backend service for
+            // {@link android.telephony.satellite.SatelliteManager}.
+            SatelliteController.make(this);
+
             // Create an instance of CdmaPhoneCallState and initialize it to IDLE
             cdmaPhoneCallState = new CdmaPhoneCallState();
             cdmaPhoneCallState.CdmaPhoneCallStateInit();
@@ -527,6 +532,8 @@ public class PhoneGlobals extends ContextWrapper {
 
             imsRcsController = ImsRcsController.init(this);
 
+            configLoader = CarrierConfigLoader.init(this);
+
             if (getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY_IMS)) {
                 mImsStateCallbackController =
                         ImsStateCallbackController.make(this, PhoneFactory.getPhones().length);
@@ -537,8 +544,6 @@ public class PhoneGlobals extends ContextWrapper {
                 mImsProvisioningController =
                         ImsProvisioningController.make(this, PhoneFactory.getPhones().length);
             }
-
-            configLoader = CarrierConfigLoader.init(this);
 
             // Create the CallNotifier singleton, which handles
             // asynchronous events from the telephony layer (like

@@ -275,6 +275,8 @@ public class TelecomAccountRegistry {
 
         private PhoneAccount registerPstnPhoneAccount(boolean isEmergency, boolean isTestAccount) {
             PhoneAccount account = buildPstnPhoneAccount(mIsEmergency, mIsTestAccount);
+            Log.i(this, "registerPstnPhoneAccount: Registering account=%s with "
+                    + "Telecom. subId=%d", account, getSubId());
             // Register with Telecom and put into the account entry.
             mTelecomManager.registerPhoneAccount(account);
             return account;
@@ -1175,7 +1177,10 @@ public class TelecomAccountRegistry {
         @Override
         public void onServiceStateChanged(ServiceState serviceState) {
             int newState = serviceState.getState();
+            Log.i(this, "onServiceStateChanged: newState=%d, mServiceState=%d",
+                    newState, mServiceState);
             if (newState == ServiceState.STATE_IN_SERVICE && mServiceState != newState) {
+                Log.i(this, "onServiceStateChanged: Tearing down and re-setting up accounts.");
                 tearDownAccounts();
                 setupAccounts();
             } else {
@@ -1588,9 +1593,8 @@ public class TelecomAccountRegistry {
                         int subscriptionId = phone.getSubId();
                         Log.i(this, "setupAccounts: Phone with subscription id %d", subscriptionId);
                         // setupAccounts can be called multiple times during service changes.
-                        // Don't add an account if the Icc has not been set yet.
-                        if (!SubscriptionManager.isValidSubscriptionId(subscriptionId)
-                                || phone.getFullIccSerialNumber() == null) {
+                        // Don't add an account if subscription is not ready.
+                        if (!SubscriptionManager.isValidSubscriptionId(subscriptionId)) {
                             Log.d(this, "setupAccounts: skipping invalid subid %d", subscriptionId);
                             continue;
                         }
@@ -1622,6 +1626,7 @@ public class TelecomAccountRegistry {
 
             // Add a fake account entry.
             if (DBG && phones.length > 0 && "TRUE".equals(System.getProperty("test_sim"))) {
+                Log.i(this, "setupAccounts: adding a fake AccountEntry");
                 mAccounts.add(new AccountEntry(phones[0], false /* emergency */,
                         true /* isTest */));
             }

@@ -57,6 +57,7 @@ import com.android.internal.telephony.emergency.EmergencyNumberTracker;
 import com.android.internal.telephony.util.TelephonyUtils;
 import com.android.modules.utils.BasicShellCommandHandler;
 import com.android.phone.callcomposer.CallComposerPictureManager;
+import com.android.phone.euicc.EuiccUiDispatcherActivity;
 import com.android.phone.utils.CarrierAllowListInfo;
 
 import java.io.IOException;
@@ -99,6 +100,10 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String DISABLE = "disable";
     private static final String QUERY = "query";
     private static final String CARRIER_RESTRICTION_STATUS_TEST = "carrier_restriction_status_test";
+    private static final String SET_CARRIER_SERVICE_PACKAGE_OVERRIDE =
+            "set-carrier-service-package-override";
+    private static final String CLEAR_CARRIER_SERVICE_PACKAGE_OVERRIDE =
+            "clear-carrier-service-package-override";
     private final String QUOTES = "\"";
 
     private static final String CALL_COMPOSER_TEST_MODE = "test-mode";
@@ -120,6 +125,9 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String CC_SET_VALUE = "set-value";
     private static final String CC_SET_VALUES_FROM_XML = "set-values-from-xml";
     private static final String CC_CLEAR_VALUES = "clear-values";
+
+    private static final String EUICC_SUBCOMMAND = "euicc";
+    private static final String EUICC_SET_UI_COMPONENT = "set-euicc-uicomponent";
 
     private static final String GBA_SUBCOMMAND = "gba";
     private static final String GBA_SET_SERVICE = "set-service";
@@ -171,6 +179,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private static final String THERMAL_MITIGATION_COMMAND = "thermal-mitigation";
     private static final String ALLOW_THERMAL_MITIGATION_PACKAGE_SUBCOMMAND = "allow-package";
     private static final String DISALLOW_THERMAL_MITIGATION_PACKAGE_SUBCOMMAND = "disallow-package";
+    private static final String SET_SATELLITE_SERVICE_PACKAGE_NAME =
+            "set-satellite-service-package-name";
 
     private static final String INVALID_ENTRY_ERROR = "An emergency number (only allow '0'-'9', "
             + "'*', '#' or '+') needs to be specified after -a in the command ";
@@ -313,6 +323,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleDataTestModeCommand();
             case END_BLOCK_SUPPRESSION:
                 return handleEndBlockSuppressionCommand();
+            case EUICC_SUBCOMMAND:
+                return handleEuiccCommand();
             case GBA_SUBCOMMAND:
                 return handleGbaCommand();
             case D2D_SUBCOMMAND:
@@ -346,6 +358,12 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleRadioCommand();
             case CARRIER_RESTRICTION_STATUS_TEST:
                 return handleCarrierRestrictionStatusCommand();
+            case SET_CARRIER_SERVICE_PACKAGE_OVERRIDE:
+                return setCarrierServicePackageOverride();
+            case CLEAR_CARRIER_SERVICE_PACKAGE_OVERRIDE:
+                return clearCarrierServicePackageOverride();
+            case SET_SATELLITE_SERVICE_PACKAGE_NAME:
+                return handleSetSatelliteServicePackageNameCommand();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -399,6 +417,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         onHelpAllowedNetworkTypes();
         onHelpRadio();
         onHelpImei();
+        onHelpSatellite();
     }
 
     private void onHelpD2D() {
@@ -608,6 +627,15 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("          is specified, it will choose the default voice SIM slot.");
     }
 
+    private void onHelpEuicc() {
+        PrintWriter pw = getOutPrintWriter();
+        pw.println("Euicc Commands:");
+        pw.println("  euicc set-euicc-uicomponent COMPONENT_NAME PACKAGE_NAME");
+        pw.println("  Sets the Euicc Ui-Component which handles EuiccService Actions.");
+        pw.println("  COMPONENT_NAME: The component name which handles UI Actions.");
+        pw.println("  PACKAGE_NAME: THe package name in which ui component belongs.");
+    }
+
     private void onHelpGba() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("Gba Commands:");
@@ -708,6 +736,16 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("    If it is binding to default, 'default' returns.");
         pw.println("    If it doesn't bind to any modem service for some reasons,");
         pw.println("    the result would be 'unknown'.");
+    }
+
+    private void onHelpSatellite() {
+        PrintWriter pw = getOutPrintWriter();
+        pw.println("Satellite Commands:");
+        pw.println("  set-satellite-service-package-name [-s SERVICE_PACKAGE_NAME]");
+        pw.println("    Sets the package name of satellite service defined in");
+        pw.println("    SERVICE_PACKAGE_NAME to be the bound. Options are:");
+        pw.println("      -s: the satellite service package name that Telephony will bind to.");
+        pw.println("          If no option is specified, it will bind to the default.");
     }
 
     private void onHelpImei() {
@@ -2058,6 +2096,35 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return 0;
     }
 
+    private int handleEuiccCommand() {
+        String arg = getNextArg();
+        if (arg == null) {
+            onHelpEuicc();
+            return 0;
+        }
+
+        switch (arg) {
+            case EUICC_SET_UI_COMPONENT: {
+                return handleEuiccServiceCommand();
+            }
+        }
+        return -1;
+    }
+
+    private int handleEuiccServiceCommand() {
+        String uiComponent = getNextArg();
+        String packageName = getNextArg();
+        if (packageName == null || uiComponent == null) {
+            return -1;
+        }
+        EuiccUiDispatcherActivity.setTestEuiccUiComponent(packageName, uiComponent);
+        if (VDBG) {
+            Log.v(LOG_TAG, "euicc set-euicc-uicomponent " + uiComponent +" "
+                    + packageName);
+        }
+        return 0;
+    }
+
     private int handleRestartModemCommand() {
         // Verify that the user is allowed to run the command. Only allowed in rooted device in a
         // non user build.
@@ -3017,6 +3084,38 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return -1;
     }
 
+    private int handleSetSatelliteServicePackageNameCommand() {
+        PrintWriter errPw = getErrPrintWriter();
+        String serviceName = null;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-s": {
+                    serviceName = getNextArgRequired();
+                    break;
+                }
+            }
+        }
+        Log.d(LOG_TAG, "handleSetSatelliteServicePackageNameCommand: serviceName="
+                + serviceName);
+
+        try {
+            boolean result = mInterface.setSatelliteServicePackageName(serviceName);
+            if (VDBG) {
+                Log.v(LOG_TAG, "SetSatelliteServicePackageName " + serviceName
+                        + ", result = " + result);
+            }
+            getOutPrintWriter().println(result);
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "SetSatelliteServicePackageName: " + serviceName
+                    + ", error = " + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
     private int handleCarrierRestrictionStatusCommand() {
         try {
             String MOCK_MODEM_SERVICE_NAME = "android.telephony.mockmodem.MockModemService";
@@ -3059,6 +3158,96 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return result;
     }
 
+    // set-carrier-service-package-override
+    private int setCarrierServicePackageOverride() {
+        PrintWriter errPw = getErrPrintWriter();
+        int subId = SubscriptionManager.getDefaultSubscriptionId();
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-s":
+                    try {
+                        subId = Integer.parseInt(getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println(
+                                "set-carrier-service-package-override requires an integer as a"
+                                        + " subscription ID.");
+                        return -1;
+                    }
+                    break;
+            }
+        }
+
+        String packageName = getNextArg();
+        if (packageName == null) {
+            errPw.println("set-carrier-service-package-override requires a override package name.");
+            return -1;
+        }
+
+        try {
+            mInterface.setCarrierServicePackageOverride(
+                    subId, packageName, mContext.getOpPackageName());
+
+            if (VDBG) {
+                Log.v(
+                        LOG_TAG,
+                        "set-carrier-service-package-override -s " + subId + " " + packageName);
+            }
+        } catch (RemoteException | IllegalArgumentException | IllegalStateException e) {
+            Log.w(
+                    LOG_TAG,
+                    "set-carrier-service-package-override -s "
+                            + subId
+                            + " "
+                            + packageName
+                            + ", error"
+                            + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    // clear-carrier-service-package-override
+    private int clearCarrierServicePackageOverride() {
+        PrintWriter errPw = getErrPrintWriter();
+        int subId = getDefaultSlot();
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-s":
+                    try {
+                        subId = Integer.parseInt(getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println(
+                                "clear-carrier-service-package-override requires an integer as a"
+                                        + " subscription ID.");
+                        return -1;
+                    }
+                    break;
+            }
+        }
+
+        try {
+            mInterface.setCarrierServicePackageOverride(subId, null, mContext.getOpPackageName());
+
+            if (VDBG) {
+                Log.v(LOG_TAG, "clear-carrier-service-package-override -s " + subId);
+            }
+        } catch (RemoteException | IllegalArgumentException | IllegalStateException e) {
+            Log.w(
+                    LOG_TAG,
+                    "clear-carrier-service-package-override -s "
+                            + subId
+                            + ", error"
+                            + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
 
     /**
      * Building the string that can be used to build the JsonObject which supports to stub the data

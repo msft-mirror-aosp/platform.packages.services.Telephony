@@ -25,6 +25,7 @@ import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.PersistableBundle;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.util.Log;
@@ -351,36 +352,31 @@ public class TelephonyRcsService {
 
     private boolean doesSubscriptionSupportPresence(int subId) {
         if (!SubscriptionManager.isValidSubscriptionId(subId)) return false;
-        CarrierConfigManager carrierConfigManager =
-                mContext.getSystemService(CarrierConfigManager.class);
-        if (carrierConfigManager == null) return false;
-        boolean supportsUce = carrierConfigManager.getConfigForSubId(subId).getBoolean(
-                CarrierConfigManager.Ims.KEY_ENABLE_PRESENCE_PUBLISH_BOOL);
-        supportsUce |= carrierConfigManager.getConfigForSubId(subId).getBoolean(
-                CarrierConfigManager.KEY_USE_RCS_SIP_OPTIONS_BOOL);
+        boolean supportsUce = getConfig(subId,
+                CarrierConfigManager.Ims.KEY_ENABLE_PRESENCE_PUBLISH_BOOL, false /*default*/);
+        supportsUce |= getConfig(subId,
+                CarrierConfigManager.KEY_USE_RCS_SIP_OPTIONS_BOOL, false /*default*/);
         return supportsUce;
     }
 
     private boolean doesSubscriptionSupportSingleRegistration(int subId) {
         if (!SubscriptionManager.isValidSubscriptionId(subId)) return false;
-        CarrierConfigManager carrierConfigManager =
-                mContext.getSystemService(CarrierConfigManager.class);
-        if (carrierConfigManager == null) return false;
-        return carrierConfigManager.getConfigForSubId(subId).getBoolean(
-                CarrierConfigManager.Ims.KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL);
+        return getConfig(subId, CarrierConfigManager.Ims.KEY_IMS_SINGLE_REGISTRATION_REQUIRED_BOOL,
+                false /*defaultValue*/);
     }
 
     private int getSubscriptionFromSlot(int slotId) {
-        SubscriptionManager manager = mContext.getSystemService(SubscriptionManager.class);
-        if (manager == null) {
-            Log.w(LOG_TAG, "Couldn't find SubscriptionManager for slotId=" + slotId);
-            return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-        }
-        int[] subIds = manager.getSubscriptionIds(slotId);
-        if (subIds != null && subIds.length > 0) {
-            return subIds[0];
-        }
-        return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        return SubscriptionManager.getSubscriptionId(slotId);
+    }
+
+    /**
+     * @return the boolean result corresponding to a boolean {@link CarrierConfigManager} key.
+     */
+    private boolean getConfig(int subId, String key, boolean defaultValue) {
+        CarrierConfigManager c = mContext.getSystemService(CarrierConfigManager.class);
+        if (c == null) return defaultValue;
+        PersistableBundle b = c.getConfigForSubId(subId, key);
+        return b != null ? b.getBoolean(key, defaultValue) : defaultValue;
     }
 
     /**

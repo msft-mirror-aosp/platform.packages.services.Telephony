@@ -114,6 +114,18 @@ countries {
     types: AMBULANCE
     types: FIRE
   }
+  eccs {
+    phone_number: "100"
+    types: FIRE
+  }
+  eccs {
+    phone_number: "101"
+    types: POLICE
+  }
+  eccs {
+    phone_number: "107"
+    types: AMBULANCE
+  }
   ecc_fallback: "911"
 }
 countries {
@@ -133,6 +145,31 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+  }
+  eccs {
+    phone_number: "122"
+    types: FIRE
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "133"
+    types: POLICE
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "144"
+    types: AMBULANCE
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "128"
+    types: MOUNTAIN_RESCUE
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "140"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
   }
   ecc_fallback: "112"
 }
@@ -333,14 +370,22 @@ countries {
   eccs {
     phone_number: "190"
     types: POLICE
+    routing: EMERGENCY
   }
   eccs {
     phone_number: "192"
     types: AMBULANCE
+    routing: NORMAL
   }
   eccs {
     phone_number: "193"
     types: FIRE
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "185"
+    types: MARINE_GUARD
+    routing: NORMAL
   }
   ecc_fallback: "911"
 }
@@ -420,6 +465,12 @@ countries {
     types: AMBULANCE
     types: FIRE
   }
+  eccs {
+    phone_number: "112"
+    types: POLICE
+    types: AMBULANCE
+    types: FIRE
+  }
   ecc_fallback: "911"
 }
 countries {
@@ -451,16 +502,57 @@ countries {
 countries {
   iso_code: "CH"
   eccs {
+    phone_number: "112"
+    types: POLICE
+    types: AMBULANCE
+    types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "911"
+    types: POLICE
+    types: AMBULANCE
+    types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
     phone_number: "117"
     types: POLICE
+    routing: EMERGENCY
   }
   eccs {
     phone_number: "144"
     types: AMBULANCE
+    routing: EMERGENCY
   }
   eccs {
     phone_number: "118"
     types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "143"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "145"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "147"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
+  }
+  eccs {
+    phone_number: "1414"
+    types: TYPE_UNSPECIFIED
+  }
+  eccs {
+    phone_number: "0800117117"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
   }
   ecc_fallback: "112"
 }
@@ -662,6 +754,7 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
   }
   ecc_fallback: "911"
 }
@@ -682,6 +775,12 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "115"
+    types: POLICE
+    routing: NORMAL
   }
   ecc_fallback: "911"
 }
@@ -735,6 +834,52 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "088"
+    types: POLICE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "085"
+    types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "1006"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "061"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "062"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "080"
+    types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "091"
+    types: POLICE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "092"
+    types: POLICE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "024"
+    types: TYPE_UNSPECIFIED
+    routing: NORMAL
   }
   ecc_fallback: "112"
 }
@@ -824,7 +969,7 @@ countries {
   eccs {
     phone_number: "18"
     types: FIRE
-    routing:NORMAL
+    routing: NORMAL
   }
   eccs {
     phone_number: "115"
@@ -889,6 +1034,7 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
   }
   ecc_fallback: "112"
 }
@@ -1253,6 +1399,18 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+  }
+  eccs {
+    phone_number: "113"
+    types: POLICE
+  }
+  eccs {
+    phone_number: "115"
+    types: FIRE
+  }
+  eccs {
+    phone_number: "118"
+    types: AMBULANCE
   }
   ecc_fallback: "112"
 }
@@ -2236,6 +2394,7 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
   }
   ecc_fallback: "911"
 }
@@ -2298,6 +2457,37 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "101"
+    types: FIRE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "102"
+    types: POLICE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "103"
+    types: AMBULANCE
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "104"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "121"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
+  }
+  eccs {
+    phone_number: "123"
+    types: TYPE_UNSPECIFIED
+    routing: EMERGENCY
   }
   ecc_fallback: "112"
 }
@@ -2808,6 +2998,18 @@ countries {
     types: POLICE
     types: AMBULANCE
     types: FIRE
+  }
+  eccs {
+    phone_number: "104"
+    types: FIRE
+  }
+  eccs {
+    phone_number: "105"
+    types: AMBULANCE
+  }
+  eccs {
+    phone_number: "106"
+    types: MARINE_GUARD
   }
   ecc_fallback: "911"
 }
