@@ -50,6 +50,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.LocaleList;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Messenger;
@@ -108,6 +109,7 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyFrameworkInitializer;
 import android.telephony.TelephonyHistogram;
 import android.telephony.TelephonyManager;
+import android.telephony.TelephonyManager.SimState;
 import android.telephony.TelephonyScanManager;
 import android.telephony.ThermalMitigationRequest;
 import android.telephony.UiccCardInfo;
@@ -164,6 +166,7 @@ import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.INumberVerificationCallback;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.IccCard;
+import com.android.internal.telephony.IccCardConstants;
 import com.android.internal.telephony.IccLogicalChannelRequest;
 import com.android.internal.telephony.LocaleTracker;
 import com.android.internal.telephony.NetworkScanRequestTracker;
@@ -191,6 +194,8 @@ import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCallTracker;
 import com.android.internal.telephony.metrics.RcsStats;
 import com.android.internal.telephony.metrics.TelephonyMetrics;
+import com.android.internal.telephony.subscription.SubscriptionInfoInternal;
+import com.android.internal.telephony.subscription.SubscriptionManagerService;
 import com.android.internal.telephony.uicc.IccCardApplicationStatus.AppType;
 import com.android.internal.telephony.uicc.IccIoResult;
 import com.android.internal.telephony.uicc.IccUtils;
@@ -375,7 +380,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     private AppOpsManager mAppOps;
     private PackageManager mPm;
     private MainThreadHandler mMainThreadHandler;
-    private SubscriptionController mSubscriptionController;
+    private final SubscriptionController mSubscriptionController;
     private SharedPreferences mTelephonySharedPreferences;
     private PhoneConfigurationManager mPhoneConfigurationManager;
     private final RadioInterfaceCapabilityController mRadioInterfaceCapabilities;
@@ -1414,6 +1419,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     request = (MainThreadRequest) ar.userObj;
                     ResultReceiver result = (ResultReceiver) request.argument;
                     int error = 0;
+                    ModemActivityInfo ret = null;
                     if (mLastModemActivityInfo == null) {
                         mLastModemActivitySpecificInfo = new ActivityStatsTechSpecificInfo[1];
                         mLastModemActivitySpecificInfo[0] =
@@ -1432,12 +1438,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         if (isModemActivityInfoValid(info)) {
                             mergeModemActivityInfo(info);
                         }
-                        mLastModemActivityInfo =
-                                new ModemActivityInfo(
-                                        mLastModemActivityInfo.getTimestampMillis(),
-                                        mLastModemActivityInfo.getSleepTimeMillis(),
-                                        mLastModemActivityInfo.getIdleTimeMillis(),
-                                        mLastModemActivitySpecificInfo);
+                        // This is needed to decouple ret from mLastModemActivityInfo
+                        // We don't want to return mLastModemActivityInfo which is updated
+                        // inside mergeModemActivityInfo()
+                        ret = new ModemActivityInfo(
+                                mLastModemActivityInfo.getTimestampMillis(),
+                                mLastModemActivityInfo.getSleepTimeMillis(),
+                                mLastModemActivityInfo.getIdleTimeMillis(),
+                                deepCopyModemActivitySpecificInfo(mLastModemActivitySpecificInfo));
 
                     } else {
                         if (ar.result == null) {
@@ -1455,10 +1463,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         }
                     }
                     Bundle bundle = new Bundle();
-                    if (mLastModemActivityInfo != null) {
+                    if (ret != null) {
                         bundle.putParcelable(
                                 TelephonyManager.MODEM_ACTIVITY_RESULT_KEY,
-                                mLastModemActivityInfo);
+                                ret);
                     } else {
                         bundle.putInt(TelephonyManager.EXCEPTION_RESULT_KEY, error);
                     }
@@ -2339,7 +2347,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mAppOps = (AppOpsManager)app.getSystemService(Context.APP_OPS_SERVICE);
         mPm = app.getSystemService(PackageManager.class);
         mMainThreadHandler = new MainThreadHandler();
-        mSubscriptionController = SubscriptionController.getInstance();
+        if (!PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+            mSubscriptionController = SubscriptionController.getInstance();
+        } else {
+            mSubscriptionController = null;
+        }
         mTelephonySharedPreferences =
                 PreferenceManager.getDefaultSharedPreferences(mApp);
         mNetworkScanRequestTracker = new NetworkScanRequestTracker();
@@ -2388,7 +2400,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     // returns phone associated with the subId.
     private Phone getPhone(int subId) {
-        return PhoneFactory.getPhone(mSubscriptionController.getPhoneId(subId));
+        return PhoneFactory.getPhone(SubscriptionManager.getPhoneId(subId));
     }
 
     private void sendEraseModemConfig(@NonNull Phone phone) {
@@ -2860,7 +2872,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            int subId = mSubscriptionController.getDefaultDataSubId();
+            int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
             if (phone != null) {
                 phone.getDataSettingsManager().setDataEnabled(
@@ -2881,7 +2893,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            int subId = mSubscriptionController.getDefaultDataSubId();
+            int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
             if (phone != null) {
                 phone.getDataSettingsManager().setDataEnabled(
@@ -2992,7 +3004,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int getDataState() {
-        return getDataStateForSubId(mSubscriptionController.getDefaultDataSubId());
+        return getDataStateForSubId(SubscriptionManager.getDefaultDataSubscriptionId());
     }
 
     @Override
@@ -3013,7 +3025,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public @DataActivityType int getDataActivity() {
-        return getDataActivityForSubId(mSubscriptionController.getDefaultDataSubId());
+        return getDataActivityForSubId(SubscriptionManager.getDefaultDataSubscriptionId());
     }
 
     @Override
@@ -3059,7 +3071,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             if (DBG_LOC) log("getCellLocation: is active user");
-            int subId = mSubscriptionController.getDefaultDataSubId();
+            int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             return (CellIdentity) sendRequest(CMD_GET_CELL_LOCATION, workSource, subId);
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -3076,7 +3088,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 // Get default phone in this case.
                 phoneId = SubscriptionManager.DEFAULT_PHONE_INDEX;
             }
-            final int subId = mSubscriptionController.getSubIdUsingPhoneId(phoneId);
+            final int subId = SubscriptionManager.getSubscriptionId(phoneId);
             Phone phone = PhoneFactory.getPhone(phoneId);
             if (phone == null) return "";
             ServiceStateTracker sst = phone.getServiceStateTracker();
@@ -5001,7 +5013,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public int getDataNetworkType(String callingPackage, String callingFeatureId) {
-        return getDataNetworkTypeForSubscriber(mSubscriptionController.getDefaultDataSubId(),
+        return getDataNetworkTypeForSubscriber(SubscriptionManager.getDefaultDataSubscriptionId(),
                 callingPackage, callingFeatureId);
     }
 
@@ -5066,7 +5078,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public boolean hasIccCard() {
         // FIXME Make changes to pass defaultSimId of type int
-        return hasIccCardUsingSlotIndex(mSubscriptionController.getSlotIndex(
+        return hasIccCardUsingSlotIndex(SubscriptionManager.getSlotIndex(
                 getDefaultSubscription()));
     }
 
@@ -5131,18 +5143,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * Returns Default subId, 0 in the case of single standby.
      */
     private int getDefaultSubscription() {
-        return mSubscriptionController.getDefaultSubId();
+        return SubscriptionManager.getDefaultSubscriptionId();
     }
 
     private int getSlotForDefaultSubscription() {
-        return mSubscriptionController.getPhoneId(getDefaultSubscription());
+        return SubscriptionManager.getPhoneId(getDefaultSubscription());
     }
 
     private int getPreferredVoiceSubscription() {
-        return mSubscriptionController.getDefaultVoiceSubId();
+        return SubscriptionManager.getDefaultVoiceSubscriptionId();
     }
 
     private boolean isActiveSubscription(int subId) {
+        if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+            return SubscriptionManagerService.getInstance().isActiveSubId(subId,
+                    mApp.getOpPackageName(), mApp.getFeatureId());
+        }
         return mSubscriptionController.isActiveSubId(subId);
     }
 
@@ -5809,11 +5825,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public boolean setBoundImsServiceOverride(int slotIndex, boolean isCarrierService,
             int[] featureTypes, String packageName) {
-        int[] subIds = SubscriptionManager.getSubId(slotIndex);
         TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setBoundImsServiceOverride");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
-                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "setBoundImsServiceOverride");
+                SubscriptionManager.getSubscriptionId(slotIndex), "setBoundImsServiceOverride");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5843,12 +5857,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean clearCarrierImsServiceOverride(int slotIndex) {
-        int[] subIds = SubscriptionManager.getSubId(slotIndex);
         TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(),
                 "clearCarrierImsServiceOverride");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
-                (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "clearCarrierImsServiceOverride");
+                SubscriptionManager.getSubscriptionId(slotIndex), "clearCarrierImsServiceOverride");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5873,11 +5885,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public String getBoundImsServicePackage(int slotId, boolean isCarrierImsService,
             @ImsFeature.FeatureType int featureType) {
-        int[] subIds = SubscriptionManager.getSubId(slotId);
         TelephonyPermissions
-                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                mApp, (subIds != null ? subIds[0] : SubscriptionManager.INVALID_SUBSCRIPTION_ID),
-                "getBoundImsServicePackage");
+                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(mApp,
+                        SubscriptionManager.getSubscriptionId(slotId), "getBoundImsServicePackage");
 
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -5988,11 +5998,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
                 mApp, subId, "setNetworkSelectionModeManual");
 
+        final long identity = Binder.clearCallingIdentity();
         if (!isActiveSubscription(subId)) {
             return false;
         }
 
-        final long identity = Binder.clearCallingIdentity();
         try {
             ManualNetworkSelectionArgument arg = new ManualNetworkSelectionArgument(operatorInfo,
                     persistSelection);
@@ -6326,8 +6336,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     private SecurityException checkNetworkRequestForSanitizedLocationAccess(
             NetworkScanRequest request, int subId, String callingPackage) {
-        boolean hasCarrierPriv = checkCarrierPrivilegesForPackage(subId, callingPackage)
-                == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
+        boolean hasCarrierPriv;
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            hasCarrierPriv = checkCarrierPrivilegesForPackage(subId, callingPackage)
+                    == TelephonyManager.CARRIER_PRIVILEGE_STATUS_HAS_ACCESS;
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
         boolean hasNetworkScanPermission =
                 mApp.checkCallingOrSelfPermission(android.Manifest.permission.NETWORK_SCAN)
                 == PERMISSION_GRANTED;
@@ -6508,11 +6524,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return false;
         }
 
-        log("setAllowedNetworkTypesForReason: " + reason + " value: "
+        log("setAllowedNetworkTypesForReason: subId=" + subId + ", reason=" + reason + " value: "
                 + TelephonyManager.convertNetworkTypeBitmaskToString(allowedNetworkTypes));
 
+        Phone phone = getPhone(subId);
+        if (phone == null) {
+            return false;
+        }
 
-        if (allowedNetworkTypes == getPhoneFromSubId(subId).getAllowedNetworkTypes(reason)) {
+        if (allowedNetworkTypes == phone.getAllowedNetworkTypes(reason)) {
             log("setAllowedNetworkTypesForReason: " + reason + "does not change value");
             return true;
         }
@@ -6597,7 +6617,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            int phoneId = mSubscriptionController.getPhoneId(subId);
+            int phoneId = SubscriptionManager.getPhoneId(subId);
             if (DBG) log("isUserDataEnabled: subId=" + subId + " phoneId=" + phoneId);
             Phone phone = PhoneFactory.getPhone(phoneId);
             if (phone != null) {
@@ -6644,7 +6664,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            int phoneId = mSubscriptionController.getPhoneId(subId);
+            int phoneId = SubscriptionManager.getPhoneId(subId);
             Phone phone = PhoneFactory.getPhone(phoneId);
             if (phone != null) {
                 boolean retVal;
@@ -6692,7 +6712,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         final long identity = Binder.clearCallingIdentity();
         try {
-            int phoneId = mSubscriptionController.getPhoneId(subId);
+            int phoneId = SubscriptionManager.getPhoneId(subId);
             if (DBG) {
                 log("isDataEnabledForReason: subId=" + subId + " phoneId=" + phoneId
                         + " reason=" + reason);
@@ -7104,9 +7124,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 return null;
             }
 
-            final SubscriptionInfo info = SubscriptionController.getInstance()
-                    .getSubscriptionInfo(subId);
-            final ParcelUuid groupUuid = info.getGroupUuid();
+            ParcelUuid groupUuid;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                final SubscriptionInfo info = SubscriptionManagerService.getInstance()
+                        .getSubscriptionInfo(subId);
+                groupUuid = info.getGroupUuid();
+            } else {
+                final SubscriptionInfo info = mSubscriptionController
+                        .getSubscriptionInfo(subId);
+                groupUuid = info.getGroupUuid();
+            }
             // If it doesn't belong to any group, return just subscriberId of itself.
             if (groupUuid == null) {
                 return new String[]{subscriberId};
@@ -7114,9 +7141,16 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
             // Get all subscriberIds from the group.
             final List<String> mergedSubscriberIds = new ArrayList<>();
-            final List<SubscriptionInfo> groupInfos = SubscriptionController.getInstance()
-                    .getSubscriptionsInGroup(groupUuid, mApp.getOpPackageName(),
-                            mApp.getAttributionTag());
+            List<SubscriptionInfo> groupInfos;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                groupInfos = SubscriptionManagerService.getInstance()
+                        .getSubscriptionsInGroup(groupUuid, mApp.getOpPackageName(),
+                                mApp.getAttributionTag());
+            } else {
+                groupInfos = mSubscriptionController
+                        .getSubscriptionsInGroup(groupUuid, mApp.getOpPackageName(),
+                                mApp.getAttributionTag());
+            }
             for (SubscriptionInfo subInfo : groupInfos) {
                 subscriberId = telephonyManager.getSubscriberId(subInfo.getSubscriptionId());
                 if (subscriberId != null) {
@@ -7676,11 +7710,23 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
         final long identity = Binder.clearCallingIdentity();
         try {
-            final SubscriptionInfo info = mSubscriptionController.getActiveSubscriptionInfo(subId,
-                    phone.getContext().getOpPackageName(), phone.getContext().getAttributionTag());
-            if (info == null) {
-                log("getSimLocaleForSubscriber, inactive subId: " + subId);
-                return null;
+            SubscriptionInfo info;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                info = SubscriptionManagerService.getInstance().getActiveSubscriptionInfo(subId,
+                        phone.getContext().getOpPackageName(),
+                        phone.getContext().getAttributionTag());
+                if (info == null) {
+                    log("getSimLocaleForSubscriber, inactive subId: " + subId);
+                    return null;
+                }
+            } else {
+                info = mSubscriptionController.getActiveSubscriptionInfo(subId,
+                        phone.getContext().getOpPackageName(),
+                        phone.getContext().getAttributionTag());
+                if (info == null) {
+                    log("getSimLocaleForSubscriber, inactive subId: " + subId);
+                    return null;
+                }
             }
             // Try and fetch the locale from the carrier properties or from the SIM language
             // preferences (EF-PL and EF-LI)...
@@ -7691,7 +7737,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 if (!localeFromDefaultSim.getCountry().isEmpty()) {
                     if (DBG) log("Using locale from subId: " + subId + " locale: "
                             + localeFromDefaultSim);
-                    return localeFromDefaultSim.toLanguageTag();
+                    return matchLocaleFromSupportedLocaleList(phone, localeFromDefaultSim);
                 } else {
                     simLanguage = localeFromDefaultSim.getLanguage();
                 }
@@ -7704,7 +7750,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             final Locale mccLocale = LocaleUtils.getLocaleFromMcc(mApp, mcc, simLanguage);
             if (mccLocale != null) {
                 if (DBG) log("No locale from SIM, using mcc locale:" + mccLocale);
-                return mccLocale.toLanguageTag();
+                return matchLocaleFromSupportedLocaleList(phone, mccLocale);
             }
 
             if (DBG) log("No locale found - returning null");
@@ -7714,15 +7760,28 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-    private List<SubscriptionInfo> getAllSubscriptionInfoList() {
-        return mSubscriptionController.getAllSubInfoList(mApp.getOpPackageName(),
-                mApp.getAttributionTag());
+    @VisibleForTesting
+    String matchLocaleFromSupportedLocaleList(Phone phone, @NonNull Locale inputLocale) {
+        String[] supportedLocale = com.android.internal.app.LocalePicker.getSupportedLocales(
+                phone.getContext());
+        for (String localeTag : supportedLocale) {
+            if (LocaleList.matchesLanguageAndScript(inputLocale, Locale.forLanguageTag(localeTag))
+                    && TextUtils.equals(inputLocale.getCountry(),
+                    Locale.forLanguageTag(localeTag).getCountry())) {
+                return localeTag;
+            }
+        }
+        return inputLocale.toLanguageTag();
     }
 
     /**
      * NOTE: this method assumes permission checks are done and caller identity has been cleared.
      */
     private List<SubscriptionInfo> getActiveSubscriptionInfoListPrivileged() {
+        if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+            return SubscriptionManagerService.getInstance().getActiveSubscriptionInfoList(
+                    mApp.getOpPackageName(), mApp.getAttributionTag());
+        }
         return mSubscriptionController.getActiveSubscriptionInfoList(mApp.getOpPackageName(),
                 mApp.getAttributionTag());
     }
@@ -7805,7 +7864,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     */
     private void mergeModemActivityInfo(ModemActivityInfo info) {
         List<ActivityStatsTechSpecificInfo> merged = new ArrayList<>();
-        ActivityStatsTechSpecificInfo mDeltaSpecificInfo;
+        ActivityStatsTechSpecificInfo deltaSpecificInfo;
         boolean matched;
         for (int i = 0; i < info.getSpecificInfoLength(); i++) {
             matched = false;
@@ -7830,13 +7889,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             }
 
             if (!matched) {
-                mDeltaSpecificInfo =
+                deltaSpecificInfo =
                         new ActivityStatsTechSpecificInfo(
                                 rat,
                                 freq,
                                 info.getTransmitTimeMillis(rat, freq),
                                 (int) info.getReceiveTimeMillis(rat, freq));
-                merged.addAll(Arrays.asList(mDeltaSpecificInfo));
+                merged.addAll(Arrays.asList(deltaSpecificInfo));
             }
         }
         merged.addAll(Arrays.asList(mLastModemActivitySpecificInfo));
@@ -7851,6 +7910,26 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mLastModemActivityInfo.setIdleTimeMillis(
                 info.getIdleTimeMillis()
                 + mLastModemActivityInfo.getIdleTimeMillis());
+
+        mLastModemActivityInfo =
+                 new ModemActivityInfo(
+                         mLastModemActivityInfo.getTimestampMillis(),
+                         mLastModemActivityInfo.getSleepTimeMillis(),
+                         mLastModemActivityInfo.getIdleTimeMillis(),
+                         mLastModemActivitySpecificInfo);
+    }
+
+    private ActivityStatsTechSpecificInfo[] deepCopyModemActivitySpecificInfo(
+            ActivityStatsTechSpecificInfo[] info) {
+        int infoSize = info.length;
+        ActivityStatsTechSpecificInfo[] ret = new ActivityStatsTechSpecificInfo[infoSize];
+        for (int i = 0; i < infoSize; i++) {
+            ret[i] = new ActivityStatsTechSpecificInfo(
+                    info[i].getRat(), info[i].getFrequencyRange(),
+                    info[i].getTransmitTimeMillis(),
+                    (int) info[i].getReceiveTimeMillis());
+        }
+        return ret;
     }
 
     /**
@@ -7914,10 +7993,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 .contains(callingPackage);
         try {
             // isActiveSubId requires READ_PHONE_STATE, which we already check for above
-            if (!mSubscriptionController.isActiveSubId(subId, callingPackage, callingFeatureId)) {
-                Rlog.d(LOG_TAG,
-                        "getServiceStateForSubscriber returning null for inactive subId=" + subId);
-                return null;
+            if (PhoneFactory.isSubscriptionManagerServiceEnabled()) {
+                SubscriptionInfoInternal subInfo = SubscriptionManagerService.getInstance()
+                        .getSubscriptionInfoInternal(subId);
+                if (subInfo == null || !subInfo.isActive()) {
+                    Rlog.d(LOG_TAG, "getServiceStateForSubscriber returning null for inactive "
+                            + "subId=" + subId);
+                    return null;
+                }
+            } else {
+                if (!mSubscriptionController.isActiveSubId(subId, callingPackage,
+                        callingFeatureId)) {
+                    Rlog.d(LOG_TAG, "getServiceStateForSubscriber returning null for inactive "
+                            + "subId=" + subId);
+                    return null;
+                }
             }
 
             ServiceState ss = phone.getServiceState();
@@ -9056,7 +9146,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     private int getDefaultNetworkType(int subId) {
         List<Integer> list = TelephonyProperties.default_network();
-        int phoneId = mSubscriptionController.getPhoneId(subId);
+        int phoneId = SubscriptionManager.getPhoneId(subId);
         if (phoneId >= 0 && phoneId < list.size() && list.get(phoneId) != null) {
             return list.get(phoneId);
         }
@@ -11275,5 +11365,36 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         }
     }
 
-
+    /**
+     * Get the SIM state for the slot index.
+     * For Remote-SIMs, this method returns {@link IccCardConstants.State#UNKNOWN}
+     *
+     * @return SIM state as the ordinal of {@link IccCardConstants.State}
+     */
+    @Override
+    @SimState
+    public int getSimStateForSlotIndex(int slotIndex) {
+        IccCardConstants.State simState;
+        if (slotIndex < 0) {
+            simState = IccCardConstants.State.UNKNOWN;
+        } else {
+            Phone phone = null;
+            try {
+                phone = PhoneFactory.getPhone(slotIndex);
+            } catch (IllegalStateException e) {
+                // ignore
+            }
+            if (phone == null) {
+                simState = IccCardConstants.State.UNKNOWN;
+            } else {
+                IccCard icc = phone.getIccCard();
+                if (icc == null) {
+                    simState = IccCardConstants.State.UNKNOWN;
+                } else {
+                    simState = icc.getState();
+                }
+            }
+        }
+        return simState.ordinal();
+    }
 }
