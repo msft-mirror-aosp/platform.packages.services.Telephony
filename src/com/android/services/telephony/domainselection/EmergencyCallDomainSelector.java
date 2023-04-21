@@ -42,6 +42,7 @@ import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_REQUIRES_VOLTE_ENABLED_BOOL;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_SCAN_TIMER_SEC_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT;
+import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_PREFER_IMS_EMERGENCY_WHEN_VOICE_CALLS_ON_CS_BOOL;
 import static android.telephony.CarrierConfigManager.ImsEmergency.SCAN_TYPE_FULL_SERVICE_FOLLOWED_BY_LIMITED_SERVICE;
@@ -50,6 +51,8 @@ import static android.telephony.CarrierConfigManager.ImsEmergency.VOWIFI_REQUIRE
 import static android.telephony.CarrierConfigManager.ImsWfc.KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL;
 import static android.telephony.NetworkRegistrationInfo.REGISTRATION_STATE_HOME;
 import static android.telephony.NetworkRegistrationInfo.REGISTRATION_STATE_ROAMING;
+import static android.telephony.PreciseDisconnectCause.EMERGENCY_PERM_FAILURE;
+import static android.telephony.PreciseDisconnectCause.EMERGENCY_TEMP_FAILURE;
 
 import android.annotation.NonNull;
 import android.content.Context;
@@ -73,11 +76,14 @@ import android.telephony.DomainSelectionService;
 import android.telephony.DomainSelectionService.SelectionAttributes;
 import android.telephony.EmergencyRegResult;
 import android.telephony.NetworkRegistrationInfo;
+import android.telephony.PhoneNumberUtils;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.TransportSelectorCallback;
+import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.ImsManager;
 import android.telephony.ims.ImsMmTelManager;
+import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.ProvisioningManager;
 import android.text.TextUtils;
 import android.util.LocalLog;
@@ -86,7 +92,9 @@ import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.function.IntFunction;
 
 /**
@@ -102,6 +110,8 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     @VisibleForTesting
     public static final int MSG_NETWORK_SCAN_TIMEOUT = 12;
     private static final int MSG_NETWORK_SCAN_RESULT = 13;
+    @VisibleForTesting
+    public static final int MSG_MAX_CELLULAR_TIMEOUT = 14;
 
     private static final int NOT_SUPPORTED = -1;
 
@@ -157,6 +167,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private @TransportType int mLastTransportType = TRANSPORT_TYPE_INVALID;
     private @DomainSelectionService.EmergencyScanType int mScanType;
     private @RadioAccessNetworkType List<Integer> mLastPreferredNetworks;
+    private boolean mIsTestEmergencyNumber;
 
     private CancellationSignal mCancelSignal;
 
@@ -172,6 +183,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private boolean mIsMonitoringConnectivity;
     private boolean mWiFiAvailable;
     private int mScanTimeout;
+    private int mMaxCellularTimeout;
     private int mMaxNumOfVoWifiTries;
     private boolean mVoWifiOverEmergencyPdn;
     private @CarrierConfigManager.ImsEmergency.EmergencyScanType int mPreferredNetworkScanType;
@@ -189,6 +201,11 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private boolean mIsScanRequested = false;
     /** Indicates whether selected domain has been notified. */
     private boolean mDomainSelected = false;
+    /** Indicates whether the cross sim redialing timer has expired. */
+    private boolean mCrossStackTimerExpired = false;
+    /** Indicates whether max cellular timer expired. */
+    private boolean mMaxCellularTimerExpired = false;
+
     /**
      * Indicates whether {@link #selectDomain(SelectionAttributes, TransportSelectionCallback)}
      * is called or not.
@@ -196,11 +213,13 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private boolean mDomainSelectionRequested = false;
 
     private final PowerManager.WakeLock mPartialWakeLock;
+    private final CrossSimRedialingController mCrossSimRedialingController;
 
     /** Constructor. */
     public EmergencyCallDomainSelector(Context context, int slotId, int subId,
             @NonNull Looper looper, @NonNull ImsStateTracker imsStateTracker,
-            @NonNull DestroyListener destroyListener) {
+            @NonNull DestroyListener destroyListener,
+            @NonNull CrossSimRedialingController csrController) {
         super(context, slotId, subId, looper, imsStateTracker, destroyListener, TAG);
 
         mImsStateTracker.addBarringInfoListener(this);
@@ -209,6 +228,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         PowerManager pm = context.getSystemService(PowerManager.class);
         mPartialWakeLock = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, TAG);
 
+        mCrossSimRedialingController = csrController;
         acquireWakeLock();
     }
 
@@ -227,6 +247,10 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
             case MSG_NETWORK_SCAN_RESULT:
                 handleScanResult((EmergencyRegResult) msg.obj);
+                break;
+
+            case MSG_MAX_CELLULAR_TIMEOUT:
+                handleMaxCellularTimeout();
                 break;
 
             default:
@@ -315,6 +339,28 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private void reselectDomain() {
         logi("reselectDomain tryCsWhenPsFails=" + mTryCsWhenPsFails);
 
+        int cause = mSelectionAttributes.getCsDisconnectCause();
+        mCrossSimRedialingController.notifyCallFailure(cause);
+
+        // TODO(b/258112541) make EMERGENCY_PERM_FAILURE and EMERGENCY_TEMP_FAILURE public api
+        if (cause == EMERGENCY_PERM_FAILURE
+                || cause == EMERGENCY_TEMP_FAILURE) {
+            logi("reselectDomain should redial on the other subscription");
+            terminateSelectionForCrossSimRedialing(cause == EMERGENCY_PERM_FAILURE);
+            return;
+        }
+
+        if (mCrossStackTimerExpired) {
+            logi("reselectDomain cross stack timer expired");
+            terminateSelectionForCrossSimRedialing(false);
+            return;
+        }
+
+        if (mIsTestEmergencyNumber) {
+            selectDomainForTestEmergencyNumber();
+            return;
+        }
+
         if (mTryCsWhenPsFails) {
             mTryCsWhenPsFails = false;
             // Initial state was CSFB available and dial PS failed.
@@ -323,6 +369,18 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             if (mCsNetworkType != UNKNOWN) {
                 onWwanNetworkTypeSelected(mCsNetworkType);
                 return;
+            }
+        }
+
+        if (mMaxCellularTimerExpired) {
+            if (mLastTransportType == TRANSPORT_TYPE_WWAN
+                    && maybeDialOverWlan()) {
+                // Cellular call failed and max cellular search timer expired, so redial on Wi-Fi.
+                // If this VoWi-Fi fails, the timer shall be restarted on next reselectDomain().
+                return;
+            } else if (mLastTransportType == TRANSPORT_TYPE_WLAN) {
+                // Since VoWi-Fi failed, allow for requestScan to restart max cellular timer.
+                mMaxCellularTimerExpired = false;
             }
         }
 
@@ -367,6 +425,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         logi("selectDomain attr=" + attr);
         mTransportSelectorCallback = cb;
         mSelectionAttributes = attr;
+        mIsTestEmergencyNumber = isTestEmergencyNumber(attr.getNumber());
 
         TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
         mModemCount = tm.getActiveModemCount();
@@ -378,6 +437,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         logi("startDomainSelection modemCount=" + mModemCount);
         updateCarrierConfiguration();
         mDomainSelectionRequested = true;
+        startCrossStackTimer();
         if (SubscriptionManager.isValidSubscriptionId(getSubId())) {
             selectDomain();
         } else {
@@ -439,6 +499,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
                 KEY_PREFER_IMS_EMERGENCY_WHEN_VOICE_CALLS_ON_CS_BOOL);
         mVoWifiRequiresCondition = b.getInt(KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT);
         mScanTimeout = b.getInt(KEY_EMERGENCY_SCAN_TIMER_SEC_INT) * 1000;
+        mMaxCellularTimeout = b.getInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT) * 1000;
         mMaxNumOfVoWifiTries = b.getInt(KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT);
         mVoWifiOverEmergencyPdn = b.getBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL);
         mPreferredNetworkScanType = b.getInt(KEY_EMERGENCY_NETWORK_SCAN_TYPE_INT);
@@ -474,6 +535,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
                 + ", preferImsOnCs=" + mPreferImsWhenCallsOnCs
                 + ", voWifiRequiresCondition=" + mVoWifiRequiresCondition
                 + ", scanTimeout=" + mScanTimeout
+                + ", maxCellularTimeout=" + mMaxCellularTimeout
                 + ", maxNumOfVoWifiTries=" + mMaxNumOfVoWifiTries
                 + ", voWifiOverEmergencyPdn=" + mVoWifiOverEmergencyPdn
                 + ", preferredScanType=" + carrierConfigNetworkScanTypeToString(
@@ -530,6 +592,11 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     }
 
     private void selectDomainFromInitialState() {
+        if (mIsTestEmergencyNumber) {
+            selectDomainForTestEmergencyNumber();
+            return;
+        }
+
         boolean csInService = isCsInService();
         boolean psInService = isPsInService();
 
@@ -627,7 +694,8 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         mCancelSignal = new CancellationSignal();
         // In case dialing over Wi-Fi has failed, do not the change the domain preference.
         if (!wifiFailed) {
-            mLastPreferredNetworks = getNextPreferredNetworks(csPreferred, mTryEpsFallback);
+            mLastPreferredNetworks = getNextPreferredNetworks(csPreferred, mTryEpsFallback,
+                    !startVoWifiTimer);
         }
         mTryEpsFallback = false;
 
@@ -655,6 +723,9 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
                 registerForConnectivityChanges();
             }
         }
+        if (!mMaxCellularTimerExpired && !hasMessages(MSG_MAX_CELLULAR_TIMEOUT)) {
+            startMaxCellularTimer();
+        }
     }
 
     /**
@@ -662,11 +733,13 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
      *
      * @param csPreferred Indicates whether CS preferred scan is requested.
      * @param tryEpsFallback Indicates whether scan requested for EPS fallback.
+     * @param lastScanFailed Indicates whether this a scan request due to the failure of last scan
+     *        request.
      * @return The list of preferred network types.
      */
     @VisibleForTesting
     public @RadioAccessNetworkType List<Integer> getNextPreferredNetworks(boolean csPreferred,
-            boolean tryEpsFallback) {
+            boolean tryEpsFallback, boolean lastScanFailed) {
         if (mRequiresVoLteEnabled && !isAdvancedCallingSettingEnabled()) {
             // Emergency call over IMS is not supported.
             logi("getNextPreferredNetworks VoLte setting is not enabled.");
@@ -736,6 +809,23 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             }
         }
 
+        // There can be cases that dialing IMS call failed but the modem doesn't know this
+        // situation with some vendor solutions. For example, dialing failure due to the
+        // emergency registration failure.
+        // Remove the current RAT from the scan list to avoid modem select current PLMN.
+        // If the scan fails, the next scan will include this RAT again.
+        //
+        // TODO (b/278183420) Replace this with a better solution by adding indication
+        // of call setup failure to the scan request.
+        ImsReasonInfo reasonInfo = mSelectionAttributes.getPsDisconnectCause();
+        if (!lastScanFailed && reasonInfo != null
+                && reasonInfo.getCode() == ImsReasonInfo.CODE_LOCAL_NOT_REGISTERED) {
+            logi("getNextPreferredNetworks remove " + mLastNetworkType);
+            if (preferredNetworks.size() > 1) {
+                preferredNetworks.remove(Integer.valueOf(mLastNetworkType));
+            }
+        }
+
         return preferredNetworks;
     }
 
@@ -748,8 +838,33 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         return preferredNetworks;
     }
 
+    private void handleMaxCellularTimeout() {
+        logi("handleMaxCellularTimeout");
+        if (mVoWifiTrialCount >= mMaxNumOfVoWifiTries) {
+            logi("handleMaxCellularTimeout already tried maximum");
+            return;
+        }
+
+        mMaxCellularTimerExpired = true;
+
+        if (mDomainSelected) {
+            // Dialing is already requested.
+            logi("handleMaxCellularTimeout wait for reselectDomain");
+            return;
+        }
+
+        if (!maybeDialOverWlan()) {
+            logd("handleMaxCellularTimeout VoWi-Fi is not available");
+        }
+    }
+
     private void handleNetworkScanTimeout() {
-        logi("handleNetworkScanTimeout overEmergencyPdn=" + mVoWifiOverEmergencyPdn
+        logi("handleNetworkScanTimeout");
+        maybeDialOverWlan();
+    }
+
+    private boolean maybeDialOverWlan() {
+        logi("maybeDialOverWlan overEmergencyPdn=" + mVoWifiOverEmergencyPdn
                 + ", wifiAvailable=" + mWiFiAvailable);
         boolean available = mWiFiAvailable;
         if (mVoWifiOverEmergencyPdn) {
@@ -774,7 +889,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             available = isImsRegisteredWithVoiceCapability() && isImsRegisteredOverWifi();
         }
 
-        logi("handleNetworkScanTimeout VoWi-Fi available=" + available);
+        logi("maybeDialOverWlan VoWi-Fi available=" + available);
         if (available) {
             if (mCancelSignal != null) {
                 mCancelSignal.cancel();
@@ -782,6 +897,8 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             }
             onWlanSelected();
         }
+
+        return available;
     }
 
     /**
@@ -920,7 +1037,11 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private boolean isEmcOverWifiSupported() {
         if (SubscriptionManager.isValidSubscriptionId(getSubId())) {
             List<Integer> domains = getDomainPreference();
-            return domains.contains(DOMAIN_PS_NON_3GPP);
+            boolean ret = domains.contains(DOMAIN_PS_NON_3GPP);
+            logi("isEmcOverWifiSupported " + ret);
+            return ret;
+        } else {
+            logi("isEmcOverWifiSupported invalid subId");
         }
         return false;
     }
@@ -1119,8 +1240,10 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         mDomainSelected = true;
         mLastTransportType = TRANSPORT_TYPE_WLAN;
         mVoWifiTrialCount++;
-        mTransportSelectorCallback.onWlanSelected();
+        mTransportSelectorCallback.onWlanSelected(mVoWifiOverEmergencyPdn);
         mWwanSelectorCallback = null;
+        removeMessages(MSG_NETWORK_SCAN_TIMEOUT);
+        removeMessages(MSG_MAX_CELLULAR_TIMEOUT);
     }
 
     private void onWwanSelected(Runnable runnable) {
@@ -1150,7 +1273,8 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         if (accessNetworkType == EUTRAN || accessNetworkType == NGRAN) {
             domain = NetworkRegistrationInfo.DOMAIN_PS;
         }
-        mWwanSelectorCallback.onDomainSelected(domain);
+        mWwanSelectorCallback.onDomainSelected(domain,
+                (domain == NetworkRegistrationInfo.DOMAIN_PS));
     }
 
     /**
@@ -1187,6 +1311,19 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         }
     }
 
+    /** Starts the max cellular timer. */
+    private void startMaxCellularTimer() {
+        logd("startMaxCellularTimer tried=" + mVoWifiTrialCount
+                + ", max=" + mMaxNumOfVoWifiTries);
+        if (isEmcOverWifiSupported()
+                && (mMaxCellularTimeout > 0)
+                && (mVoWifiTrialCount < mMaxNumOfVoWifiTries)) {
+            logi("startMaxCellularTimer start timer");
+            sendEmptyMessageDelayed(MSG_MAX_CELLULAR_TIMEOUT, mMaxCellularTimeout);
+            registerForConnectivityChanges();
+        }
+    }
+
     private boolean allowEmergencyCalls(EmergencyRegResult regResult) {
         if (mModemCount < 2) return true;
         if (regResult == null) {
@@ -1200,7 +1337,10 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             int simState = tm.getSimState(getSlotId());
             if (simState != TelephonyManager.SIM_STATE_READY) {
                 logi("allowEmergencyCalls not ready, simState=" + simState + ", iso=" + iso);
-                return false;
+                if (mCrossSimRedialingController.isThereOtherSlot()) {
+                    return false;
+                }
+                logi("allowEmergencyCalls there is no other slot available");
             }
         }
 
@@ -1209,12 +1349,58 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
     private void terminateSelectionPermanentlyForSlot() {
         logi("terminateSelectionPermanentlyForSlot");
-        mTransportSelectorCallback.onSelectionTerminated(DisconnectCause.EMERGENCY_PERM_FAILURE);
+        terminateSelection(true);
+    }
+
+    private void terminateSelectionForCrossSimRedialing(boolean permanent) {
+        logi("terminateSelectionForCrossSimRedialing perm=" + permanent);
+        terminateSelection(permanent);
+    }
+
+    private void terminateSelection(boolean permanent) {
+        mTransportSelectorCallback.onSelectionTerminated(permanent
+                ? DisconnectCause.EMERGENCY_PERM_FAILURE
+                : DisconnectCause.EMERGENCY_TEMP_FAILURE);
 
         if (mIsScanRequested && mCancelSignal != null) {
             mCancelSignal.cancel();
             mCancelSignal = null;
         }
+    }
+
+    /** Starts the cross stack timer. */
+    public void startCrossStackTimer() {
+        boolean inService = false;
+        boolean inRoaming = false;
+
+        if (mModemCount == 1) return;
+
+        EmergencyRegResult regResult = mSelectionAttributes.getEmergencyRegResult();
+        if (regResult != null) {
+            int regState = regResult.getRegState();
+
+            if ((regResult.getDomain() > 0)
+                    && (regState == REGISTRATION_STATE_HOME
+                            || regState == REGISTRATION_STATE_ROAMING)) {
+                inService = true;
+            }
+            inRoaming = (regState == REGISTRATION_STATE_ROAMING) || isInRoaming();
+        }
+
+        mCrossSimRedialingController.startTimer(mContext, this, mSelectionAttributes.getCallId(),
+                mSelectionAttributes.getNumber(), inService, inRoaming, mModemCount);
+    }
+
+    /** Notifies that the cross stack redilaing timer has been expired. */
+    public void notifyCrossStackTimerExpired() {
+        logi("notifyCrossStackTimerExpired");
+
+        mCrossStackTimerExpired = true;
+        if (mDomainSelected) {
+            // When reselecting domain, terminateSelection will be called.
+            return;
+        }
+        terminateSelectionForCrossSimRedialing(false);
     }
 
     private static String arrayToString(int[] intArray, IntFunction<String> func) {
@@ -1287,6 +1473,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     public void destroy() {
         if (DBG) logd("destroy");
 
+        mCrossSimRedialingController.stopTimer();
         releaseWakeLock();
 
         mDestroyed = true;
@@ -1315,6 +1502,37 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
                 }
             }
         }
+    }
+
+    private void selectDomainForTestEmergencyNumber() {
+        logi("selectDomainForTestEmergencyNumber");
+        if (isImsRegisteredWithVoiceCapability()) {
+            onWwanNetworkTypeSelected(EUTRAN);
+        } else {
+            onWwanNetworkTypeSelected(UTRAN);
+        }
+    }
+
+    private boolean isTestEmergencyNumber(String number) {
+        number = PhoneNumberUtils.stripSeparators(number);
+        Map<Integer, List<EmergencyNumber>> list = new HashMap<>();
+        try {
+            TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
+            list = tm.getEmergencyNumberList();
+        } catch (IllegalStateException ise) {
+            loge("isTestEmergencyNumber ise=" + ise);
+        }
+
+        for (Integer sub : list.keySet()) {
+            for (EmergencyNumber eNumber : list.get(sub)) {
+                if (number.equals(eNumber.getNumber())
+                        && eNumber.isFromSources(EmergencyNumber.EMERGENCY_NUMBER_SOURCE_TEST)) {
+                    logd("isTestEmergencyNumber: " + number + " is a test emergency number.");
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     @Override

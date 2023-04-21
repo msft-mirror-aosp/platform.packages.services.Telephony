@@ -89,7 +89,6 @@ public class EmergencySmsDomainSelectorTest {
     private NetworkRegistrationInfo mNetworkRegistrationInfo;
     private boolean mCarrierConfigManagerNullTest = false;
     private BarringInfo mBarringInfo = new BarringInfo();
-    private ImsStateTracker.ImsStateListener mImsStateListener;
     private ImsStateTracker.BarringInfoListener mBarringInfoListener;
     private ImsStateTracker.ServiceStateListener mServiceStateListener;
     private EmergencySmsDomainSelector mDomainSelector;
@@ -210,7 +209,8 @@ public class EmergencySmsDomainSelectorTest {
 
         processAllMessages();
 
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(false));
         assertFalse(mDomainSelector.isDomainSelectionRequested());
     }
 
@@ -413,7 +413,8 @@ public class EmergencySmsDomainSelectorTest {
 
         // onDomainSelected will be invoked only once
         // even though the domain selection was requested twice.
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(true));
         assertFalse(mDomainSelector.isDomainSelectionRequested());
     }
 
@@ -430,7 +431,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -446,7 +448,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -462,7 +465,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -478,7 +482,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: PS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(true));
     }
 
     @Test
@@ -494,7 +499,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -510,7 +516,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -526,7 +533,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: PS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(true));
     }
 
     @Test
@@ -542,7 +550,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -558,7 +567,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -574,7 +584,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: PS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(true));
     }
 
     @Test
@@ -590,7 +601,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -606,7 +618,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: CS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -622,7 +635,7 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: WLAN
-        verify(mTransportSelectorCallback).onWlanSelected();
+        verify(mTransportSelectorCallback).onWlanSelected(eq(false));
     }
 
     @Test
@@ -641,7 +654,8 @@ public class EmergencySmsDomainSelectorTest {
         // if the emergency SMS messages over IMS is enabled in the carrier configuration and
         // the PS network does not allow the emergency service, this MO SMS should be routed to
         // CS domain.
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_CS),
+                eq(false));
     }
 
     @Test
@@ -657,7 +671,8 @@ public class EmergencySmsDomainSelectorTest {
         processAllMessages();
 
         // Expected: PS network
-        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS));
+        verify(mWwanSelectorCallback).onDomainSelected(eq(NetworkRegistrationInfo.DOMAIN_PS),
+                eq(true));
     }
 
     private void setUpCarrierConfig(boolean supported) {
