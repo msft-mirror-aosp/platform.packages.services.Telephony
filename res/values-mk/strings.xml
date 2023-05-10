@@ -152,7 +152,7 @@
     <string name="change_num" msgid="6982164494063109334">"Ажурирај"</string>
   <string-array name="clir_display_values">
     <item msgid="8477364191403806960">"Стандардна мрежа"</item>
-    <item msgid="6813323051965618926">"Сокриј број"</item>
+    <item msgid="6813323051965618926">"Скриј број"</item>
     <item msgid="9150034130629852635">"Прикажи број"</item>
   </string-array>
     <string name="vm_changed" msgid="4739599044379692505">"Бројот на говорна пошта е променет."</string>
@@ -458,7 +458,7 @@
     <string name="auto_retry_mode_title" msgid="2985801935424422340">"Автоматски повторен обид"</string>
     <string name="auto_retry_mode_summary" msgid="2863919925349511402">"Овозможи режим на автоматски повторен обид"</string>
     <string name="tty_mode_not_allowed_video_call" msgid="6551976083652752815">"Промена на режим TTY не е дозволена за време на видеоповик"</string>
-    <string name="menu_add" msgid="5616487894975773141">"Додај контакт"</string>
+    <string name="menu_add" msgid="5616487894975773141">"Додајте контакт"</string>
     <string name="menu_edit" msgid="3593856941552460706">"Измени контакт"</string>
     <string name="menu_delete" msgid="6326861853830546488">"Избриши контакт"</string>
     <string name="menu_dial" msgid="4178537318419450012">"Повикај контакт"</string>
