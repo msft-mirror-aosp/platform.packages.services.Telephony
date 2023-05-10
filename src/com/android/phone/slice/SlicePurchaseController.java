@@ -300,8 +300,7 @@ public class SlicePurchaseController extends Handler {
             mSlicePurchaseControllerBroadcastReceivers = new HashMap<>();
     /** The current network slicing configuration. */
     @Nullable private NetworkSlicingConfig mSlicingConfig;
-    /** Premium network entitlement query API. */
-    @NonNull private final PremiumNetworkEntitlementApi mPremiumNetworkEntitlementApi;
+
     /** LocalDate to use when resetting notification counts. {@code null} except when testing. */
     @Nullable private LocalDate mLocalDate;
     /** The number of times the performance boost notification has been shown today. */
@@ -452,8 +451,6 @@ public class SlicePurchaseController extends Handler {
         mPhone = phone;
         // TODO: Create a cached value for slicing config in DataIndication and initialize here
         mPhone.mCi.registerForSlicingConfigChanged(this, EVENT_SLICING_CONFIG_CHANGED, null);
-        mPremiumNetworkEntitlementApi =
-                new PremiumNetworkEntitlementApi(mPhone, getCarrierConfigs());
         mIsSlicingUpsellEnabled = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_TELEPHONY, KEY_ENABLE_SLICING_UPSELL, false);
         DeviceConfig.addOnPropertiesChangedListener(
@@ -682,10 +679,20 @@ public class SlicePurchaseController extends Handler {
         }
     }
 
+    /**
+     * @return A new PremiumNetworkEntitlementApi object.
+     */
+    @VisibleForTesting
+    public PremiumNetworkEntitlementApi getPremiumNetworkEntitlementApi() {
+        return new PremiumNetworkEntitlementApi(mPhone, getCarrierConfigs());
+    }
+
     private void onStartSlicePurchaseApplication(
             @TelephonyManager.PremiumCapability int capability) {
+        final PremiumNetworkEntitlementApi premiumNetworkEntitlementApi =
+                getPremiumNetworkEntitlementApi();
         PremiumNetworkEntitlementResponse premiumNetworkEntitlementResponse =
-                mPremiumNetworkEntitlementApi.checkEntitlementStatus(capability);
+                premiumNetworkEntitlementApi.checkEntitlementStatus(capability);
 
         // invalid response for entitlement check
         if (premiumNetworkEntitlementResponse == null) {
@@ -777,7 +784,8 @@ public class SlicePurchaseController extends Handler {
         filter.addAction(ACTION_SLICE_PURCHASE_APP_RESPONSE_SUCCESS);
         filter.addAction(ACTION_SLICE_PURCHASE_APP_RESPONSE_NOTIFICATION_SHOWN);
         mPhone.getContext().registerReceiver(
-                mSlicePurchaseControllerBroadcastReceivers.get(capability), filter);
+                mSlicePurchaseControllerBroadcastReceivers.get(capability), filter,
+                Context.RECEIVER_NOT_EXPORTED);
     }
 
     /**
@@ -979,6 +987,7 @@ public class SlicePurchaseController extends Handler {
         int[] supportedCapabilities = getCarrierConfigs().getIntArray(
                 CarrierConfigManager.KEY_SUPPORTED_PREMIUM_CAPABILITIES_INT_ARRAY);
         if (supportedCapabilities == null) {
+            logd("No premium capabilities are supported by the carrier.");
             return false;
         }
         return Arrays.stream(supportedCapabilities)
@@ -1007,7 +1016,12 @@ public class SlicePurchaseController extends Handler {
     private boolean arePremiumCapabilitiesSupportedByDevice() {
         if ((mPhone.getCachedAllowedNetworkTypesBitmask()
                 & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
+            logd("Premium capabilities unsupported because NR is not allowed on the device.");
             return false;
+        }
+        if (!mIsSlicingUpsellEnabled) {
+            logd("Premium capabilities unsupported because "
+                    + "slicing upsell is disabled on the device.");
         }
         return mIsSlicingUpsellEnabled;
     }
@@ -1040,7 +1054,13 @@ public class SlicePurchaseController extends Handler {
 
     private boolean isNetworkAvailable() {
         if (mPhone.getServiceState().getDataRoaming()) {
-            logd("Network unavailable because it is roaming.");
+            logd("Network unavailable because device is roaming.");
+            return false;
+        }
+
+        if (!mPhone.getDataSettingsManager().isDataEnabledForReason(
+                TelephonyManager.DATA_ENABLED_REASON_USER)) {
+            logd("Network unavailable because user data is disabled.");
             return false;
         }
 
