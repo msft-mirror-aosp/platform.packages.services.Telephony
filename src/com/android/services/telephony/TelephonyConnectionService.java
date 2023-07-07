@@ -87,6 +87,7 @@ import com.android.internal.telephony.imsphone.ImsExternalCallTracker;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneConnection;
 import com.android.internal.telephony.imsphone.ImsPhoneMmiCode;
+import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.internal.telephony.satellite.SatelliteSOSMessageRecommender;
 import com.android.internal.telephony.subscription.SubscriptionInfoInternal;
 import com.android.internal.telephony.subscription.SubscriptionManagerService;
@@ -227,6 +228,7 @@ public class TelephonyConnectionService extends ConnectionService {
     private ImsManager mImsManager = null;
     private DomainSelectionConnection mDomainSelectionConnection;
     private TelephonyConnection mNormalCallConnection;
+    private SatelliteController mSatelliteController;
 
     /**
      * Keeps track of the status of a SIM slot.
@@ -778,7 +780,7 @@ public class TelephonyConnectionService extends ConnectionService {
             new TelephonyConferenceBase.TelephonyConferenceListener() {
         @Override
         public void onConferenceMembershipChanged(Connection connection) {
-            mHoldTracker.updateHoldCapability(connection.getPhoneAccountHandle());
+            mHoldTracker.updateHoldCapability();
         }
     };
 
@@ -799,6 +801,7 @@ public class TelephonyConnectionService extends ConnectionService {
         mIsTtyEnabled = mDeviceState.isTtyModeEnabled(this);
         mDomainSelectionMainExecutor = getApplicationContext().getMainExecutor();
         mDomainSelectionResolver = DomainSelectionResolver.getInstance();
+        mSatelliteController = SatelliteController.getInstance();
 
         IntentFilter intentFilter = new IntentFilter(
                 TelecomManager.ACTION_TTY_PREFERRED_MODE_CHANGED);
@@ -1060,6 +1063,7 @@ public class TelephonyConnectionService extends ConnectionService {
 
         boolean needToTurnOnRadio = (isEmergencyNumber && (!isRadioOn() || isAirplaneModeOn))
                 || isRadioPowerDownOnBluetooth();
+        boolean needToTurnOffSatellite = isSatelliteBlockingCall(isEmergencyNumber);
 
         // Get the right phone object from the account data passed in.
         final Phone phone = getPhoneForAccount(request.getAccountHandle(), isEmergencyNumber,
@@ -1077,7 +1081,7 @@ public class TelephonyConnectionService extends ConnectionService {
             }
         }
 
-        if (needToTurnOnRadio) {
+        if (needToTurnOnRadio || needToTurnOffSatellite) {
             final Uri resultHandle = handle;
             final int originalPhoneType = phone.getPhoneType();
             final Connection resultConnection = getTelephonyConnection(request, numberToDial,
@@ -1131,8 +1135,9 @@ public class TelephonyConnectionService extends ConnectionService {
                         // We should be able to make emergency calls at any time after the radio has
                         // been powered on and isn't in the UNAVAILABLE state, even if it is
                         // reporting the OUT_OF_SERVICE state.
-                        return (phone.getState() == PhoneConstants.State.OFFHOOK)
-                            || phone.getServiceStateTracker().isRadioOn();
+                        return phone.getState() == PhoneConstants.State.OFFHOOK
+                                || (phone.getServiceStateTracker().isRadioOn()
+                                && !mSatelliteController.isSatelliteEnabled());
                     } else {
                         SubscriptionInfoInternal subInfo = SubscriptionManagerService
                                 .getInstance().getSubscriptionInfoInternal(phone.getSubId());
@@ -1141,10 +1146,11 @@ public class TelephonyConnectionService extends ConnectionService {
                         // if it is a test emergency number and we have to wait for the device
                         // to move IN_SERVICE before the call can take place over normal
                         // routing.
-                        return (phone.getState() == PhoneConstants.State.OFFHOOK)
+                        return phone.getState() == PhoneConstants.State.OFFHOOK
                                 // Do not wait for voice in service on opportunistic SIMs.
-                                || (subInfo != null && subInfo.isOpportunistic())
-                                || serviceState == ServiceState.STATE_IN_SERVICE;
+                                || subInfo != null && subInfo.isOpportunistic()
+                                || (serviceState == ServiceState.STATE_IN_SERVICE
+                                && !isSatelliteBlockingCall(isEmergencyNumber));
                     }
                 }
             }, isEmergencyNumber && !isTestEmergencyNumber, phone, isTestEmergencyNumber,
@@ -1165,6 +1171,13 @@ public class TelephonyConnectionService extends ConnectionService {
             }
 
             if (!isEmergencyNumber) {
+                if (mSatelliteController.isSatelliteEnabled()) {
+                    Log.d(this, "onCreateOutgoingConnection, cannot make call in satellite mode.");
+                    return Connection.createFailedConnection(
+                            mDisconnectCauseFactory.toTelecomDisconnectCause(
+                                    android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                                    "Call failed because satellite modem is enabled."));
+                }
                 final Connection resultConnection = getTelephonyConnection(request, numberToDial,
                         false, handle, phone);
                 if (isAdhocConference) {
@@ -1314,11 +1327,19 @@ public class TelephonyConnectionService extends ConnectionService {
                 });
             }
         } else {
-            Log.w(this, "onCreateOutgoingConnection, failed to turn on radio");
-            closeOrDestroyConnection(originalConnection,
-                    mDisconnectCauseFactory.toTelecomDisconnectCause(
-                            android.telephony.DisconnectCause.POWER_OFF,
-                            "Failed to turn on radio."));
+            if (isSatelliteBlockingCall(isEmergencyNumber)) {
+                Log.w(LOG_TAG, "handleOnComplete, failed to turn off satellite modem");
+                closeOrDestroyConnection(originalConnection,
+                        mDisconnectCauseFactory.toTelecomDisconnectCause(
+                                android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                                "Failed to turn off satellite modem."));
+            } else {
+                Log.w(LOG_TAG, "handleOnComplete, failed to turn on radio");
+                closeOrDestroyConnection(originalConnection,
+                        mDisconnectCauseFactory.toTelecomDisconnectCause(
+                                android.telephony.DisconnectCause.POWER_OFF,
+                                "Failed to turn on radio."));
+            }
             mIsEmergencyCallPending = false;
         }
     }
@@ -1883,29 +1904,28 @@ public class TelephonyConnectionService extends ConnectionService {
     @Override
     public void onConnectionAdded(Connection connection) {
         if (connection instanceof Holdable && !isExternalConnection(connection)) {
-            mHoldTracker.addHoldable(
-                    connection.getPhoneAccountHandle(), (Holdable) connection);
+            mHoldTracker.addHoldable((Holdable) connection);
         }
     }
 
     @Override
     public void onConnectionRemoved(Connection connection) {
         if (connection instanceof Holdable && !isExternalConnection(connection)) {
-            mHoldTracker.removeHoldable(connection.getPhoneAccountHandle(), (Holdable) connection);
+            mHoldTracker.removeHoldable((Holdable) connection);
         }
     }
 
     @Override
     public void onConferenceAdded(Conference conference) {
         if (conference instanceof Holdable) {
-            mHoldTracker.addHoldable(conference.getPhoneAccountHandle(), (Holdable) conference);
+            mHoldTracker.addHoldable((Holdable) conference);
         }
     }
 
     @Override
     public void onConferenceRemoved(Conference conference) {
         if (conference instanceof Holdable) {
-            mHoldTracker.removeHoldable(conference.getPhoneAccountHandle(), (Holdable) conference);
+            mHoldTracker.removeHoldable((Holdable) conference);
         }
     }
 
@@ -1957,6 +1977,14 @@ public class TelephonyConnectionService extends ConnectionService {
             result |= phone.isRadioOn();
         }
         return result;
+    }
+
+    private boolean isSatelliteBlockingCall(boolean isEmergencyNumber) {
+        if (isEmergencyNumber) {
+            return mSatelliteController.isSatelliteEnabled();
+        } else {
+            return mSatelliteController.isDemoModeEnabled();
+        }
     }
 
     private Pair<WeakReference<TelephonyConnection>, Queue<Phone>> makeCachedConnectionPhonePair(
