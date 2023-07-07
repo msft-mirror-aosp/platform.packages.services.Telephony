@@ -18,6 +18,7 @@ package com.android.services.telephony.domainselection;
 
 import static android.telephony.AccessNetworkConstants.AccessNetworkType.EUTRAN;
 import static android.telephony.AccessNetworkConstants.AccessNetworkType.GERAN;
+import static android.telephony.AccessNetworkConstants.AccessNetworkType.NGRAN;
 import static android.telephony.AccessNetworkConstants.AccessNetworkType.UNKNOWN;
 import static android.telephony.AccessNetworkConstants.AccessNetworkType.UTRAN;
 import static android.telephony.BarringInfo.BARRING_SERVICE_TYPE_EMERGENCY;
@@ -36,6 +37,7 @@ import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_REQUIRES_VOLTE_ENABLED_BOOL;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_SCAN_TIMER_SEC_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT;
+import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT;
 import static android.telephony.CarrierConfigManager.ImsEmergency.KEY_PREFER_IMS_EMERGENCY_WHEN_VOICE_CALLS_ON_CS_BOOL;
 import static android.telephony.CarrierConfigManager.ImsEmergency.SCAN_TYPE_FULL_SERVICE;
@@ -51,6 +53,7 @@ import static android.telephony.NetworkRegistrationInfo.DOMAIN_PS;
 import static android.telephony.NetworkRegistrationInfo.REGISTRATION_STATE_HOME;
 import static android.telephony.NetworkRegistrationInfo.REGISTRATION_STATE_UNKNOWN;
 
+import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_MAX_CELLULAR_TIMEOUT;
 import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_NETWORK_SCAN_TIMEOUT;
 
 import static junit.framework.Assert.assertEquals;
@@ -59,6 +62,7 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertTrue;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
@@ -89,11 +93,13 @@ import android.telephony.DomainSelectionService;
 import android.telephony.DomainSelectionService.SelectionAttributes;
 import android.telephony.EmergencyRegResult;
 import android.telephony.NetworkRegistrationInfo;
+import android.telephony.PreciseDisconnectCause;
 import android.telephony.TelephonyManager;
 import android.telephony.TransportSelectorCallback;
 import android.telephony.WwanSelectorCallback;
 import android.telephony.ims.ImsManager;
 import android.telephony.ims.ImsMmTelManager;
+import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.ProvisioningManager;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.TestableLooper;
@@ -132,6 +138,7 @@ public class EmergencyCallDomainSelectorTest {
     @Mock private ImsStateTracker mImsStateTracker;
     @Mock private DomainSelectorBase.DestroyListener mDestroyListener;
     @Mock private ProvisioningManager mProvisioningManager;
+    @Mock private CrossSimRedialingController mCsrdCtrl;
 
     private Context mContext;
 
@@ -268,7 +275,7 @@ public class EmergencyCallDomainSelectorTest {
 
         verify(mWwanSelectorCallback, times(0)).onRequestEmergencyNetworkScan(
                 any(), anyInt(), any(), any());
-        verify(mWwanSelectorCallback, times(0)).onDomainSelected(anyInt());
+        verify(mWwanSelectorCallback, times(0)).onDomainSelected(anyInt(), eq(true));
     }
 
     @Test
@@ -983,13 +990,13 @@ public class EmergencyCallDomainSelectorTest {
         assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
 
         // Wi-Fi is not connected.
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected.
         mNetworkCallback.onAvailable(null);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(eq(true));
     }
 
     @Test
@@ -1015,20 +1022,20 @@ public class EmergencyCallDomainSelectorTest {
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
         // Wi-Fi is not connected.
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected. But Wi-Fi calling setting is disabled.
         mNetworkCallback.onAvailable(null);
         when(mMmTelManager.isVoWiFiRoamingSettingEnabled()).thenReturn(false);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected and Wi-Fi calling setting is enabled.
         when(mMmTelManager.isVoWiFiSettingEnabled()).thenReturn(true);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(eq(true));
     }
 
     @Test
@@ -1054,19 +1061,19 @@ public class EmergencyCallDomainSelectorTest {
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
         // Wi-Fi is not connected.
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected. But Wi-Fi calling s not activated.
         mNetworkCallback.onAvailable(null);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected and Wi-Fi calling is activated.
         doReturn("1").when(mProvisioningManager).getProvisioningStringValue(anyInt());
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(eq(true));
     }
 
     @Test
@@ -1087,19 +1094,19 @@ public class EmergencyCallDomainSelectorTest {
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
         // Wi-Fi is not connected.
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // Wi-Fi is connected but IMS is not registered over Wi-Fi.
         mNetworkCallback.onAvailable(null);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(0)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
 
         // IMS is registered over Wi-Fi.
         bindImsService(true);
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(eq(false));
     }
 
     @Test
@@ -1126,13 +1133,13 @@ public class EmergencyCallDomainSelectorTest {
 
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(eq(false));
 
         // duplicated event
         mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
 
         // ignore duplicated callback, no change in interaction
-        verify(mTransportSelectorCallback, times(1)).onWlanSelected();
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
     }
 
     @Test
@@ -1142,6 +1149,7 @@ public class EmergencyCallDomainSelectorTest {
         doReturn(2).when(mTelephonyManager).getActiveModemCount();
         doReturn(TelephonyManager.SIM_STATE_PIN_REQUIRED)
                 .when(mTelephonyManager).getSimState(anyInt());
+        doReturn(true).when(mCsrdCtrl).isThereOtherSlot();
 
         EmergencyRegResult regResult = getEmergencyRegResult(EUTRAN, REGISTRATION_STATE_UNKNOWN,
                 0, false, false, 0, 0, "", "", "jp");
@@ -1154,6 +1162,29 @@ public class EmergencyCallDomainSelectorTest {
 
         verify(mTransportSelectorCallback, times(1))
                 .onSelectionTerminated(eq(DisconnectCause.EMERGENCY_PERM_FAILURE));
+    }
+
+    @Test
+    public void testDualSimInvalidSubscriptionButNoOtherSlot() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+        doReturn(2).when(mTelephonyManager).getActiveModemCount();
+        doReturn(TelephonyManager.SIM_STATE_PIN_REQUIRED)
+                .when(mTelephonyManager).getSimState(anyInt());
+        doReturn(false).when(mCsrdCtrl).isThereOtherSlot();
+
+        EmergencyRegResult regResult = getEmergencyRegResult(EUTRAN, REGISTRATION_STATE_UNKNOWN,
+                0, false, false, 0, 0, "", "", "jp");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+        processAllMessages();
+
+        verify(mTransportSelectorCallback, times(0))
+                .onSelectionTerminated(eq(DisconnectCause.EMERGENCY_PERM_FAILURE));
+        verifyScanPsPreferred();
     }
 
     @Test
@@ -1240,7 +1271,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1254,7 +1285,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyPsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyPsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1269,7 +1300,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1284,7 +1315,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyCsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyCsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
 
     }
 
@@ -1299,7 +1330,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1313,7 +1344,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1329,7 +1360,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1344,7 +1375,7 @@ public class EmergencyCallDomainSelectorTest {
 
         setupForScanListTest(bundle);
 
-        verifyCsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyCsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1361,7 +1392,7 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1378,7 +1409,7 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1396,7 +1427,7 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false));
+        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(false, false, false));
     }
 
     @Test
@@ -1413,7 +1444,7 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1430,7 +1461,7 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyCsPreferredScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
     }
 
     @Test
@@ -1449,7 +1480,371 @@ public class EmergencyCallDomainSelectorTest {
         bindImsService();
         processAllMessages();
 
-        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true));
+        verifyPsOnlyScanList(mDomainSelector.getNextPreferredNetworks(true, false, false));
+    }
+
+    @Test
+    public void testEpsFallbackThenCsPreference() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        int[] domainPreference = new int[] {
+                CarrierConfigManager.ImsEmergency.DOMAIN_PS_3GPP,
+                CarrierConfigManager.ImsEmergency.DOMAIN_CS,
+                };
+        bundle.putIntArray(KEY_EMERGENCY_DOMAIN_PREFERENCE_INT_ARRAY, domainPreference);
+        bundle.putIntArray(KEY_EMERGENCY_OVER_IMS_SUPPORTED_3GPP_NETWORK_TYPES_INT_ARRAY,
+                    new int[] { NGRAN, EUTRAN });
+
+        setupForScanListTest(bundle);
+
+        List<Integer> networks = mDomainSelector.getNextPreferredNetworks(false, true, false);
+
+        assertFalse(networks.isEmpty());
+        assertTrue(networks.contains(EUTRAN));
+        assertTrue(networks.contains(NGRAN));
+        assertTrue(networks.contains(UTRAN));
+        assertTrue(networks.contains(GERAN));
+        assertTrue(networks.indexOf(EUTRAN) < networks.indexOf(UTRAN));
+        assertTrue(networks.indexOf(UTRAN) < networks.indexOf(GERAN));
+        assertTrue(networks.indexOf(GERAN) < networks.indexOf(NGRAN));
+    }
+
+    @Test
+    public void testStartCrossStackTimer() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(
+                UNKNOWN, REGISTRATION_STATE_UNKNOWN, 0, false, false, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        processAllMessages();
+        verify(mCsrdCtrl).startTimer(any(), eq(mDomainSelector), any(),
+                any(), anyBoolean(), anyBoolean(), anyInt());
+    }
+
+    @Test
+    public void testStopCrossStackTimerOnCancel() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        mDomainSelector.cancelSelection();
+
+        verify(mCsrdCtrl).stopTimer();
+    }
+
+    @Test
+    public void testStopCrossStackTimerOnFinish() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        mDomainSelector.finishSelection();
+
+        verify(mCsrdCtrl).stopTimer();
+    }
+
+    @Test
+    public void testCrossStackTimerTempFailure() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        verifyCsDialed();
+
+        attr = new SelectionAttributes.Builder(SLOT_0, SLOT_0_SUB_ID, SELECTOR_TYPE_CALLING)
+                .setEmergency(true)
+                .setEmergencyRegResult(regResult)
+                .setCsDisconnectCause(PreciseDisconnectCause.EMERGENCY_TEMP_FAILURE)
+                .build();
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        verify(mCsrdCtrl).notifyCallFailure(eq(PreciseDisconnectCause.EMERGENCY_TEMP_FAILURE));
+    }
+
+    @Test
+    public void testCrossStackTimerPermFailure() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        verifyCsDialed();
+
+        attr = new SelectionAttributes.Builder(SLOT_0, SLOT_0_SUB_ID, SELECTOR_TYPE_CALLING)
+                .setEmergency(true)
+                .setEmergencyRegResult(regResult)
+                .setCsDisconnectCause(PreciseDisconnectCause.EMERGENCY_PERM_FAILURE)
+                .build();
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        verify(mCsrdCtrl).notifyCallFailure(eq(PreciseDisconnectCause.EMERGENCY_PERM_FAILURE));
+    }
+
+    @Test
+    public void testCrossStackTimerExpired() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(
+                UNKNOWN, REGISTRATION_STATE_UNKNOWN, 0, false, false, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        verifyScanPsPreferred();
+
+        mDomainSelector.notifyCrossStackTimerExpired();
+
+        verify(mTransportSelectorCallback)
+                .onSelectionTerminated(eq(DisconnectCause.EMERGENCY_TEMP_FAILURE));
+    }
+
+    @Test
+    public void testCrossStackTimerExpiredAfterDomainSelected() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        verifyCsDialed();
+
+        mDomainSelector.notifyCrossStackTimerExpired();
+
+        verify(mTransportSelectorCallback, times(0))
+                .onSelectionTerminated(eq(DisconnectCause.EMERGENCY_TEMP_FAILURE));
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        verify(mTransportSelectorCallback)
+                .onSelectionTerminated(eq(DisconnectCause.EMERGENCY_TEMP_FAILURE));
+    }
+
+    @Test
+    public void testDefaultEpsImsRegisteredSelectPsEmergencyRegFailed() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(EUTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_PS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsService();
+
+        verifyPsDialed();
+
+        attr = new SelectionAttributes.Builder(SLOT_0, SLOT_0_SUB_ID, SELECTOR_TYPE_CALLING)
+                .setEmergency(true)
+                .setEmergencyRegResult(regResult)
+                .setPsDisconnectCause(
+                        new ImsReasonInfo(ImsReasonInfo.CODE_LOCAL_NOT_REGISTERED, 0, null))
+                .build();
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(1)).onRequestEmergencyNetworkScan(
+                any(), anyInt(), any(), any());
+        assertFalse(mAccessNetwork.contains(EUTRAN));
+    }
+
+    @Test
+    public void testMaxCellularTimeout() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, true);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, 20);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        setupForHandleScanResult();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
+
+        // Wi-Fi is connected.
+        mNetworkCallback.onAvailable(null);
+
+        // Max cellular timer expired
+        mDomainSelector.removeMessages(MSG_MAX_CELLULAR_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_MAX_CELLULAR_TIMEOUT));
+
+        assertFalse(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
+    }
+
+
+    @Test
+    public void testMaxCellularTimeoutScanTimeout() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, true);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, 20);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        setupForHandleScanResult();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
+
+        // Wi-Fi is connected.
+        mNetworkCallback.onAvailable(null);
+
+        // Scan timer expired
+        mDomainSelector.removeMessages(MSG_NETWORK_SCAN_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
+
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
+    }
+
+    @Test
+    public void testMaxCellularTimeoutWhileDialingOnCellular() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, true);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, 5);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        verifyCsDialed();
+
+        assertFalse(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        // Wi-Fi is connected.
+        mNetworkCallback.onAvailable(null);
+        processAllMessages();
+
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
+
+        // Max cellular timer expired
+        mDomainSelector.removeMessages(MSG_MAX_CELLULAR_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_MAX_CELLULAR_TIMEOUT));
+        processAllMessages();
+
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
+    }
+
+    @Test
+    public void testMaxCellularTimeoutWileDialingOnWlan() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, true);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, 20);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        setupForHandleScanResult();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
+
+        // Wi-Fi is connected.
+        mNetworkCallback.onAvailable(null);
+
+        // Network scan timer expired
+        mDomainSelector.removeMessages(MSG_NETWORK_SCAN_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+    }
+
+    @Test
+    public void testMaxCellularTimeoutWileDialingOnWlanAllowMultipleTries() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, true);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, 20);
+        bundle.putInt(KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT, 2);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt())).thenReturn(bundle);
+
+        setupForHandleScanResult();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(0)).onWlanSelected(anyBoolean());
+
+        // Wi-Fi is connected.
+        mNetworkCallback.onAvailable(null);
+
+        // Network scan timer expired
+        mDomainSelector.removeMessages(MSG_NETWORK_SCAN_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_NETWORK_SCAN_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(1)).onWlanSelected(anyBoolean());
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        EmergencyRegResult regResult = getEmergencyRegResult(UTRAN, REGISTRATION_STATE_HOME,
+                NetworkRegistrationInfo.DOMAIN_CS,
+                true, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+
+        // Max cellular timer expired
+        mDomainSelector.removeMessages(MSG_MAX_CELLULAR_TIMEOUT);
+        mDomainSelector.handleMessage(mDomainSelector.obtainMessage(MSG_MAX_CELLULAR_TIMEOUT));
+        processAllMessages();
+
+        verify(mTransportSelectorCallback, times(2)).onWlanSelected(anyBoolean());
     }
 
     private void setupForScanListTest(PersistableBundle bundle) throws Exception {
@@ -1525,7 +1920,7 @@ public class EmergencyCallDomainSelectorTest {
     private void createSelector(int subId) throws Exception {
         mDomainSelector = new EmergencyCallDomainSelector(
                 mContext, SLOT_0, subId, mHandlerThread.getLooper(),
-                mImsStateTracker, mDestroyListener);
+                mImsStateTracker, mDestroyListener, mCsrdCtrl);
 
         replaceInstance(DomainSelectorBase.class,
                 "mWwanSelectorCallback", mDomainSelector, mWwanSelectorCallback);
@@ -1533,12 +1928,12 @@ public class EmergencyCallDomainSelectorTest {
 
     private void verifyCsDialed() {
         processAllMessages();
-        verify(mWwanSelectorCallback, times(1)).onDomainSelected(eq(DOMAIN_CS));
+        verify(mWwanSelectorCallback, times(1)).onDomainSelected(eq(DOMAIN_CS), eq(false));
     }
 
     private void verifyPsDialed() {
         processAllMessages();
-        verify(mWwanSelectorCallback, times(1)).onDomainSelected(eq(DOMAIN_PS));
+        verify(mWwanSelectorCallback, times(1)).onDomainSelected(eq(DOMAIN_PS), eq(true));
     }
 
     private void verifyScanPsPreferred() {
@@ -1624,6 +2019,7 @@ public class EmergencyCallDomainSelectorTest {
         int voWifiRequiresCondition = VOWIFI_REQUIRES_NONE;
         int maxRetriesOverWiFi = 1;
         int cellularScanTimerSec = 10;
+        int maxCellularTimerSec = 0;
         boolean voWifiOverEmergencyPdn = false;
         int scanType = SCAN_TYPE_NO_PREFERENCE;
         boolean requiresImsRegistration = false;
@@ -1634,7 +2030,7 @@ public class EmergencyCallDomainSelectorTest {
         return getPersistableBundle(imsRats, csRats, imsRoamRats, csRoamRats,
                 domainPreference, roamDomainPreference, imsWhenVoiceOnCs,
                 voWifiRequiresCondition, maxRetriesOverWiFi, cellularScanTimerSec,
-                scanType, voWifiOverEmergencyPdn, requiresImsRegistration,
+                maxCellularTimerSec, scanType, voWifiOverEmergencyPdn, requiresImsRegistration,
                 requiresVoLteEnabled, ltePreferredAfterNrFailed, cdmaPreferredNumbers);
     }
 
@@ -1643,7 +2039,8 @@ public class EmergencyCallDomainSelectorTest {
             @Nullable int[] imsRoamRats, @Nullable int[] csRoamRats,
             @Nullable int[] domainPreference, @Nullable int[] roamDomainPreference,
             boolean imsWhenVoiceOnCs, int voWifiRequiresCondition,
-            int maxRetriesOverWiFi, int cellularScanTimerSec, int scanType,
+            int maxRetriesOverWiFi, int cellularScanTimerSec,
+            int maxCellularTimerSec, int scanType,
             boolean voWifiOverEmergencyPdn, boolean requiresImsRegistration,
             boolean requiresVoLteEnabled, boolean ltePreferredAfterNrFailed,
             @Nullable String[] cdmaPreferredNumbers) {
@@ -1678,6 +2075,7 @@ public class EmergencyCallDomainSelectorTest {
         bundle.putInt(KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT, voWifiRequiresCondition);
         bundle.putInt(KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT, maxRetriesOverWiFi);
         bundle.putInt(KEY_EMERGENCY_SCAN_TIMER_SEC_INT, cellularScanTimerSec);
+        bundle.putInt(KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT, maxCellularTimerSec);
         bundle.putBoolean(KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL, voWifiOverEmergencyPdn);
         bundle.putInt(KEY_EMERGENCY_NETWORK_SCAN_TYPE_INT, scanType);
         bundle.putBoolean(KEY_EMERGENCY_REQUIRES_IMS_REGISTRATION_BOOL, requiresImsRegistration);
