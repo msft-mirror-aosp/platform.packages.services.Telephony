@@ -2608,6 +2608,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
          * If PUK is null, unlock SIM card with PIN
          *
          * If PUK is not null, unlock SIM card with PUK and set PIN code
+         *
+         * Besides, since it is reused in class level, the thread's looper will be stopped to avoid
+         * its thread leak.
          */
         synchronized int[] unlockSim(String puk, String pin) {
 
@@ -2643,6 +2646,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (mResult == PhoneConstants.PIN_RESULT_SUCCESS && pin.length() > 0) {
                 UiccController.getInstance().getPinStorage().storePin(pin, mPhoneId);
             }
+            // This instance is no longer reused, so quit its thread's looper.
+            mHandler.getLooper().quitSafely();
 
             return resultArray;
         }
@@ -9177,6 +9182,30 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             } else {
                 mCarrierPrivilegeTestOverrideSubIds.add(subId);
             }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    @Override
+    public void setCarrierServicePackageOverride(
+            int subId, String carrierServicePackage, String callingPackage) {
+        TelephonyPermissions.enforceShellOnly(
+                Binder.getCallingUid(), "setCarrierServicePackageOverride");
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            final Phone phone = getPhone(subId);
+            if (phone == null || phone.getSubId() != subId) {
+                loge("setCarrierServicePackageOverride fails with invalid subId: " + subId);
+                throw new IllegalArgumentException("No phone for subid");
+            }
+            CarrierPrivilegesTracker cpt = phone.getCarrierPrivilegesTracker();
+            if (cpt == null) {
+                loge("setCarrierServicePackageOverride failed with no CPT for phone");
+                throw new IllegalStateException("No CPT for phone");
+            }
+            cpt.setTestOverrideCarrierServicePackage(carrierServicePackage);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
