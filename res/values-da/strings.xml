@@ -596,9 +596,9 @@
     <string name="failedToImportSingleContactMsg" msgid="228095510489830266">"Kontaktpersonen kunne ikke importeres"</string>
     <string name="hac_mode_title" msgid="4127986689621125468">"Høreapparater"</string>
     <string name="hac_mode_summary" msgid="7774989500136009881">"Slå høreapparatskompatibilitet til"</string>
-    <string name="rtt_mode_title" msgid="3075948111362818043">"Opkald via sms i realtid"</string>
+    <string name="rtt_mode_title" msgid="3075948111362818043">"Opkald via beskeder i realtid"</string>
     <string name="rtt_mode_summary" msgid="8631541375609989562">"Tillad afsendelse af sms-beskeder i et taleopkald"</string>
-    <string name="rtt_mode_more_information" msgid="587500128658756318">"Sms i realtid hjælper personer, som er døve, hørehæmmede, talehandicappede, eller som har brug for mere end bare tale, med at foretage opkald.&lt;br&gt; &lt;a href=<xliff:g id="URL">http://support.google.com/mobile?p=telephony_rtt</xliff:g>&gt;Få flere oplysninger&lt;/a&gt;\n       &lt;br&gt;&lt;br&gt; – Opkald via sms i realtid gemmes som en beskedtransskription\n       &lt;br&gt; – Sms i realtid er ikke tilgængeligt til videoopkald"</string>
+    <string name="rtt_mode_more_information" msgid="587500128658756318">"Beskeder i realtid hjælper personer, som er døve, hørehæmmede, talehandicappede, eller som har brug for mere end bare tale, med at foretage opkald.&lt;br&gt; &lt;a href=<xliff:g id="URL">http://support.google.com/mobile?p=telephony_rtt</xliff:g>&gt;Få flere oplysninger&lt;/a&gt;\n       &lt;br&gt;&lt;br&gt; – Opkald via beskeder i realtid gemmes som en beskedtransskription\n       &lt;br&gt; – Beskeder i realtid er ikke tilgængeligt til videoopkald"</string>
     <string name="no_rtt_when_roaming" msgid="5268008247378355389">"Bemærk! RTT er ikke tilgængeligt under roaming"</string>
   <string-array name="tty_mode_entries">
     <item msgid="3238070884803849303">"TTY fra"</item>
@@ -862,7 +862,7 @@
     <string name="radioInfo_phone_offhook" msgid="7564601639749936170">"Opkald i gang"</string>
     <string name="radioInfo_data_disconnected" msgid="8085447971880814541">"Afbrudt"</string>
     <string name="radioInfo_data_connecting" msgid="925092271092152472">"Forbindelsen oprettes"</string>
-    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Tilsluttet"</string>
+    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Forbundet"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"Suspenderet"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"Ukendt"</string>
     <string name="radioInfo_imei_primary" msgid="5948747378637224400">"Primær"</string>
