@@ -133,7 +133,7 @@
     <string name="cdma_call_waiting_in_ims_off" msgid="1099246114368636334">"Ventende CDMA-opkald under IMS er deaktiveret"</string>
     <string name="updating_title" msgid="6130548922615719689">"Indstillinger for opkald"</string>
     <string name="call_settings_admin_user_only" msgid="7238947387649986286">"Opkaldsindstillingerne kan kun ændres af administratorbrugeren."</string>
-    <string name="phone_account_settings_user_restriction" msgid="9142685151087208396">"Kontoindstillingerne på din telefon kan kun ændres af administrator- eller arbejdsbrugeren."</string>
+    <string name="phone_account_settings_user_restriction" msgid="9142685151087208396">"Telefons kontoindstillinger kan kun ændres af en administrator eller arbejdsbruger."</string>
     <string name="call_settings_with_label" msgid="8460230435361579511">"Indstillinger (<xliff:g id="SUBSCRIPTIONLABEL">%s</xliff:g>)"</string>
     <string name="error_updating_title" msgid="2024290892676808965">"Fejl i indstillinger for opkald"</string>
     <string name="reading_settings" msgid="1605904432450871183">"Læser indstillinger ..."</string>
@@ -558,7 +558,7 @@
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Opret forbindelse til et trådløst netværk for at foretage et opkald."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Aktivér Wi-Fi-opkald for at foretage et opkald."</string>
     <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Deaktiver satellit for at foretage et opkald."</string>
-    <string name="emergency_information_hint" msgid="9208897544917793012">"Info til nødsituationer"</string>
+    <string name="emergency_information_hint" msgid="9208897544917793012">"Nødoplysninger"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Ejer"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Tryk igen for at se oplysninger"</string>
     <string name="emergency_enable_radio_dialog_title" msgid="2667568200755388829">"Nødopkald"</string>
@@ -596,9 +596,9 @@
     <string name="failedToImportSingleContactMsg" msgid="228095510489830266">"Kontaktpersonen kunne ikke importeres"</string>
     <string name="hac_mode_title" msgid="4127986689621125468">"Høreapparater"</string>
     <string name="hac_mode_summary" msgid="7774989500136009881">"Slå høreapparatskompatibilitet til"</string>
-    <string name="rtt_mode_title" msgid="3075948111362818043">"Opkald via sms i realtid"</string>
+    <string name="rtt_mode_title" msgid="3075948111362818043">"Opkald via beskeder i realtid"</string>
     <string name="rtt_mode_summary" msgid="8631541375609989562">"Tillad afsendelse af sms-beskeder i et taleopkald"</string>
-    <string name="rtt_mode_more_information" msgid="587500128658756318">"Sms i realtid hjælper personer, som er døve, hørehæmmede, talehandicappede, eller som har brug for mere end bare tale, med at foretage opkald.&lt;br&gt; &lt;a href=<xliff:g id="URL">http://support.google.com/mobile?p=telephony_rtt</xliff:g>&gt;Få flere oplysninger&lt;/a&gt;\n       &lt;br&gt;&lt;br&gt; – Opkald via sms i realtid gemmes som en beskedtransskription\n       &lt;br&gt; – Sms i realtid er ikke tilgængeligt til videoopkald"</string>
+    <string name="rtt_mode_more_information" msgid="587500128658756318">"Beskeder i realtid hjælper personer, som er døve, hørehæmmede, talehandicappede, eller som har brug for mere end bare tale, med at foretage opkald.&lt;br&gt; &lt;a href=<xliff:g id="URL">http://support.google.com/mobile?p=telephony_rtt</xliff:g>&gt;Få flere oplysninger&lt;/a&gt;\n       &lt;br&gt;&lt;br&gt; – Opkald via beskeder i realtid gemmes som en beskedtransskription\n       &lt;br&gt; – Beskeder i realtid er ikke tilgængeligt til videoopkald"</string>
     <string name="no_rtt_when_roaming" msgid="5268008247378355389">"Bemærk! RTT er ikke tilgængeligt under roaming"</string>
   <string-array name="tty_mode_entries">
     <item msgid="3238070884803849303">"TTY fra"</item>
@@ -683,8 +683,8 @@
     <string name="callFailed_wifi_lost" msgid="1788036730589163141">"Du mistede Wi-Fi-forbindelsen. Opkaldet blev afsluttet."</string>
     <string name="dialFailed_low_battery" msgid="6857904237423407056">"Du kan ikke foretage videoopkaldet på grund af lavt batteriniveau."</string>
     <string name="callFailed_low_battery" msgid="4056828320214416182">"Videoopkaldet blev afsluttet på grund af lavt batteriniveau."</string>
-    <string name="callFailed_emergency_call_over_wfc_not_available" msgid="5944309590693432042">"Det er ikke muligt at foretage nødopkald som Wi-Fi-opkald i dette land."</string>
-    <string name="callFailed_wfc_service_not_available_in_this_location" msgid="3624536608369524988">"Det er ikke muligt at foretage Wi-Fi-opkald i dette land."</string>
+    <string name="callFailed_emergency_call_over_wfc_not_available" msgid="5944309590693432042">"Det er ikke muligt at foretage nødopkald som Wi-Fi-opkald på denne lokation."</string>
+    <string name="callFailed_wfc_service_not_available_in_this_location" msgid="3624536608369524988">"Det er ikke muligt at foretage Wi-Fi-opkald på denne lokation."</string>
     <string name="change_pin_title" msgid="3564254326626797321">"Skift pinkode til din telefonsvarer"</string>
     <string name="change_pin_continue_label" msgid="5177011752453506371">"Fortsæt"</string>
     <string name="change_pin_cancel_label" msgid="2301711566758827936">"Annuller"</string>
@@ -862,7 +862,7 @@
     <string name="radioInfo_phone_offhook" msgid="7564601639749936170">"Opkald i gang"</string>
     <string name="radioInfo_data_disconnected" msgid="8085447971880814541">"Afbrudt"</string>
     <string name="radioInfo_data_connecting" msgid="925092271092152472">"Forbindelsen oprettes"</string>
-    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Tilsluttet"</string>
+    <string name="radioInfo_data_connected" msgid="7637335645634239508">"Forbundet"</string>
     <string name="radioInfo_data_suspended" msgid="8695262782642002785">"Suspenderet"</string>
     <string name="radioInfo_unknown" msgid="5401423738500672850">"Ukendt"</string>
     <string name="radioInfo_imei_primary" msgid="5948747378637224400">"Primær"</string>
