@@ -44,6 +44,7 @@ import android.os.HandlerExecutor;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.SystemProperties;
+import android.os.UserManager;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellIdentityCdma;
@@ -207,6 +208,7 @@ public class RadioInfo extends AppCompatActivity {
     private static final int EVENT_QUERY_SMSC_DONE = 1005;
     private static final int EVENT_UPDATE_SMSC_DONE = 1006;
     private static final int EVENT_PHYSICAL_CHANNEL_CONFIG_CHANGED = 1007;
+    private static final int EVENT_UPDATE_NR_STATS = 1008;
 
     private static final int MENU_ITEM_VIEW_ADN            = 1;
     private static final int MENU_ITEM_VIEW_FDN            = 2;
@@ -379,7 +381,14 @@ public class RadioInfo extends AppCompatActivity {
             updateNetworkType();
             updateRawRegistrationState(serviceState);
             updateImsProvisionedState();
-            updateNrStats(serviceState);
+
+            // Since update NR stats includes a ril message to get slicing information, it runs
+            // as blocking during the timeout period of 1 second. if ServiceStateChanged event
+            // fires consecutively, RadioInfo can run for more than 10 seconds. This can cause ANR.
+            // Therefore, send event only when there is no same event being processed.
+            if (!mHandler.hasMessages(EVENT_UPDATE_NR_STATS)) {
+                mHandler.obtainMessage(EVENT_UPDATE_NR_STATS).sendToTarget();
+            }
         }
 
         @Override
@@ -465,6 +474,10 @@ public class RadioInfo extends AppCompatActivity {
                     }
                     updatePhysicalChannelConfiguration((List<PhysicalChannelConfig>) ar.result);
                     break;
+                case EVENT_UPDATE_NR_STATS:
+                    log("got EVENT_UPDATE_NR_STATS");
+                    updateNrStats();
+                    break;
                 default:
                     super.handleMessage(msg);
                     break;
@@ -478,6 +491,15 @@ public class RadioInfo extends AppCompatActivity {
         super.onCreate(icicle);
         if (!android.os.Process.myUserHandle().isSystem()) {
             Log.e(TAG, "Not run from system user, don't do anything.");
+            finish();
+            return;
+        }
+
+        UserManager userManager =
+                (UserManager) getApplicationContext().getSystemService(Context.USER_SERVICE);
+        if (userManager != null
+                && userManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+            Log.w(TAG, "User is restricted from configuring mobile networks.");
             finish();
             return;
         }
@@ -690,7 +712,7 @@ public class RadioInfo extends AppCompatActivity {
         updateProperties();
         updateDnsCheckState();
         updateNetworkType();
-        updateNrStats(null);
+        updateNrStats();
 
         updateCellInfo(mCellInfoResult);
         updateSubscriptionIds();
@@ -835,7 +857,9 @@ public class RadioInfo extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mQueuedWork.shutdown();
+        if (mQueuedWork != null) {
+            mQueuedWork.shutdown();
+        }
     }
 
     // returns array of string labels for each phone index. The array index is equal to the phone
@@ -1235,15 +1259,12 @@ public class RadioInfo extends AppCompatActivity {
                     AccessNetworkConstants.TRANSPORT_TYPE_WLAN));
     }
 
-    private void updateNrStats(ServiceState serviceState) {
+    private void updateNrStats() {
         if ((mTelephonyManager.getSupportedRadioAccessFamily()
                 & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
             return;
         }
-        ServiceState ss = serviceState;
-        if (ss == null && mPhone != null) {
-            ss = mPhone.getServiceState();
-        }
+        ServiceState ss = (mPhone == null) ? null : mPhone.getServiceState();
         if (ss != null) {
             NetworkRegistrationInfo nri = ss.getNetworkRegistrationInfo(
                     NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
@@ -1257,6 +1278,13 @@ public class RadioInfo extends AppCompatActivity {
             }
             mNrState.setText(NetworkRegistrationInfo.nrStateToString(ss.getNrState()));
             mNrFrequency.setText(ServiceState.frequencyRangeToString(ss.getNrFrequencyRange()));
+        } else {
+            Log.e(TAG, "Clear Nr stats by null service state");
+            mEndcAvailable.setText("");
+            mDcnrRestricted.setText("");
+            mNrAvailable.setText("");
+            mNrState.setText("");
+            mNrFrequency.setText("");
         }
 
         CompletableFuture<NetworkSlicingConfig> resultFuture = new CompletableFuture<>();
@@ -1539,8 +1567,7 @@ public class RadioInfo extends AppCompatActivity {
     };
 
     private boolean isRadioOn() {
-        //FIXME: Replace with a TelephonyManager call
-        return mPhone.getServiceState().getState() != ServiceState.STATE_POWER_OFF;
+        return mTelephonyManager.getRadioPowerState() == TelephonyManager.RADIO_POWER_ON;
     }
 
     private void updateRadioPowerState() {

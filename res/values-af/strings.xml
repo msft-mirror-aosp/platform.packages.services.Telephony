@@ -298,7 +298,7 @@
     <string name="sip_accounts_removed_notification_title" msgid="3528076957535736095">"Opgeskorte SIP-rekeninge is gevind en verwyder"</string>
     <string name="sip_accounts_removed_notification_message" msgid="1916856744869791592">"SIP-bel word nie meer deur die Android-platform ondersteun nie.\nJou bestaande SIP-rekeninge <xliff:g id="REMOVED_SIP_ACCOUNTS">%s</xliff:g> is verwyder.\nBevestig asseblief jou verstekbelinstelling."</string>
     <string name="sip_accounts_removed_notification_action" msgid="3772778402370555562">"Gaan na instellings"</string>
-    <string name="data_usage_title" msgid="8438592133893837464">"Programdatagebruik"</string>
+    <string name="data_usage_title" msgid="8438592133893837464">"Appdatagebruik"</string>
     <string name="data_usage_template" msgid="6287906680674061783">"<xliff:g id="ID_1">%1$s</xliff:g> mobiele data gebruik <xliff:g id="ID_2">%2$s</xliff:g>"</string>
     <string name="advanced_options_title" msgid="9208195294513520934">"Gevorderd"</string>
     <string name="carrier_settings_euicc" msgid="1190237227261337749">"Diensverskaffer"</string>
@@ -876,7 +876,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"Sub-ID van verstekdata-SIM:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Aflaaibandwydte (kbps):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Oplaaibandwydte (kbps):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"Fisieke LTE-kanaalopstelling:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"Fisieke kanaalopstellings:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"Herlaaikoers van selinligting:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"Alle selmetingsinligting:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"Datadiens:"</string>

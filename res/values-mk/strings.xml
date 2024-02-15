@@ -318,7 +318,7 @@
     <string name="throttle_current_usage" msgid="7483859109708658613">"Податоци кои се користат во тековниот период"</string>
     <string name="throttle_time_frame" msgid="1813452485948918791">"Период на потрошен интернет"</string>
     <string name="throttle_rate" msgid="7641913901133634905">"Политика на стапка на податоци"</string>
-    <string name="throttle_help" msgid="2624535757028809735">"Дознај повеќе"</string>
+    <string name="throttle_help" msgid="2624535757028809735">"Дознајте повеќе"</string>
     <string name="throttle_status_subtext" msgid="1110276415078236687">"<xliff:g id="USED_0">%1$s</xliff:g> (<xliff:g id="USED_1">%2$d</xliff:g> ٪) од максимум <xliff:g id="USED_2">%3$s</xliff:g> за периодот\nСледниот период започнува за <xliff:g id="USED_3">%4$d</xliff:g> дена (<xliff:g id="USED_4">%5$s</xliff:g>)"</string>
     <string name="throttle_data_usage_subtext" msgid="3185429653996709840">"<xliff:g id="USED_0">%1$s</xliff:g> (<xliff:g id="USED_1">%2$d</xliff:g>٪) од <xliff:g id="USED_2">%3$s</xliff:g> максимален период"</string>
     <string name="throttle_data_rate_reduced_subtext" msgid="8369839346277847725">"<xliff:g id="USED_0">%1$s</xliff:g> максимум е надминат\nСтапката на податоци е намалена на <xliff:g id="USED_1">%2$d</xliff:g> Kb/s"</string>
@@ -876,7 +876,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"SUBID на стандардната SIM за мобилен интернет:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Брзина на пренос при преземање (kbps):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Брзина на пренос при прикачување (kbps):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"Конфигурација на физички канал на LTE:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"Конфигурации на физички канали:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"Стапка на освежување на информациите за мобилниот:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"Сите информации за мерењата на мобилниот:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"Услуга за мобилен интернет:"</string>
@@ -929,6 +929,6 @@
     <string name="send_from_work_profile_title" msgid="7044759579507604732">"Не може да испраќате пораки од лична апликација"</string>
     <string name="send_from_work_profile_description" msgid="2174402508727161974">"Организацијата ви дозволува да испраќате пораки само од работни апликации"</string>
     <string name="send_from_work_profile_cancel" msgid="177746511030381711">"Откажи"</string>
-    <string name="send_from_work_profile_action_str" msgid="6892775562934243337">"Префрли на работен профил"</string>
+    <string name="send_from_work_profile_action_str" msgid="6892775562934243337">"Префрлете се на работен профил"</string>
     <string name="install_messages_on_work_profile_action_str" msgid="3773440996395152903">"Инсталирајте работна апликација за разменување пораки"</string>
 </resources>

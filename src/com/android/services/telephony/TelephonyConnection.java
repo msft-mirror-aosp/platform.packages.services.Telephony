@@ -83,6 +83,7 @@ import com.android.internal.telephony.d2d.RtpAdapter;
 import com.android.internal.telephony.d2d.RtpTransport;
 import com.android.internal.telephony.d2d.Timeouts;
 import com.android.internal.telephony.d2d.TransportProtocol;
+import com.android.internal.telephony.flags.Flags;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.imsphone.ImsPhoneCall;
@@ -149,6 +150,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     private static final int MSG_DTMF_DONE = 22;
     private static final int MSG_MEDIA_ATTRIBUTES_CHANGED = 23;
     private static final int MSG_ON_RTT_INITIATED = 24;
+    private static final int MSG_HOLD = 25;
+    private static final int MSG_UNHOLD = 26;
 
     private static final String JAPAN_COUNTRY_CODE_WITH_PLUS_SIGN = "+81";
     private static final String JAPAN_ISO_COUNTRY_CODE = "JP";
@@ -343,6 +346,12 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                         refreshConferenceSupported();
                     }
                     sendRttInitiationSuccess();
+                    break;
+                case MSG_HOLD:
+                    performHold();
+                    break;
+                case MSG_UNHOLD:
+                    performUnhold();
                     break;
             }
         }
@@ -955,7 +964,7 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
     private Integer mEmergencyServiceCategory = null;
 
     protected TelephonyConnection(com.android.internal.telephony.Connection originalConnection,
-            String callId, @android.telecom.Call.Details.CallDirection int callDirection) {
+            String callId, int callDirection) {
         setCallDirection(callDirection);
         setTelecomCallId(callId);
         if (originalConnection != null) {
@@ -1007,23 +1016,6 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         mHandler.obtainMessage(MSG_HANGUP, android.telephony.DisconnectCause.LOCAL).sendToTarget();
     }
 
-    /**
-     * Notifies this Connection of a request to disconnect a participant of the conference managed
-     * by the connection.
-     *
-     * @param endpoint the {@link Uri} of the participant to disconnect.
-     */
-    @Override
-    public void onDisconnectConferenceParticipant(Uri endpoint) {
-        Log.v(this, "onDisconnectConferenceParticipant %s", endpoint);
-
-        if (mOriginalConnection == null) {
-            return;
-        }
-
-        mOriginalConnection.onDisconnectConferenceParticipant(endpoint);
-    }
-
     @Override
     public void onSeparate() {
         Log.v(this, "onSeparate");
@@ -1049,12 +1041,12 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
 
     @Override
     public void onHold() {
-        performHold();
+        mHandler.obtainMessage(MSG_HOLD).sendToTarget();
     }
 
     @Override
     public void onUnhold() {
-        performUnhold();
+        mHandler.obtainMessage(MSG_UNHOLD).sendToTarget();
     }
 
     @Override
@@ -1296,12 +1288,22 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
         originalConnection.sendRttModifyResponse(textStream);
     }
 
+    private boolean answeringDropsFgCalls() {
+        if (Flags.callExtraForNonHoldSupportedCarriers()) {
+            Bundle extras = getExtras();
+            if (extras != null) {
+                return extras.getBoolean(Connection.EXTRA_ANSWERING_DROPS_FG_CALL);
+            }
+        }
+        return false;
+    }
+
     public void performAnswer(int videoState) {
         Log.v(this, "performAnswer");
         if (isValidRingingCall() && getPhone() != null) {
             try {
                 mTelephonyConnectionService.maybeDisconnectCallsOnOtherSubs(
-                        getPhoneAccountHandle());
+                        getPhoneAccountHandle(), answeringDropsFgCalls());
                 getPhone().acceptCall(videoState);
             } catch (CallStateException e) {
                 Log.e(this, e, "Failed to accept call.");
@@ -2515,8 +2517,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                             }
                         }
 
-                        if (mTelephonyConnectionService.maybeReselectDomain(this,
-                                  mOriginalConnection.getPreciseDisconnectCause(), reasonInfo)) {
+                        if (mTelephonyConnectionService.maybeReselectDomain(this, reasonInfo,
+                                mShowPreciseFailedCause, mHangupDisconnectCause)) {
                             clearOriginalConnection();
                             break;
                         }
@@ -2558,7 +2560,8 @@ abstract class TelephonyConnection extends Connection implements Holdable, Commu
                                         disconnectCause,
                                         preciseDisconnectCause,
                                         mOriginalConnection.getVendorDisconnectCause(),
-                                        getPhone().getPhoneId(), imsReasonInfo));
+                                        getPhone().getPhoneId(), imsReasonInfo,
+                                        new FlagsAdapterImpl()));
                         close();
                     }
                     break;
