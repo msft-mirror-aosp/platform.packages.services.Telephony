@@ -85,6 +85,7 @@ import android.telephony.TelephonyManager;
 import android.telephony.TransportSelectorCallback;
 import android.telephony.ims.ImsManager;
 import android.telephony.ims.ImsMmTelManager;
+import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.ProvisioningManager;
 import android.text.TextUtils;
 import android.util.LocalLog;
@@ -335,11 +336,11 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private void reselectDomain() {
         logi("reselectDomain tryCsWhenPsFails=" + mTryCsWhenPsFails);
 
-        int cause = mSelectionAttributes.getCsDisconnectCause();
+        int cause = getDisconnectCause();
         mCrossSimRedialingController.notifyCallFailure(cause);
 
-        if (cause == EMERGENCY_PERM_FAILURE
-                || cause == EMERGENCY_TEMP_FAILURE) {
+        if ((cause == EMERGENCY_PERM_FAILURE || cause == EMERGENCY_TEMP_FAILURE)
+                && mCrossSimRedialingController.isThereOtherSlot()) {
             logi("reselectDomain should redial on the other subscription");
             terminateSelectionForCrossSimRedialing(cause == EMERGENCY_PERM_FAILURE);
             return;
@@ -392,6 +393,25 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
         requestScan(true);
         mDomainSelected = false;
+    }
+
+    private int getDisconnectCause() {
+        int cause = mSelectionAttributes.getCsDisconnectCause();
+
+        ImsReasonInfo reasonInfo = mSelectionAttributes.getPsDisconnectCause();
+        if (reasonInfo != null) {
+            switch (reasonInfo.getCode()) {
+                case ImsReasonInfo.CODE_EMERGENCY_TEMP_FAILURE:
+                    cause = EMERGENCY_TEMP_FAILURE;
+                    break;
+                case ImsReasonInfo.CODE_EMERGENCY_PERM_FAILURE:
+                    cause = EMERGENCY_PERM_FAILURE;
+                    break;
+                default:
+                    break;
+            }
+        }
+        return cause;
     }
 
     private void reselectDomainInternal() {
@@ -657,6 +677,13 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private void selectDomainFromInitialState() {
         if (mDestroyed) return;
 
+        if (isInEmergencyCallbackModeOnPsWwan()) {
+            logi("selectDomain PS cellular connected in ECBM");
+            mPsNetworkType = EUTRAN;
+            onWwanNetworkTypeSelected(mPsNetworkType);
+            return;
+        }
+
         boolean csInService = isCsInService();
         boolean psInService = isPsInService();
 
@@ -668,6 +695,12 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             mPsNetworkType = getSelectablePsNetworkType(false);
             logi("selectDomain limited service ps=" + accessNetworkTypeToString(mPsNetworkType)
                     + ", cs=" + accessNetworkTypeToString(mCsNetworkType));
+            if (!isInRoaming()
+                    && (mPreferredNetworkScanType
+                            == CarrierConfigManager.ImsEmergency.SCAN_TYPE_FULL_SERVICE)) {
+                requestScan(true);
+                return;
+            }
             // If NGRAN, request scan to trigger emergency registration.
             if (mPsNetworkType == EUTRAN) {
                 onWwanNetworkTypeSelected(mPsNetworkType);
@@ -1601,6 +1634,12 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private boolean isInEmergencyCallbackModeOnWlan() {
         return mEcbmHelper.isInEmergencyCallbackMode(getSlotId())
                 && mEcbmHelper.getTransportType(getSlotId()) == TRANSPORT_TYPE_WLAN
+                && mEcbmHelper.getDataConnectionState(getSlotId()) == DATA_CONNECTED;
+    }
+
+    private boolean isInEmergencyCallbackModeOnPsWwan() {
+        return mEcbmHelper.isInEmergencyCallbackMode(getSlotId())
+                && mEcbmHelper.getTransportType(getSlotId()) == TRANSPORT_TYPE_WWAN
                 && mEcbmHelper.getDataConnectionState(getSlotId()) == DATA_CONNECTED;
     }
 
