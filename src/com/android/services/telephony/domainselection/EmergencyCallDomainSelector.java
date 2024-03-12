@@ -161,6 +161,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
     private @RadioAccessNetworkType List<Integer> mLastPreferredNetworks;
 
     private CancellationSignal mCancelSignal;
+    private EmergencyRegistrationResult mLastRegResult;
 
     // Members for carrier configuration
     private @RadioAccessNetworkType int[] mImsRatsConfig;
@@ -297,6 +298,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
             return;
         }
 
+        mLastRegResult = result;
         removeMessages(MSG_NETWORK_SCAN_TIMEOUT);
         onWwanNetworkTypeSelected(getAccessNetworkType(result));
         mCancelSignal = null;
@@ -446,6 +448,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         logi("selectDomain attr=" + attr);
         mTransportSelectorCallback = cb;
         mSelectionAttributes = attr;
+        mLastRegResult = mSelectionAttributes.getEmergencyRegistrationResult();
 
         TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
         mModemCount = tm.getActiveModemCount();
@@ -501,7 +504,26 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
      */
     private void updateCarrierConfiguration() {
         CarrierConfigManager configMgr = mContext.getSystemService(CarrierConfigManager.class);
-        PersistableBundle b = configMgr.getConfigForSubId(getSubId());
+        PersistableBundle b = configMgr.getConfigForSubId(getSubId(),
+                KEY_EMERGENCY_OVER_IMS_SUPPORTED_3GPP_NETWORK_TYPES_INT_ARRAY,
+                KEY_EMERGENCY_OVER_IMS_ROAMING_SUPPORTED_3GPP_NETWORK_TYPES_INT_ARRAY,
+                KEY_EMERGENCY_OVER_CS_SUPPORTED_ACCESS_NETWORK_TYPES_INT_ARRAY,
+                KEY_EMERGENCY_OVER_CS_ROAMING_SUPPORTED_ACCESS_NETWORK_TYPES_INT_ARRAY,
+                KEY_EMERGENCY_DOMAIN_PREFERENCE_INT_ARRAY,
+                KEY_EMERGENCY_DOMAIN_PREFERENCE_ROAMING_INT_ARRAY,
+                KEY_PREFER_IMS_EMERGENCY_WHEN_VOICE_CALLS_ON_CS_BOOL,
+                KEY_EMERGENCY_VOWIFI_REQUIRES_CONDITION_INT,
+                KEY_EMERGENCY_SCAN_TIMER_SEC_INT,
+                KEY_MAXIMUM_CELLULAR_SEARCH_TIMER_SEC_INT,
+                KEY_MAXIMUM_NUMBER_OF_EMERGENCY_TRIES_OVER_VOWIFI_INT,
+                KEY_EMERGENCY_CALL_OVER_EMERGENCY_PDN_BOOL,
+                KEY_EMERGENCY_NETWORK_SCAN_TYPE_INT,
+                KEY_EMERGENCY_CALL_SETUP_TIMER_ON_CURRENT_NETWORK_SEC_INT,
+                KEY_EMERGENCY_REQUIRES_IMS_REGISTRATION_BOOL,
+                KEY_EMERGENCY_REQUIRES_VOLTE_ENABLED_BOOL,
+                KEY_EMERGENCY_LTE_PREFERRED_AFTER_NR_FAILED_BOOL,
+                KEY_SCAN_LIMITED_SERVICE_AFTER_VOLTE_FAILURE_BOOL,
+                KEY_EMERGENCY_CDMA_PREFERRED_NUMBERS_STRING_ARRAY);
         if (b == null) {
             b = CarrierConfigManager.getDefaultConfig();
         }
@@ -890,10 +912,13 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         } else if (csPreferred || mLastNetworkType == EUTRAN || mLastNetworkType == NGRAN) {
             if (!csPreferred && mLastNetworkType == NGRAN && mLtePreferredAfterNrFailure) {
                 // LTE is preferred after dialing over NR failed.
-                List<Integer> imsRats = getImsNetworkTypeConfiguration();
-                imsRats.remove(Integer.valueOf(NGRAN));
-                preferredNetworks = generatePreferredNetworks(imsRats,
+                preferredNetworks = generatePreferredNetworks(getImsNetworkTypeConfiguration(),
                         getCsNetworkTypeConfiguration());
+                // Make NGRAN have the lowest priority
+                if (preferredNetworks.contains(NGRAN)) {
+                    preferredNetworks.remove(Integer.valueOf(NGRAN));
+                    preferredNetworks.add(NGRAN);
+                }
             } else  if (csPriority > NOT_SUPPORTED) {
                 // PS tried, generate the list with CS preferred.
                 preferredNetworks = generatePreferredNetworks(getCsNetworkTypeConfiguration(),
@@ -1276,8 +1301,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         tm = tm.createForSubscriptionId(getSubId());
         String netIso = tm.getNetworkCountryIso();
 
-        EmergencyRegistrationResult regResult =
-                mSelectionAttributes.getEmergencyRegistrationResult();
+        EmergencyRegistrationResult regResult = mLastRegResult;
         if (regResult != null) {
             if (regResult.getRegState() == REGISTRATION_STATE_HOME) return false;
             if (regResult.getRegState() == REGISTRATION_STATE_ROAMING) return true;
