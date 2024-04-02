@@ -754,8 +754,25 @@ public class TelephonyConnectionService extends ConnectionService {
                     }
                 }
                 if (mEmergencyConnection != null) {
-                    mEmergencyConnection.hangup(android.telephony.DisconnectCause.OUT_OF_NETWORK);
-                    mEmergencyConnection = null;
+                    if (mEmergencyConnection.getOriginalConnection() != null) {
+                        mEmergencyConnection.hangup(cause);
+                    } else {
+                        DomainSelectionConnection dsc = mEmergencyCallDomainSelectionConnection;
+                        int disconnectCause = (cause == android.telephony.DisconnectCause.NOT_VALID)
+                                ? dsc.getDisconnectCause() : cause;
+                        mEmergencyConnection.setTelephonyConnectionDisconnected(
+                                    DisconnectCauseUtil.toTelecomDisconnectCause(disconnectCause,
+                                        dsc.getPreciseDisconnectCause(), dsc.getReasonMessage(),
+                                        dsc.getPhoneId(), dsc.getImsReasonInfo(),
+                                        new FlagsAdapterImpl()));
+                        mEmergencyConnection.close();
+
+                        TelephonyConnection c = mEmergencyConnection;
+                        mEmergencyConnection.removeTelephonyConnectionListener(
+                                mEmergencyConnectionListener);
+                        releaseEmergencyCallDomainSelection(true, false);
+                        mEmergencyStateTracker.endCall(c);
+                    }
                 }
             });
         }
@@ -2648,7 +2665,8 @@ public class TelephonyConnectionService extends ConnectionService {
         Log.i(this, "maybeReselectDomain csCause=" +  callFailCause + ", psCause=" + reasonInfo);
         if (mEmergencyConnection == c) {
             if (mEmergencyCallDomainSelectionConnection != null) {
-                return maybeReselectDomainForEmergencyCall(c, callFailCause, reasonInfo);
+                return maybeReselectDomainForEmergencyCall(c, callFailCause, reasonInfo,
+                        showPreciseCause, overrideCause);
             }
             Log.i(this, "maybeReselectDomain endCall()");
             c.removeTelephonyConnectionListener(mEmergencyConnectionListener);
@@ -2677,15 +2695,23 @@ public class TelephonyConnectionService extends ConnectionService {
     }
 
     private boolean maybeReselectDomainForEmergencyCall(final TelephonyConnection c,
-            int callFailCause, ImsReasonInfo reasonInfo) {
+            int callFailCause, ImsReasonInfo reasonInfo,
+            boolean showPreciseCause, int overrideCause) {
         Log.i(this, "maybeReselectDomainForEmergencyCall "
-                + "csCause=" +  callFailCause + ", psCause=" + reasonInfo);
+                + "csCause=" +  callFailCause + ", psCause=" + reasonInfo
+                + ", showPreciseCause=" + showPreciseCause + ", overrideCause=" + overrideCause);
 
         if (c.getOriginalConnection() != null
                 && c.getOriginalConnection().getDisconnectCause()
                         != android.telephony.DisconnectCause.LOCAL
                 && c.getOriginalConnection().getDisconnectCause()
                         != android.telephony.DisconnectCause.POWER_OFF) {
+
+            int disconnectCause = (overrideCause != android.telephony.DisconnectCause.NOT_VALID)
+                    ? overrideCause : c.getOriginalConnection().getDisconnectCause();
+            mEmergencyCallDomainSelectionConnection.setDisconnectCause(disconnectCause,
+                    showPreciseCause ? callFailCause : CallFailCause.NOT_VALID,
+                    c.getOriginalConnection().getVendorDisconnectCause());
 
             DomainSelectionService.SelectionAttributes attr =
                     EmergencyCallDomainSelectionConnection.getSelectionAttributes(
@@ -4448,23 +4474,16 @@ public class TelephonyConnectionService extends ConnectionService {
             return false;
         }
 
-        ServiceState serviceState = phone.getServiceState();
-        if (serviceState == null) {
-            return false;
-        }
-
-        if (!serviceState.isUsingNonTerrestrialNetwork()) {
+        if (!mSatelliteController.isInSatelliteModeForCarrierRoaming(phone)) {
             // Device is not connected to satellite
             return false;
         }
 
-        for (NetworkRegistrationInfo nri : serviceState.getNetworkRegistrationInfoList()) {
-            if (nri.isNonTerrestrialNetwork()
-                    && nri.getAvailableServices().contains(
-                    NetworkRegistrationInfo.SERVICE_TYPE_VOICE)) {
-                // Call is supported while using satellite
-                return false;
-            }
+        List<Integer> capabilities =
+                mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(phone);
+        if (capabilities.contains(NetworkRegistrationInfo.SERVICE_TYPE_VOICE)) {
+            // Call is supported while using satellite
+            return false;
         }
 
         // Call is disallowed while using satellite
