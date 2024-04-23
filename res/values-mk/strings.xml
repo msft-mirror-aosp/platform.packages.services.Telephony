@@ -485,8 +485,8 @@
     <string name="simContacts_title" msgid="2714029230160136647">"Избери контакти за увоз"</string>
     <string name="simContacts_airplaneMode" msgid="4654884030631503808">"Исклучете го авионскиот режим за да ги увезете контактите од SIM-картичката."</string>
     <string name="enable_pin" msgid="967674051730845376">"Овозможи/оневозможи PIN на SIM"</string>
-    <string name="change_pin" msgid="3657869530942905790">"Промени PIN на SIM"</string>
-    <string name="enter_pin_text" msgid="3182311451978663356">"PIN на SIM:"</string>
+    <string name="change_pin" msgid="3657869530942905790">"Променете PIN за SIM-картичката"</string>
+    <string name="enter_pin_text" msgid="3182311451978663356">"PIN за SIM-картичката:"</string>
     <string name="oldPinLabel" msgid="8618515202411987721">"Стар PIN"</string>
     <string name="newPinLabel" msgid="3585899083055354732">"Нов PIN"</string>
     <string name="confirmPinLabel" msgid="7783531218662473778">"Потврди нов PIN"</string>
@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Не може да се задржат повици."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Поврзете се на безжична мрежа за да повикате."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Овозможете повикување преку Wi-Fi за воспоставување повик."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Исклучете го режимот на сателит за да упатите повик."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"За да воспоставите повик, прво завршете ја сателитската врска."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Може да испраќате и примате пораки без мобилна или Wi-Fi мрежа."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Податоци за итни случаи"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Сопственик"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Допрете повторно за приказ на информации"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Поставување eSIM што може да се отстрани како стандардна"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Радио-напојување на мобилен"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Симулирање „Надвор од употреба“ (само за верзиите за отстранување грешки)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Симулација на режим на сателит за оператор (само за верзиите за отстранување грешки)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Прикажи именик на SIM-картичката"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Прикажи броеви со ограничено бирање"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Прикажи броеви за бирање служби"</string>

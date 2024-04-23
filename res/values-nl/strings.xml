@@ -485,7 +485,7 @@
     <string name="simContacts_title" msgid="2714029230160136647">"Contacten selecteren om te importeren"</string>
     <string name="simContacts_airplaneMode" msgid="4654884030631503808">"Zet de vliegtuigmodus uit om contacten van de simkaart te importeren."</string>
     <string name="enable_pin" msgid="967674051730845376">"SIM pincode aan-/uitzetten"</string>
-    <string name="change_pin" msgid="3657869530942905790">"Pincode simkaart wijzigen"</string>
+    <string name="change_pin" msgid="3657869530942905790">"Pincode van simkaart wijzigen"</string>
     <string name="enter_pin_text" msgid="3182311451978663356">"Pincode simkaart:"</string>
     <string name="oldPinLabel" msgid="8618515202411987721">"Oude pincode"</string>
     <string name="newPinLabel" msgid="3585899083055354732">"Nieuwe pincode"</string>
@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Kan gesprekken niet in de wacht zetten."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Maak verbinding met een draadloos netwerk om te bellen."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Zet bellen via wifi aan om te bellen."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Zet de satellietmodus uit om te bellen."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Als je wilt bellen, moet je eerst de satellietverbinding beëindigen."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Je kunt berichten sturen en krijgen zonder een mobiel of wifi-netwerk."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Noodinformatie"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Eigenaar"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Tik nogmaals om informatie te bekijken"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Verwisselbare e-simkaart instellen als standaard"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Mobiel radiovermogen"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"\'Niet in gebruik\' simuleren (alleen in foutopsporingsbuild)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Satellietmodus voor testprovider (alleen in foutopsporingsbuild)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Adresboek op simkaart bekijken"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Vaste nummers bekijken"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Servicenummers bekijken"</string>

@@ -149,6 +149,10 @@ public class TelephonyConnectionService extends ConnectionService {
     private static final Pattern CDMA_ACTIVATION_CODE_REGEX_PATTERN =
             Pattern.compile("\\*228[0-9]{0,2}");
 
+    private static final String DISCONNECT_REASON_SATELLITE_ENABLED = "SATELLITE_ENABLED";
+    private static final String DISCONNECT_REASON_CARRIER_ROAMING_SATELLITE_MODE =
+            "CARRIER_ROAMING_SATELLITE_MODE";
+
     private final TelephonyConnectionServiceProxy mTelephonyConnectionServiceProxy =
             new TelephonyConnectionServiceProxy() {
         @Override
@@ -1193,6 +1197,11 @@ public class TelephonyConnectionService extends ConnectionService {
                             && phone.getHalVersion(HAL_SERVICE_VOICE)
                             .less(RIL.RADIO_HAL_VERSION_1_4);
                     if (mDomainSelectionResolver.isDomainSelectionSupported()) {
+                        if (resultConnection != null
+                                && resultConnection.getState() == Connection.STATE_DISCONNECTED) {
+                            // Dialing is discarded.
+                            return true;
+                        }
                         if (isEmergencyNumber && phone == phoneForEmergency) {
                             // Since the domain selection service is enabled,
                             // dilaing normal routing emergency number only reaches here.
@@ -1245,15 +1254,23 @@ public class TelephonyConnectionService extends ConnectionService {
             }
 
             if (!isEmergencyNumber) {
-                if ((mSatelliteController.isSatelliteEnabled()
-                        || isCallDisallowedDueToSatellite(phone))
-                        && (imsPhone == null || !imsPhone.canMakeWifiCall())) {
-                    Log.d(this, "onCreateOutgoingConnection, cannot make call in satellite mode.");
+                if (mSatelliteController.isSatelliteEnabled()) {
+                    Log.d(this, "onCreateOutgoingConnection, cannot make call in "
+                            + "satellite mode.");
                     return Connection.createFailedConnection(
                             mDisconnectCauseFactory.toTelecomDisconnectCause(
                                     android.telephony.DisconnectCause.SATELLITE_ENABLED,
-                                    "Call failed because satellite modem is enabled."));
+                                    DISCONNECT_REASON_SATELLITE_ENABLED));
+                } else if (isCallDisallowedDueToSatellite(phone)
+                        && (imsPhone == null || !imsPhone.canMakeWifiCall())) {
+                    Log.d(this, "onCreateOutgoingConnection, cannot make call "
+                            + "when device is connected to carrier roaming satellite network");
+                    return Connection.createFailedConnection(
+                            mDisconnectCauseFactory.toTelecomDisconnectCause(
+                                    android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                                    DISCONNECT_REASON_CARRIER_ROAMING_SATELLITE_MODE));
                 }
+
                 final Connection resultConnection = getTelephonyConnection(request, numberToDial,
                         false, handle, phone);
                 if (isAdhocConference) {
@@ -1388,6 +1405,11 @@ public class TelephonyConnectionService extends ConnectionService {
             Log.i(this, "Call disconnected before the outgoing call was placed. Skipping call "
                     + "placement.");
             if (isEmergencyNumber) {
+                if (mDomainSelectionResolver.isDomainSelectionSupported()
+                        && mDeviceState.isAirplaneModeOn(this)) {
+                    mIsEmergencyCallPending = false;
+                    return;
+                }
                 // If call is already canceled by the user, notify modem to exit emergency call
                 // mode by sending radio on with forEmergencyCall=false.
                 for (Phone curPhone : mPhoneFactoryProxy.getPhones()) {
@@ -1818,7 +1840,6 @@ public class TelephonyConnectionService extends ConnectionService {
         // different underlying signaling (CDMA), which is already encapsulated in
         // TelephonyConnection.
         connection.onReject();
-        connection.close();
     }
 
     /**
@@ -2800,6 +2821,25 @@ public class TelephonyConnectionService extends ConnectionService {
                 .findFirst().orElse(null);
     }
 
+    /**
+     * Determines the phone with which emergency callback mode was set.
+     * @return The {@link Phone} with which emergency callback mode was set,
+     *         or {@code null} if none was found.
+     */
+    @VisibleForTesting
+    public Phone getPhoneInEmergencyCallbackMode() {
+        if (!mDomainSelectionResolver.isDomainSelectionSupported()) {
+            // This is applicable for the AP domain selection service.
+            return null;
+        }
+        if (mEmergencyStateTracker == null) {
+            mEmergencyStateTracker = EmergencyStateTracker.getInstance();
+        }
+        return Stream.of(mPhoneFactoryProxy.getPhones())
+                .filter(p -> mEmergencyStateTracker.isInEcm(p))
+                .findFirst().orElse(null);
+    }
+
     private boolean isVoiceInService(Phone phone, boolean imsVoiceCapable) {
         // Dialing normal call is available.
         if (phone.isWifiCallingEnabled()) {
@@ -3301,6 +3341,15 @@ public class TelephonyConnectionService extends ConnectionService {
                             + "using phoneId=%d/subId=%d", normalRoutingPhone.getPhoneId(),
                     normalRoutingPhone.getSubId());
             return normalRoutingPhone;
+        }
+
+        if (mDomainSelectionResolver.isDomainSelectionSupported()) {
+            Phone phoneInEcm = getPhoneInEmergencyCallbackMode();
+            if (phoneInEcm != null) {
+                Log.i(this, "getPhoneForAccount: in ECBM, using phoneId=%d/subId=%d",
+                        phoneInEcm.getPhoneId(), phoneInEcm.getSubId());
+                return phoneInEcm;
+            }
         }
 
         // Default emergency call phone selection logic:

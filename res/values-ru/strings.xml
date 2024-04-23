@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Удержание невозможно."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Чтобы позвонить, подключитесь к Wi-Fi."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Чтобы позвонить, включите звонки через Wi-Fi."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Чтобы позвонить, отключите спутниковый режим."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Чтобы позвонить, сначала завершите спутниковое соединение."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Вы можете отправлять и получать сообщения без доступа к мобильной сети или Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Данные для экстренных случаев"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Владелец"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Чтобы посмотреть информацию, нажмите ещё раз"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Установить съемную eSIM-карту в качестве используемой по умолчанию"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Мощность радиосигнала"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Моделирование нахождения вне зоны обслуживания (только отладочная сборка)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Режим спутниковой связи симуляции оператора (только отладочная сборка)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Посмотреть адресную книгу на SIM-карте"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Список разрешенных номеров"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Посмотреть номера служебного набора"</string>

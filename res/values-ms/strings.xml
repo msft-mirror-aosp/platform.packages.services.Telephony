@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Tidak dapat menunda panggilan."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Sambungkan ke rangkaian wayarles untuk membuat panggilan."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Dayakan panggilan Wi-Fi untuk membuat panggilan."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Lumpuhkan mod satelit untuk membuat panggilan."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Untuk membuat panggilan, tamatkan sambungan satelit dahulu."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Anda boleh menghantar dan menerima mesej tanpa rangkaian mudah alih atau Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Maklumat kecemasan"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Pemilik"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Ketik lagi untuk melihat maklumat"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Tetapkan eSIM Boleh Tanggal sebagai Lalai"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Kuasa Radio Mudah Alih"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simulasi Rosak (Binaan Penyahpepijatan sahaja)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Contoh Mod Satelit Pembawa (Binaan Penyahpepijatan sahaja)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Lihat Buku Alamat SIM"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Lihat Nombor Dailan Tetap"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Lihat Nombor Dailan Perkhidmatan"</string>

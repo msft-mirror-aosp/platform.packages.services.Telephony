@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Hovory nie je možné podržať."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Ak chcete volať, pripojte sa k bezdrôtovej sieti"</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Na uskutočnenie hovoru povoľte volanie cez Wi‑Fi."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Ak chcete volať, deaktivujte satelitný režim."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Ak chcete uskutočniť hovor, musíte najprv ukončiť satelitné pripojenie."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Správy môžete odosielať a prijímať bez mobilnej siete či siete Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Tiesňové informácie"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Vlastník"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Informácie si zobrazíte opätovným klepnutím"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Nastaviť odoberateľnú eSIM kartu ako predvolenú"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Sila signálu GSM"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simulácia nefungujúceho zariadenia (možné iba v ladiacej zostave)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Simulácia satelitného režimu operátora (iba ladiaca zostava)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Zobraziť adresár SIM karty"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Zobraziť povolené čísla"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Zobraziť čísla volaní služieb"</string>

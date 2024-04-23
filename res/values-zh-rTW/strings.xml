@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"無法保留通話。"</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"連上無線網路即可撥打電話。"</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"請啟用 Wi-Fi 通話功能以撥打電話。"</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"如要撥打電話，請停用衛星模式。"</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"如要撥打電話，請先結束衛星連線。"</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"你可以收發訊息，沒有行動/Wi-Fi 網路也無妨。"</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"緊急救援資訊"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"擁有者"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"再次輕觸即可查看資訊"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"將可移除的 eSIM 卡設為預設 eSIM 卡"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"行動無線電電源"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"模擬無法使用服務的情況 (僅限偵錯版本)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"模擬電信業者衛星模式 (僅限偵錯版本)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"查看 SIM 通訊錄"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"查看固定撥號"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"查看服務撥號號碼"</string>

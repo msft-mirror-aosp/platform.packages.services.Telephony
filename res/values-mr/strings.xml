@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"कॉल सुरू ठेवू शकत नाही."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"कॉल करण्‍यासाठी वायरलेस नेटवर्कशी कनेक्‍ट करा."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"कॉल करण्यासाठी वाय-फाय कॉलिंग सक्षम करा."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"कॉल करण्यासाठी उपग्रह मोड बंद करा."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"कॉल करण्यासाठी, सर्वप्रथम उपग्रह कनेक्शन बंद करा."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"तुम्ही मोबाइल किंवा वाय-फाय नेटवर्कशिवाय मेसेज पाठवू आणि मिळवू शकता."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"अतिमहत्त्वाची माहिती"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"मालक"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"माहिती पाहण्यासाठी पुन्हा टॅप करा"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"काढून टाकण्यायोग्य eSIM डीफॉल्ट म्हणून सेट करा"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"मोबाइल रेडिओ पॉवर"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"सेवा बंद आहे सिम्युलेट करा (फक्त डीबगचा बिल्‍ड)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"नमुना वाहकाचा उपग्रह मोड (फक्त डीबग बिल्ड)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"सिम ॲड्रेस बुक पहा"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"निश्चित डायलिंग नंबर पहा"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"सर्व्हिस डायलिंग नंबर पहा"</string>

@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Nije moguće stavljati pozive na čekanje."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Povežite se na bežičnu mrežu da biste uputili poziv."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Omogućite pozivanje preko WiFi-a da biste uputili poziv."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Onemogućite satelitski režim da biste uputili poziv."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Da biste uputili poziv, prvo završite satelitsku vezu."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Možete da šaljete i primate poruke bez mobilne ili WiFi mreže."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Informacije za hitne slučajeve"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Vlasnik"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Dodirnite ponovo da biste videli informacije"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Podesi prenosivi eSIM kao podrazumevani"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Napajanje za radio na mobilnim uređajima"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simulacija ne funkcioniše (samo verzija sa otklonjenim greškama)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Lažni režim mobilnog operatera za slanje preko satelita (samo verzija za otklanjanje grešaka)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Prikaži adresar SIM-a"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Prikaži brojeve za fiksno biranje"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Prikaži brojeve za servisno biranje"</string>

@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"ບໍ່ສາມາດພັກສາຍໄດ້."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"ເຊື່ອມຕໍ່ກັບເຄືອຂ່າຍໄຮ້ສາຍເພື່ອເຮັດການໂທ."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"ກະລຸນາເປີດໃຊ້ການໂທ Wi-Fi ເພື່ອໂທ."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"ປິດການນຳໃຊ້ໂໝດດາວທຽມເພື່ອໂທອອກ."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"ເພື່ອໂທອອກ, ໃຫ້ສິ້ນສຸດການເຊື່ອມຕໍ່ຜ່ານດາວທຽມກ່ອນ."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"ທ່ານສາມາດສົ່ງ ແລະ ຮັບຂໍ້ຄວາມໂດຍບໍ່ຕ້ອງໃຊ້ເຄືອຂ່າຍມືຖື ຫຼື Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"ຂໍ້ມູນສຸກເສີນ"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"ເຈົ້າຂອງ"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"ແຕະອີກເທື່ອໜຶ່ງເພື່ອເບິ່ງຂໍ້ມູນ"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"ຕັ້ງຄ່າ eSIM ແບບຖອດໄດ້ໃຫ້ເປັນຄ່າເລີ່ມຕົ້ນ"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"ພະລັງງານວິທະຍຸມືຖື"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"ຈໍາລອງເຫດການບໍ່ພ້ອມໃຫ້ບໍລິການ (ສໍາລັບ Build ດີບັກເທົ່ານັ້ນ)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"ຈຳລອງໂໝດດາວທຽມຂອງຜູ້ໃຫ້ບໍລິການ (ສຳລັບ Build ດີບັກເທົ່ານັ້ນ)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"ເບິ່ງສະໝຸດທີ່ຢູ່ໃນຊິມ"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"ເບິ່ງໝາຍເລກໂທອອກທີ່ກຳນົດ"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"ເບິ່ງໝາຍເລກບໍລິການໂທອອກ"</string>
