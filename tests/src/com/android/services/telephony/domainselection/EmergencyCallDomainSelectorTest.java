@@ -66,6 +66,7 @@ import static android.telephony.TelephonyManager.SIM_ACTIVATION_STATE_DEACTIVATE
 import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_MAX_CELLULAR_TIMEOUT;
 import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_NETWORK_SCAN_TIMEOUT;
 import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_WAIT_DISCONNECTION_TIMEOUT;
+import static com.android.services.telephony.domainselection.EmergencyCallDomainSelector.MSG_WAIT_FOR_IMS_STATE_TIMEOUT;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
@@ -387,11 +388,14 @@ public class EmergencyCallDomainSelectorTest {
         mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
         processAllMessages();
 
+        assertTrue(mDomainSelector.hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
+
         bindImsService();
         unsolBarringInfoChanged(false);
 
         processAllMessages();
 
+        assertFalse(mDomainSelector.hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
         verify(mTransportSelectorCallback, times(1)).onWwanSelected(any());
         verify(mWwanSelectorCallback, times(1)).onDomainSelected(anyInt(), anyBoolean());
     }
@@ -2928,6 +2932,40 @@ public class EmergencyCallDomainSelectorTest {
     }
 
     @Test
+    public void testDefaultLimitedServiceEutranFailScanLimitedOnly() throws Exception {
+        PersistableBundle bundle = getDefaultPersistableBundle();
+        bundle.putBoolean(KEY_SCAN_LIMITED_SERVICE_AFTER_VOLTE_FAILURE_BOOL,
+                true);
+        when(mCarrierConfigManager.getConfigForSubId(anyInt(), anyVararg())).thenReturn(bundle);
+
+        createSelector(SLOT_0_SUB_ID);
+        unsolBarringInfoChanged(false);
+
+        EmergencyRegistrationResult regResult = getEmergencyRegResult(EUTRAN,
+                REGISTRATION_STATE_UNKNOWN,
+                0, false, true, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        bindImsServiceUnregistered();
+
+        processAllMessages();
+        verify(mWwanSelectorCallback, times(1)).onDomainSelected(eq(DOMAIN_PS), eq(true));
+
+        attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, false, regResult,
+                new ImsReasonInfo(ImsReasonInfo.CODE_LOCAL_NOT_REGISTERED, 0, null));
+        mDomainSelector.reselectDomain(attr);
+        processAllMessages();
+
+        // Verify CS preferred limited service only scan
+        verify(mWwanSelectorCallback).onRequestEmergencyNetworkScan(
+                any(), eq(DomainSelectionService.SCAN_TYPE_LIMITED_SERVICE),
+                anyBoolean(), any(), any());
+        assertEquals(UTRAN, (int) mAccessNetwork.get(0));
+    }
+
+    @Test
     public void testDefaultLimitedServiceEutranFailPinLocked() throws Exception {
         doReturn(TelephonyManager.SIM_STATE_PIN_REQUIRED)
                 .when(mTelephonyManager).getSimState(anyInt());
@@ -3685,6 +3723,53 @@ public class EmergencyCallDomainSelectorTest {
         processAllMessages();
 
         verifyCsDialed();
+    }
+
+    @Test
+    public void testSimLockedNoCellularScanTimeout() throws Exception {
+        doReturn(TelephonyManager.SIM_STATE_PIN_REQUIRED)
+                .when(mTelephonyManager).getSimState(anyInt());
+
+        setupForHandleScanResult();
+
+        assertFalse(mDomainSelector.hasMessages(MSG_NETWORK_SCAN_TIMEOUT));
+        assertFalse(mDomainSelector.hasMessages(MSG_MAX_CELLULAR_TIMEOUT));
+    }
+
+    @Test
+    public void testWaitForImsStateTimeout() throws Exception {
+        createSelector(SLOT_0_SUB_ID);
+
+        EmergencyRegistrationResult regResult = getEmergencyRegResult(
+                UNKNOWN, REGISTRATION_STATE_UNKNOWN, 0, false, false, 0, 0, "", "");
+        SelectionAttributes attr = getSelectionAttributes(SLOT_0, SLOT_0_SUB_ID, regResult);
+        mDomainSelector.selectDomain(attr, mTransportSelectorCallback);
+        processAllMessages();
+
+        assertTrue(mDomainSelector.hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
+
+        verify(mTransportSelectorCallback, times(0)).onWwanSelected(any());
+        verify(mWwanSelectorCallback, times(0)).onRequestEmergencyNetworkScan(
+                any(), anyInt(), anyBoolean(), any(), any());
+
+        unsolBarringInfoChanged(false);
+        processAllMessages();
+
+        verify(mTransportSelectorCallback, times(0)).onWwanSelected(any());
+        verify(mWwanSelectorCallback, times(0)).onRequestEmergencyNetworkScan(
+                any(), anyInt(), anyBoolean(), any(), any());
+        assertTrue(mDomainSelector.hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
+
+        mDomainSelector.handleMessage(
+                mDomainSelector.obtainMessage(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
+
+        assertFalse(mDomainSelector.hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT));
+        verify(mTransportSelectorCallback, times(1)).onWwanSelected(any());
+
+        processAllMessages();
+
+        verify(mWwanSelectorCallback, times(1)).onRequestEmergencyNetworkScan(
+                any(), anyInt(), anyBoolean(), any(), any());
     }
 
     private void setupForScanListTest(PersistableBundle bundle) throws Exception {
