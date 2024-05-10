@@ -59,10 +59,13 @@ import android.util.Log;
 import android.util.SparseArray;
 import android.widget.Toast;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.TelephonyCapabilities;
+import com.android.internal.telephony.flags.FeatureFlags;
+import com.android.internal.telephony.flags.FeatureFlagsImpl;
 import com.android.internal.telephony.util.NotificationChannelController;
 import com.android.phone.settings.VoicemailSettingsActivity;
 
@@ -145,6 +148,9 @@ public class NotificationMgr {
     // maps each subId to selected network operator name.
     private SparseArray<String> mSelectedNetworkOperatorName = new SparseArray<>();
 
+    // feature flags
+    private final FeatureFlags mFeatureFlags;
+
     private final Handler mHandler = new Handler() {
         @Override
         public void handleMessage(Message msg) {
@@ -166,7 +172,8 @@ public class NotificationMgr {
      * Private constructor (this is a singleton).
      * @see #init(PhoneGlobals)
      */
-    private NotificationMgr(PhoneGlobals app) {
+    @VisibleForTesting
+    /* package */ NotificationMgr(PhoneGlobals app) {
         mApp = app;
         mContext = app;
         mStatusBarManager =
@@ -175,6 +182,7 @@ public class NotificationMgr {
         mSubscriptionManager = SubscriptionManager.from(mContext);
         mTelecomManager = app.getSystemService(TelecomManager.class);
         mTelephonyManager = (TelephonyManager) app.getSystemService(Context.TELEPHONY_SERVICE);
+        mFeatureFlags = new FeatureFlagsImpl();
     }
 
     /**
@@ -363,10 +371,16 @@ public class NotificationMgr {
                                 null));
                 intent.putExtra(TelecomManager.EXTRA_PHONE_ACCOUNT_HANDLE, phoneAccountHandle);
             }
-
-            PendingIntent pendingIntent =
-                    PendingIntent.getActivity(mContext, subId /* requestCode */, intent,
-                            PendingIntent.FLAG_IMMUTABLE);
+            PendingIntent pendingIntent;
+            UserHandle subAssociatedUserHandle =
+                    mSubscriptionManager.getSubscriptionUserHandle(subId);
+            if (subAssociatedUserHandle == null) {
+                pendingIntent = PendingIntent.getActivity(mContext, subId /* requestCode */, intent,
+                        PendingIntent.FLAG_IMMUTABLE);
+            } else {
+                pendingIntent = PendingIntent.getActivityAsUser(mContext, subId /* requestCode */,
+                        intent, PendingIntent.FLAG_IMMUTABLE, null, subAssociatedUserHandle);
+            }
 
             Resources res = mContext.getResources();
             PersistableBundle carrierConfig = PhoneGlobals.getInstance().getCarrierConfigForSubId(
@@ -387,32 +401,34 @@ public class NotificationMgr {
             final Notification notification = builder.build();
             List<UserHandle> users = getUsersExcludeDying();
             for (UserHandle userHandle : users) {
-                if (!hasUserRestriction(
-                        UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
-                    if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, vmCount, vmNumber,
-                            pendingIntent, isSettingsIntent, userHandle, isRefresh)) {
-                        notifyAsUser(
-                                Integer.toString(subId) /* tag */,
-                                VOICEMAIL_NOTIFICATION,
-                                notification,
-                                userHandle);
-                    }
+                boolean isManagedUser = mUserManager.isManagedProfile(userHandle.getIdentifier());
+                if (!hasUserRestriction(UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
+                        && (userHandle.equals(subAssociatedUserHandle)
+                            || (subAssociatedUserHandle == null && !isManagedUser))
+                        && !maybeSendVoicemailNotificationUsingDefaultDialer(phone, vmCount,
+                        vmNumber, pendingIntent, isSettingsIntent, userHandle, isRefresh)) {
+                    notifyAsUser(
+                            Integer.toString(subId) /* tag */,
+                            VOICEMAIL_NOTIFICATION,
+                            notification,
+                            userHandle);
                 }
             }
         } else {
+            UserHandle subAssociatedUserHandle =
+                    mSubscriptionManager.getSubscriptionUserHandle(subId);
             List<UserHandle> users = getUsersExcludeDying();
             for (UserHandle userHandle : users) {
-                if (!hasUserRestriction(
-                        UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
-                        && !mUserManager.isManagedProfile(userHandle.getIdentifier())) {
-                    if (!maybeSendVoicemailNotificationUsingDefaultDialer(phone, 0, null, null,
-                            false, userHandle, isRefresh)) {
-                        cancelAsUser(
-                                Integer.toString(subId) /* tag */,
-                                VOICEMAIL_NOTIFICATION,
-                                userHandle);
-                    }
+                boolean isManagedUser = mUserManager.isManagedProfile(userHandle.getIdentifier());
+                if (!hasUserRestriction(UserManager.DISALLOW_OUTGOING_CALLS, userHandle)
+                        && (userHandle.equals(subAssociatedUserHandle)
+                            || (subAssociatedUserHandle == null && !isManagedUser))
+                        && !maybeSendVoicemailNotificationUsingDefaultDialer(phone, 0, null, null,
+                        false, userHandle, isRefresh)) {
+                    cancelAsUser(
+                            Integer.toString(subId) /* tag */,
+                            VOICEMAIL_NOTIFICATION,
+                            userHandle);
                 }
             }
         }
@@ -818,9 +834,72 @@ public class NotificationMgr {
      * @param subId The subscription ID
      */
     void updateNetworkSelection(int serviceState, int subId) {
+        if (!mFeatureFlags.dismissNetworkSelectionNotificationOnSimDisable()) {
+            updateNetworkSelectionForFeatureDisabled(serviceState, subId);
+            return;
+        }
+
+        // for dismissNetworkSelectionNotificationOnSimDisable feature enabled.
         int phoneId = SubscriptionManager.getPhoneId(subId);
         Phone phone = SubscriptionManager.isValidPhoneId(phoneId) ?
                 PhoneFactory.getPhone(phoneId) : PhoneFactory.getDefaultPhone();
+        if (TelephonyCapabilities.supportsNetworkSelection(phone)) {
+            if (SubscriptionManager.isValidSubscriptionId(subId)
+                    && mSubscriptionManager.isActiveSubId(subId)) {
+                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
+                String selectedNetworkOperatorName =
+                        sp.getString(Phone.NETWORK_SELECTION_NAME_KEY + subId, "");
+                // get the shared preference of network_selection.
+                // empty is auto mode, otherwise it is the operator alpha name
+                // in case there is no operator name, check the operator numeric
+                if (TextUtils.isEmpty(selectedNetworkOperatorName)) {
+                    selectedNetworkOperatorName =
+                            sp.getString(Phone.NETWORK_SELECTION_KEY + subId, "");
+                }
+                boolean isManualSelection;
+                // if restoring manual selection is controlled by framework, then get network
+                // selection from shared preference, otherwise get from real network indicators.
+                boolean restoreSelection = !mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.skip_restoring_network_selection);
+                if (restoreSelection) {
+                    isManualSelection = !TextUtils.isEmpty(selectedNetworkOperatorName);
+                } else {
+                    isManualSelection = phone.getServiceStateTracker().mSS.getIsManualSelection();
+                }
+
+                if (DBG) {
+                    log("updateNetworkSelection()..." + "state = " + serviceState + " new network "
+                            + (isManualSelection ? selectedNetworkOperatorName : ""));
+                }
+
+                if (isManualSelection) {
+                    mSelectedNetworkOperatorName.put(subId, selectedNetworkOperatorName);
+                    shouldShowNotification(serviceState, subId);
+                } else {
+                    dismissNetworkSelectionNotification(subId);
+                    clearUpNetworkSelectionNotificationParam(subId);
+                }
+            } else {
+                if (DBG) {
+                    log("updateNetworkSelection()... state = " + serviceState
+                            + " not updating network due to invalid subId " + subId);
+                }
+                dismissNetworkSelectionNotificationForInactiveSubId();
+            }
+        }
+    }
+
+    /**
+     * Update notification about no service of user selected operator.
+     * For dismissNetworkSelectionNotificationOnSimDisable feature disabled.
+     *
+     * @param serviceState Phone service state
+     * @param subId The subscription ID
+     */
+    private void updateNetworkSelectionForFeatureDisabled(int serviceState, int subId) {
+        int phoneId = SubscriptionManager.getPhoneId(subId);
+        Phone phone = SubscriptionManager.isValidPhoneId(phoneId)
+                ? PhoneFactory.getPhone(phoneId) : PhoneFactory.getDefaultPhone();
         if (TelephonyCapabilities.supportsNetworkSelection(phone)) {
             if (SubscriptionManager.isValidSubscriptionId(subId)) {
                 SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(mContext);
@@ -871,7 +950,10 @@ public class NotificationMgr {
         }
     }
 
-    private void dismissNetworkSelectionNotificationForInactiveSubId() {
+    /**
+     * Dismiss the network selection "no service" notification for all inactive subscriptions.
+     */
+    public void dismissNetworkSelectionNotificationForInactiveSubId() {
         for (int i = 0; i < mSelectedUnavailableNotify.size(); i++) {
             int subId = mSelectedUnavailableNotify.keyAt(i);
             if (!mSubscriptionManager.isActiveSubId(subId)) {
@@ -879,15 +961,6 @@ public class NotificationMgr {
                 clearUpNetworkSelectionNotificationParam(subId);
             }
         }
-    }
-
-    /* package */ void postTransientNotification(int notifyId, CharSequence msg) {
-        if (mToast != null) {
-            mToast.cancel();
-        }
-
-        mToast = Toast.makeText(mContext, msg, Toast.LENGTH_LONG);
-        mToast.show();
     }
 
     private void log(String msg) {
@@ -904,15 +977,16 @@ public class NotificationMgr {
         // can be overridden to hide the network selection to the end user. In this case, the
         // notification is not shown to avoid confusion to the end user.
         if (!shouldDisplayNetworkSelectOptions(subId)) {
-            logi("Skipping network selection unavailable notification due to carrier policy.");
+            logi("Carrier configs refuse to show network selection not available notification");
             return;
         }
 
-        // In unstable network condition, the phone may go in and out of service. Add logic here to
-        // debounce the network selection notification. The notification only shows after phone is
-        // out of service, AND fulfills one of the two conditions below:
-        // - Out of service lasts {@link #NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIME_IN_MS}
-        // - Or has checked {@link #NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIMES} times
+        // In case network selection notification shows up repeatedly under
+        // unstable network condition. The logic is to check whether or not
+        // the service state keeps in no service condition for at least
+        // {@link #NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIME_IN_MS}.
+        // And checking {@link #NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIMES} times.
+        // To avoid the notification showing up for the momentary state.
         if (serviceState == ServiceState.STATE_OUT_OF_SERVICE) {
             if (mPreviousServiceState.get(subId, STATE_UNKNOWN_SERVICE)
                     != ServiceState.STATE_OUT_OF_SERVICE) {
@@ -939,36 +1013,10 @@ public class NotificationMgr {
         }
     }
 
-    private void startPendingNetworkSelectionNotification(int subId) {
-        if (!mHandler.hasMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId)) {
-            if (DBG) {
-                log("startPendingNetworkSelectionNotification: subId = " + subId);
-            }
-            mHandler.sendMessageDelayed(
-                    mHandler.obtainMessage(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId),
-                    NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIME_IN_MS);
-            mPendingEventCounter.put(subId, mPendingEventCounter.get(subId, 0) + 1);
-        }
-    }
-
-    private void clearUpNetworkSelectionNotificationParam(int subId) {
-        if (mHandler.hasMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId)) {
-            mHandler.removeMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId);
-        }
-        mPreviousServiceState.remove(subId);
-        mOOSTimestamp.remove(subId);
-        mPendingEventCounter.remove(subId);
-        mSelectedNetworkOperatorName.remove(subId);
-    }
-
-    private static long getTimeStamp() {
-        return SystemClock.elapsedRealtime();
-    }
-
     // TODO(b/243010310): merge methods below with Settings#MobileNetworkUtils and optimize them.
     // The methods below are copied from com.android.settings.network.telephony.MobileNetworkUtils
-    // to make sure the network selection unavailable notification should not show when network
-    // selection menu is not visible to the end user in Settings app.
+    // to make sure the network selection unavailable notification should not show when Network
+    // Selection menu is not present in Settings app.
     private boolean shouldDisplayNetworkSelectOptions(int subId) {
         final TelephonyManager telephonyManager = mTelephonyManager.createForSubscriptionId(subId);
         final CarrierConfigManager carrierConfigManager = mContext.getSystemService(
@@ -1071,4 +1119,31 @@ public class NotificationMgr {
         return false;
     }
     // END of TODO:(b/243010310): merge methods above with Settings#MobileNetworkUtils and optimize.
+
+    private void startPendingNetworkSelectionNotification(int subId) {
+        if (!mHandler.hasMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId)) {
+            if (DBG) {
+                log("startPendingNetworkSelectionNotification: subId = " + subId);
+            }
+            mHandler.sendMessageDelayed(
+                    mHandler.obtainMessage(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId),
+                    NETWORK_SELECTION_NOTIFICATION_MAX_PENDING_TIME_IN_MS);
+            mPendingEventCounter.put(subId, mPendingEventCounter.get(subId, 0) + 1);
+        }
+    }
+
+    private void clearUpNetworkSelectionNotificationParam(int subId) {
+        if (mHandler.hasMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId)) {
+            mHandler.removeMessages(EVENT_PENDING_NETWORK_SELECTION_NOTIFICATION, subId);
+        }
+        mPreviousServiceState.remove(subId);
+        mOOSTimestamp.remove(subId);
+        mPendingEventCounter.remove(subId);
+        mSelectedNetworkOperatorName.remove(subId);
+    }
+
+    @VisibleForTesting
+    public long getTimeStamp() {
+        return SystemClock.elapsedRealtime();
+    }
 }

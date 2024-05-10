@@ -31,6 +31,7 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Message;
 import android.os.PersistableBundle;
+import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.telecom.PhoneAccount;
@@ -98,7 +99,6 @@ public class PhoneUtils {
     private static final int THEME = com.android.internal.R.style.Theme_DeviceDefault_Dialog_Alert;
 
     /** USSD information used to aggregate all USSD messages */
-    private static AlertDialog sUssdDialog = null;
     private static StringBuilder sUssdMsg = new StringBuilder();
 
     private static final ComponentName PSTN_CONNECTION_SERVICE_COMPONENT =
@@ -588,39 +588,36 @@ public class PhoneUtils {
         // displaying system alert dialog on the screen instead of
         // using another activity to display the message.  This
         // places the message at the forefront of the UI.
+        AlertDialog ussdDialog = new AlertDialog.Builder(context, THEME)
+                .setPositiveButton(R.string.ok, null)
+                .setCancelable(true)
+                .setOnDismissListener(new DialogInterface.OnDismissListener() {
+                    @Override
+                    public void onDismiss(DialogInterface dialog) {
+                        sUssdMsg.setLength(0);
+                    }
+                })
+                .create();
 
-        if (sUssdDialog == null) {
-            sUssdDialog = new AlertDialog.Builder(context, THEME)
-                    .setPositiveButton(R.string.ok, null)
-                    .setCancelable(true)
-                    .setOnDismissListener(new DialogInterface.OnDismissListener() {
-                        @Override
-                        public void onDismiss(DialogInterface dialog) {
-                            sUssdMsg.setLength(0);
-                        }
-                    })
-                    .create();
+        ussdDialog.getWindow().setType(windowType);
+        ussdDialog.getWindow().addFlags(
+                WindowManager.LayoutParams.FLAG_DIM_BEHIND);
 
-            sUssdDialog.getWindow().setType(windowType);
-            sUssdDialog.getWindow().addFlags(
-                    WindowManager.LayoutParams.FLAG_DIM_BEHIND);
-        }
         if (sUssdMsg.length() != 0) {
-            sUssdMsg
-                    .insert(0, "\n")
+            sUssdMsg.insert(0, "\n")
                     .insert(0, app.getResources().getString(R.string.ussd_dialog_sep))
                     .insert(0, "\n");
         }
         if (phone != null && phone.getCarrierName() != null) {
-            sUssdDialog.setTitle(app.getResources().getString(R.string.carrier_mmi_msg_title,
+            ussdDialog.setTitle(app.getResources().getString(R.string.carrier_mmi_msg_title,
                     phone.getCarrierName()));
         } else {
-            sUssdDialog
+            ussdDialog
                     .setTitle(app.getResources().getString(R.string.default_carrier_mmi_msg_title));
         }
         sUssdMsg.insert(0, text);
-        sUssdDialog.setMessage(sUssdMsg.toString());
-        sUssdDialog.show();
+        ussdDialog.setMessage(sUssdMsg.toString());
+        ussdDialog.show();
     }
 
     /**
@@ -705,31 +702,32 @@ public class PhoneUtils {
         Log.d(LOG_TAG, msg);
     }
 
-    public static PhoneAccountHandle makePstnPhoneAccountHandle(String id) {
-        return makePstnPhoneAccountHandleWithPrefix(id, "", false);
-    }
-
-    public static PhoneAccountHandle makePstnPhoneAccountHandle(int phoneId) {
-        return makePstnPhoneAccountHandle(PhoneFactory.getPhone(phoneId));
-    }
-
     public static PhoneAccountHandle makePstnPhoneAccountHandle(Phone phone) {
-        return makePstnPhoneAccountHandleWithPrefix(phone, "", false);
+        if (phone == null) {
+            return null;
+        } else {
+            return makePstnPhoneAccountHandleWithPrefix(phone, "",
+                    false, phone.getUserHandle());
+        }
     }
 
     public static PhoneAccountHandle makePstnPhoneAccountHandleWithPrefix(
-            Phone phone, String prefix, boolean isEmergency) {
+            Phone phone, String prefix, boolean isEmergency, UserHandle userHandle) {
         // TODO: Should use some sort of special hidden flag to decorate this account as
         // an emergency-only account
         String id = isEmergency ? EMERGENCY_ACCOUNT_HANDLE_ID : prefix +
                 String.valueOf(phone.getSubId());
-        return makePstnPhoneAccountHandleWithPrefix(id, prefix, isEmergency);
+        return makePstnPhoneAccountHandleWithId(id, userHandle);
     }
 
-    public static PhoneAccountHandle makePstnPhoneAccountHandleWithPrefix(
-            String id, String prefix, boolean isEmergency) {
+    public static PhoneAccountHandle makePstnPhoneAccountHandleWithId(
+            String id, UserHandle userHandle) {
         ComponentName pstnConnectionServiceName = getPstnConnectionServiceName();
-        return new PhoneAccountHandle(pstnConnectionServiceName, id);
+        // If user handle is null, resort to default constructor to use phone process's
+        // user handle
+        return userHandle == null
+                ? new PhoneAccountHandle(pstnConnectionServiceName, id)
+                : new PhoneAccountHandle(pstnConnectionServiceName, id, userHandle);
     }
 
     public static int getSubIdForPhoneAccount(PhoneAccount phoneAccount) {
