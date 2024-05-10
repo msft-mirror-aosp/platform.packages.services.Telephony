@@ -29,6 +29,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
 import android.graphics.Typeface;
+import android.hardware.radio.modem.ImeiInfo;
 import android.net.ConnectivityManager;
 import android.net.Network;
 import android.net.NetworkCapabilities;
@@ -43,6 +44,7 @@ import android.os.HandlerExecutor;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.SystemProperties;
+import android.os.UserManager;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellIdentityCdma;
@@ -102,6 +104,9 @@ import androidx.appcompat.app.AppCompatActivity;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.euicc.EuiccConnector;
+import com.android.internal.telephony.flags.FeatureFlags;
+import com.android.internal.telephony.flags.FeatureFlagsImpl;
+import com.android.internal.telephony.util.TelephonyUtils;
 import com.android.phone.R;
 
 import java.io.IOException;
@@ -202,12 +207,11 @@ public class RadioInfo extends AppCompatActivity {
         Log.d(TAG, s);
     }
 
-    private static final int EVENT_CFI_CHANGED = 302;
     private static final int EVENT_QUERY_SMSC_DONE = 1005;
     private static final int EVENT_UPDATE_SMSC_DONE = 1006;
     private static final int EVENT_PHYSICAL_CHANNEL_CONFIG_CHANGED = 1007;
+    private static final int EVENT_UPDATE_NR_STATS = 1008;
 
-    private static final int MENU_ITEM_SELECT_BAND         = 0;
     private static final int MENU_ITEM_VIEW_ADN            = 1;
     private static final int MENU_ITEM_VIEW_FDN            = 2;
     private static final int MENU_ITEM_VIEW_SDN            = 3;
@@ -234,6 +238,9 @@ public class RadioInfo extends AppCompatActivity {
     private TextView mGprsState;
     private TextView mVoiceNetwork;
     private TextView mDataNetwork;
+    private TextView mVoiceRawReg;
+    private TextView mDataRawReg;
+    private TextView mWlanDataRawReg;
     private TextView mOverrideNetwork;
     private TextView mDBm;
     private TextView mMwi;
@@ -256,7 +263,7 @@ public class RadioInfo extends AppCompatActivity {
     private TextView mNetworkSlicingConfig;
     private EditText mSmsc;
     private Switch mRadioPowerOnSwitch;
-    private Button mCellInfoRefreshRateButton;
+    private Switch mSimulateOutOfServiceSwitch;
     private Button mDnsCheckToggleButton;
     private Button mPingTestButton;
     private Button mUpdateSmscButton;
@@ -292,10 +299,13 @@ public class RadioInfo extends AppCompatActivity {
     private boolean mCfiValue = false;
 
     private List<CellInfo> mCellInfoResult = null;
+    private final boolean[] mSimulateOos = new boolean[2];
 
     private int mPreferredNetworkTypeResult;
     private int mCellInfoRefreshRateIndex;
     private int mSelectedPhoneIndex;
+
+    private FeatureFlags mFeatureFlags;
 
     private final NetworkRequest mDefaultNetworkRequest = new NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
@@ -373,8 +383,16 @@ public class RadioInfo extends AppCompatActivity {
             updateServiceState(serviceState);
             updateRadioPowerState();
             updateNetworkType();
+            updateRawRegistrationState(serviceState);
             updateImsProvisionedState();
-            updateNrStats(serviceState);
+
+            // Since update NR stats includes a ril message to get slicing information, it runs
+            // as blocking during the timeout period of 1 second. if ServiceStateChanged event
+            // fires consecutively, RadioInfo can run for more than 10 seconds. This can cause ANR.
+            // Therefore, send event only when there is no same event being processed.
+            if (!mHandler.hasMessages(EVENT_UPDATE_NR_STATS)) {
+                mHandler.obtainMessage(EVENT_UPDATE_NR_STATS).sendToTarget();
+            }
         }
 
         @Override
@@ -410,7 +428,7 @@ public class RadioInfo extends AppCompatActivity {
     private void updatePhoneIndex(int phoneIndex, int subId) {
         // unregister listeners on the old subId
         unregisterPhoneStateListener();
-        mTelephonyManager.setCellInfoListRate(sCellInfoListRateDisabled);
+        mTelephonyManager.setCellInfoListRate(sCellInfoListRateDisabled, mPhone.getSubId());
 
         if (phoneIndex == SubscriptionManager.INVALID_PHONE_INDEX) {
             log("Invalid phone index " + phoneIndex + ", subscription ID " + subId);
@@ -460,6 +478,10 @@ public class RadioInfo extends AppCompatActivity {
                     }
                     updatePhysicalChannelConfiguration((List<PhysicalChannelConfig>) ar.result);
                     break;
+                case EVENT_UPDATE_NR_STATS:
+                    log("got EVENT_UPDATE_NR_STATS");
+                    updateNrStats();
+                    break;
                 default:
                     super.handleMessage(msg);
                     break;
@@ -477,9 +499,20 @@ public class RadioInfo extends AppCompatActivity {
             return;
         }
 
+        UserManager userManager =
+                (UserManager) getApplicationContext().getSystemService(Context.USER_SERVICE);
+        if (userManager != null
+                && userManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+            Log.w(TAG, "User is restricted from configuring mobile networks.");
+            finish();
+            return;
+        }
+
         setContentView(R.layout.radio_info);
 
         log("Started onCreate");
+
+        mFeatureFlags = new FeatureFlagsImpl();
 
         mQueuedWork = new ThreadPoolExecutor(1, 1, RUNNABLE_TIMEOUT_MS, TimeUnit.MICROSECONDS,
                 new LinkedBlockingDeque<Runnable>());
@@ -510,6 +543,9 @@ public class RadioInfo extends AppCompatActivity {
         mGprsState = (TextView) findViewById(R.id.gprs);
         mVoiceNetwork = (TextView) findViewById(R.id.voice_network);
         mDataNetwork = (TextView) findViewById(R.id.data_network);
+        mVoiceRawReg = (TextView) findViewById(R.id.voice_raw_registration_state);
+        mDataRawReg = (TextView) findViewById(R.id.data_raw_registration_state);
+        mWlanDataRawReg = (TextView) findViewById(R.id.wlan_data_raw_registration_state);
         mOverrideNetwork = (TextView) findViewById(R.id.override_network);
         mDBm = (TextView) findViewById(R.id.dbm);
         mMwi = (TextView) findViewById(R.id.mwi);
@@ -598,6 +634,11 @@ public class RadioInfo extends AppCompatActivity {
 
         mRadioPowerOnSwitch = (Switch) findViewById(R.id.radio_power);
 
+        mSimulateOutOfServiceSwitch = (Switch) findViewById(R.id.simulate_out_of_service);
+        if (!TelephonyUtils.IS_DEBUGGABLE) {
+            mSimulateOutOfServiceSwitch.setVisibility(View.GONE);
+        }
+
         mDownlinkKbps = (TextView) findViewById(R.id.dl_kbps);
         mUplinkKbps = (TextView) findViewById(R.id.ul_kbps);
         updateBandwidths(0, 0);
@@ -677,7 +718,7 @@ public class RadioInfo extends AppCompatActivity {
         updateProperties();
         updateDnsCheckState();
         updateNetworkType();
-        updateNrStats(null);
+        updateNrStats();
 
         updateCellInfo(mCellInfoResult);
         updateSubscriptionIds();
@@ -690,7 +731,8 @@ public class RadioInfo extends AppCompatActivity {
         //set selection after registering listener to force update
         mCellInfoRefreshRateSpinner.setSelection(mCellInfoRefreshRateIndex);
         // Request cell information update from RIL.
-        mTelephonyManager.setCellInfoListRate(CELL_INFO_REFRESH_RATES[mCellInfoRefreshRateIndex]);
+        mTelephonyManager.setCellInfoListRate(CELL_INFO_REFRESH_RATES[mCellInfoRefreshRateIndex],
+                mPhone.getSubId());
 
         //set selection before registering to prevent update
         mPreferredNetworkType.setSelection(mPreferredNetworkTypeResult, true);
@@ -707,6 +749,8 @@ public class RadioInfo extends AppCompatActivity {
         mSelectPhoneIndex.setOnItemSelectedListener(mSelectPhoneIndexHandler);
 
         mRadioPowerOnSwitch.setOnCheckedChangeListener(mRadioPowerOnChangeListener);
+        mSimulateOutOfServiceSwitch.setOnCheckedChangeListener(mSimulateOosOnChangeListener);
+        mSimulateOutOfServiceSwitch.setChecked(mSimulateOos[mPhone.getPhoneId()]);
         mImsVolteProvisionedSwitch.setOnCheckedChangeListener(mImsVolteCheckedChangeListener);
         mImsVtProvisionedSwitch.setOnCheckedChangeListener(mImsVtCheckedChangeListener);
         mImsWfcProvisionedSwitch.setOnCheckedChangeListener(mImsWfcCheckedChangeListener);
@@ -735,7 +779,7 @@ public class RadioInfo extends AppCompatActivity {
         log("onPause: unregister phone & data intents");
 
         mTelephonyManager.unregisterTelephonyCallback(mTelephonyCallback);
-        mTelephonyManager.setCellInfoListRate(sCellInfoListRateDisabled);
+        mTelephonyManager.setCellInfoListRate(sCellInfoListRateDisabled, mPhone.getSubId());
         mConnectivityManager.unregisterNetworkCallback(mNetworkCallback);
 
     }
@@ -776,9 +820,7 @@ public class RadioInfo extends AppCompatActivity {
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
-        menu.add(0, MENU_ITEM_SELECT_BAND, 0, R.string.radio_info_band_mode_label)
-                .setOnMenuItemClickListener(mSelectBandCallback)
-                .setAlphabeticShortcut('b');
+        // Removed "select Radio band". If need it back, use setSystemSelectionChannels()
         menu.add(1, MENU_ITEM_VIEW_ADN, 0,
                 R.string.radioInfo_menu_viewADN).setOnMenuItemClickListener(mViewADNCallback);
         menu.add(1, MENU_ITEM_VIEW_FDN, 0,
@@ -821,7 +863,9 @@ public class RadioInfo extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        mQueuedWork.shutdown();
+        if (mQueuedWork != null) {
+            mQueuedWork.shutdown();
+        }
     }
 
     // returns array of string labels for each phone index. The array index is equal to the phone
@@ -843,8 +887,11 @@ public class RadioInfo extends AppCompatActivity {
         mOperatorName.setText("");
         mGprsState.setText("");
         mDataNetwork.setText("");
+        mDataRawReg.setText("");
         mOverrideNetwork.setText("");
         mVoiceNetwork.setText("");
+        mVoiceRawReg.setText("");
+        mWlanDataRawReg.setText("");
         mSent.setText("");
         mReceived.setText("");
         mCallState.setText("");
@@ -1192,15 +1239,38 @@ public class RadioInfo extends AppCompatActivity {
         }
     }
 
-    private void updateNrStats(ServiceState serviceState) {
-        if ((mTelephonyManager.getSupportedRadioAccessFamily()
-                & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
-            return;
+    private String getRawRegistrationStateText(ServiceState ss, int domain, int transportType) {
+        if (ss != null) {
+            NetworkRegistrationInfo nri = ss.getNetworkRegistrationInfo(domain, transportType);
+            if (nri != null) {
+                return NetworkRegistrationInfo.registrationStateToString(
+                        nri.getNetworkRegistrationState())
+                        + (nri.isEmergencyEnabled() ? "_EM" : "");
+            }
         }
+        return "";
+    }
+
+    private void updateRawRegistrationState(ServiceState serviceState) {
         ServiceState ss = serviceState;
         if (ss == null && mPhone != null) {
             ss = mPhone.getServiceState();
         }
+
+        mVoiceRawReg.setText(getRawRegistrationStateText(ss, NetworkRegistrationInfo.DOMAIN_CS,
+                    AccessNetworkConstants.TRANSPORT_TYPE_WWAN));
+        mDataRawReg.setText(getRawRegistrationStateText(ss, NetworkRegistrationInfo.DOMAIN_PS,
+                    AccessNetworkConstants.TRANSPORT_TYPE_WWAN));
+        mWlanDataRawReg.setText(getRawRegistrationStateText(ss, NetworkRegistrationInfo.DOMAIN_PS,
+                    AccessNetworkConstants.TRANSPORT_TYPE_WLAN));
+    }
+
+    private void updateNrStats() {
+        if ((mTelephonyManager.getSupportedRadioAccessFamily()
+                & TelephonyManager.NETWORK_TYPE_BITMASK_NR) == 0) {
+            return;
+        }
+        ServiceState ss = (mPhone == null) ? null : mPhone.getServiceState();
         if (ss != null) {
             NetworkRegistrationInfo nri = ss.getNetworkRegistrationInfo(
                     NetworkRegistrationInfo.DOMAIN_PS, AccessNetworkConstants.TRANSPORT_TYPE_WWAN);
@@ -1214,6 +1284,13 @@ public class RadioInfo extends AppCompatActivity {
             }
             mNrState.setText(NetworkRegistrationInfo.nrStateToString(ss.getNrState()));
             mNrFrequency.setText(ServiceState.frequencyRangeToString(ss.getNrFrequencyRange()));
+        } else {
+            Log.e(TAG, "Clear Nr stats by null service state");
+            mEndcAvailable.setText("");
+            mDcnrRestricted.setText("");
+            mNrAvailable.setText("");
+            mNrState.setText("");
+            mNrFrequency.setText("");
         }
 
         CompletableFuture<NetworkSlicingConfig> resultFuture = new CompletableFuture<>();
@@ -1234,11 +1311,16 @@ public class RadioInfo extends AppCompatActivity {
         Resources r = getResources();
 
         s = mPhone.getDeviceId();
-        if (s == null) s = r.getString(R.string.radioInfo_unknown);
+        if (s == null) {
+            s = r.getString(R.string.radioInfo_unknown);
+        }  else if (mPhone.getImeiType() == ImeiInfo.ImeiType.PRIMARY) {
+            s = s + " (" + r.getString(R.string.radioInfo_imei_primary) + ")";
+        }
         mDeviceId.setText(s);
 
         s = mPhone.getSubscriberId();
         if (s == null) s = r.getString(R.string.radioInfo_unknown);
+
         mSubscriberId.setText(s);
 
         SubscriptionManager subMgr = getSystemService(SubscriptionManager.class);
@@ -1471,16 +1553,6 @@ public class RadioInfo extends AppCompatActivity {
         }
     };
 
-    private MenuItem.OnMenuItemClickListener mSelectBandCallback =
-            new MenuItem.OnMenuItemClickListener() {
-        public boolean onMenuItemClick(MenuItem item) {
-            Intent intent = new Intent();
-            intent.setClass(RadioInfo.this, BandMode.class);
-            startActivity(intent);
-            return true;
-        }
-    };
-
     private MenuItem.OnMenuItemClickListener mToggleData =
             new MenuItem.OnMenuItemClickListener() {
         public boolean onMenuItemClick(MenuItem item) {
@@ -1501,6 +1573,9 @@ public class RadioInfo extends AppCompatActivity {
     };
 
     private boolean isRadioOn() {
+        if (mFeatureFlags.radioInfoIsRadioOn()) {
+            return mTelephonyManager.getRadioPowerState() == TelephonyManager.RADIO_POWER_ON;
+        }
         //FIXME: Replace with a TelephonyManager call
         return mPhone.getServiceState().getState() != ServiceState.STATE_POWER_OFF;
     }
@@ -1633,6 +1708,22 @@ public class RadioInfo extends AppCompatActivity {
                 }
             }
         }
+    };
+
+    private final OnCheckedChangeListener mSimulateOosOnChangeListener =
+            (buttonView, isChecked) -> {
+        Intent intent = new Intent("com.android.internal.telephony.TestServiceState");
+        if (isChecked) {
+            log("Send OOS override broadcast intent.");
+            intent.putExtra("data_reg_state", 1);
+            mSimulateOos[mPhone.getPhoneId()] = true;
+        } else {
+            log("Remove OOS override.");
+            intent.putExtra("action", "reset");
+            mSimulateOos[mPhone.getPhoneId()] = false;
+        }
+
+        mPhone.getTelephonyTester().setServiceStateTestIntent(intent);
     };
 
     private boolean isImsVolteProvisioned() {
@@ -1875,14 +1966,8 @@ public class RadioInfo extends AppCompatActivity {
                     return;
                 }
                 // getSubId says it takes a slotIndex, but it actually takes a phone index
-                int subId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-                int[] subIds = SubscriptionManager.getSubId(phoneIndex);
-                if (subIds != null && subIds.length > 0) {
-                    subId = subIds[0];
-                }
                 mSelectedPhoneIndex = phoneIndex;
-
-                updatePhoneIndex(phoneIndex, subId);
+                updatePhoneIndex(phoneIndex, SubscriptionManager.getSubscriptionId(phoneIndex));
             }
         }
 
@@ -1895,7 +1980,7 @@ public class RadioInfo extends AppCompatActivity {
 
         public void onItemSelected(AdapterView parent, View v, int pos, long id) {
             mCellInfoRefreshRateIndex = pos;
-            mTelephonyManager.setCellInfoListRate(CELL_INFO_REFRESH_RATES[pos]);
+            mTelephonyManager.setCellInfoListRate(CELL_INFO_REFRESH_RATES[pos], mPhone.getSubId());
             updateAllCellInfo();
         }
 

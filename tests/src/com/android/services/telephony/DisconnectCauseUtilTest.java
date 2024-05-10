@@ -22,6 +22,10 @@ import static android.media.ToneGenerator.TONE_SUP_BUSY;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.TestCase.assertEquals;
 
+import static org.mockito.Mockito.mock;
+import static org.testng.Assert.assertFalse;
+import static org.testng.Assert.assertTrue;
+
 import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
@@ -33,23 +37,18 @@ import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.TelephonyTestBase;
+import com.android.internal.telephony.CallFailCause;
 import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.phone.common.R;
 
-import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
-import org.mockito.Mockito;
 
-import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Locale;
-
 
 @RunWith(AndroidJUnit4.class)
 public class DisconnectCauseUtilTest extends TelephonyTestBase {
@@ -60,60 +59,27 @@ public class DisconnectCauseUtilTest extends TelephonyTestBase {
 
     // dynamic
     private Context mContext;
-    private HashMap<InstanceKey, Object> mOldInstances = new HashMap<InstanceKey, Object>();
-    private ArrayList<InstanceKey> mInstanceKeys = new ArrayList<InstanceKey>();
 
     //Mocks
     @Mock
     private GsmCdmaPhone mMockPhone;
 
-    // inner classes
-    private static class InstanceKey {
-        public final Class mClass;
-        public final String mInstName;
-        public final Object mObj;
-
-        InstanceKey(final Class c, final String instName, final Object obj) {
-            mClass = c;
-            mInstName = instName;
-            mObj = obj;
-        }
-
+    private final FlagsAdapter mFeatureFlags = new FlagsAdapter(){
         @Override
-        public int hashCode() {
-            return (mClass.getName().hashCode() * 31 + mInstName.hashCode()) * 31;
+        public boolean doNotOverridePreciseLabel() {
+            return true;
         }
-
-        @Override
-        public boolean equals(Object obj) {
-            if (obj == null || !(obj instanceof InstanceKey)) {
-                return false;
-            }
-
-            InstanceKey other = (InstanceKey) obj;
-            return (other.mClass == mClass && other.mInstName.equals(mInstName)
-                    && other.mObj == mObj);
-        }
-    }
+    };
 
     @Before
     public void setUp() throws Exception {
         super.setUp();
         // objects that call static getInstance()
-        mMockPhone = Mockito.mock(GsmCdmaPhone.class);
+        mMockPhone = mock(GsmCdmaPhone.class);
         mContext = InstrumentationRegistry.getTargetContext();
         // set mocks
         setSinglePhone();
     }
-
-    @After
-    public void tearDown() throws Exception {
-        // restoreInstance.
-        // Not doing so will potentially "confuse" other tests with the mocked instance
-        restoreInstance(PhoneFactory.class, "sPhones", null);
-        super.tearDown();
-    }
-
 
     /**
      * Verifies that a call drop due to loss of WIFI results in a disconnect cause of error and that
@@ -136,7 +102,7 @@ public class DisconnectCauseUtilTest extends TelephonyTestBase {
     @Test
     public void testDefaultDisconnectCauseBehaviorForCauseNotInCarrierBusyToneArray() {
         android.telecom.DisconnectCause tcCause = DisconnectCauseUtil.toTelecomDisconnectCause(
-                DisconnectCause.ERROR_UNSPECIFIED, EMPTY_STRING, PHONE_ID);
+                DisconnectCause.ERROR_UNSPECIFIED, -1, EMPTY_STRING, PHONE_ID, null, mFeatureFlags);
         // CODE
         assertEquals(android.telecom.DisconnectCause.ERROR, tcCause.getCode());
         // LABEL
@@ -146,61 +112,148 @@ public class DisconnectCauseUtilTest extends TelephonyTestBase {
     }
 
     /**
-     *  Simulate a Carrier classifying the DisconnectCause.ERROR_UNSPECIFIED as a
-     *  DisconnectCause.BUSY.  The code, label, and tone should match DisconnectCause.BUSY.
+     * verify that if a precise label is given Telephony, the label is not overridden by Telecom
      */
     @Test
-    public void testCarrierSetDisconnectCauseInBusyToneArray() {
-        int[] carrierBusyArr = {DisconnectCause.BUSY, DisconnectCause.ERROR_UNSPECIFIED};
+    public void testDefaultPhoneConfig_NoPreciseLabelGiven() {
+        android.telecom.DisconnectCause tcCause =
+                DisconnectCauseUtil.toTelecomDisconnectCause(DisconnectCause.BUSY,
+                        -1 /*  precise label is NOT given */,
+                        EMPTY_STRING, PHONE_ID, null /* carrier config is NOT set */,
+                        mFeatureFlags);
+        assertBusyCauseWithTargetLabel(R.string.callFailed_userBusy, tcCause);
+    }
+
+    /**
+     * verify that if a precise label is given Telephony, the label is not overridden by Telecom
+     */
+    @Test
+    public void testDefaultPhoneConfig_PreciseLabelProvided() {
+        android.telecom.DisconnectCause tcCause =
+                DisconnectCauseUtil.toTelecomDisconnectCause(DisconnectCause.BUSY,
+                        CallFailCause.USER_BUSY /* Telephony defined a precise label */,
+                        EMPTY_STRING, PHONE_ID, null /* carrier config is NOT set */,
+                        mFeatureFlags);
+        // Note: The precise label should not be overridden even though the carrier defined
+        // the cause to play a busy tone
+        assertBusyCauseWithTargetLabel(R.string.clh_callFailed_user_busy_txt, tcCause);
+    }
+
+    /**
+     * special case: The Carrier has re-defined a disconnect code that should play a busy tone.
+     * Thus, the code, label, and tone should be remapped.
+     * <p>
+     * <p>
+     * Verify that if the disconnect cause is in the carrier busy tone array that the expected
+     * label, tone, and code are returned.
+     */
+    @Test
+    public void testCarrierSetBusyToneArray_NoPreciseLabelGiven() {
+        android.telecom.DisconnectCause tcCause =
+                DisconnectCauseUtil.toTelecomDisconnectCause(
+                        DisconnectCause.BUSY, -1 /*  precise label is NOT given */,
+                        EMPTY_STRING, PHONE_ID, null, getBundleWithBusyToneArray(), mFeatureFlags);
+
+        assertBusyCauseWithTargetLabel(R.string.callFailed_userBusy, tcCause);
+    }
+
+    /**
+     * special case: The Carrier has re-defined a disconnect code that should play a busy tone.
+     * Thus, the code, label, and tone should be remapped.
+     * <p>
+     * <p>
+     * Verify that if the disconnect cause is in the carrier busy tone array and the Telephony
+     * stack has provided a precise label, the label is not overridden.
+     */
+    @Test
+    public void testCarrierSetBusyToneArray_PreciseLabelProvided() {
+        android.telecom.DisconnectCause tcCause =
+                DisconnectCauseUtil.toTelecomDisconnectCause(DisconnectCause.BUSY,
+                        CallFailCause.USER_BUSY /* Telephony defined a precise label */,
+                        EMPTY_STRING, PHONE_ID, null, getBundleWithBusyToneArray(), mFeatureFlags);
+        // Note: The precise label should not be overridden even though the carrier defined
+        // the cause to play a busy tone
+        assertBusyCauseWithTargetLabel(R.string.clh_callFailed_user_busy_txt, tcCause);
+    }
+
+    /**
+     * Ensure the helper doesCarrierClassifyDisconnectCauseAsBusyCause does not hit a NPE if a
+     * NULL carrier config is passed in.
+     */
+    @Test
+    public void testDoesCarrierClassifyDisconnectCauseAsBusyCause_nullConfig() {
+        assertFalse(DisconnectCauseUtil.doesCarrierClassifyDisconnectCauseAsBusyCause(-1, null));
+    }
+
+    /**
+     * Ensure the helper doesCarrierClassifyDisconnectCauseAsBusyCause does not hit a NPE if an
+     * EMPTY carrier config is passed in.
+     */
+    @Test
+    public void testDoesCarrierClassifyDisconnectCauseAsBusyCause_ConfigDoesNotDefineArray() {
         PersistableBundle config = new PersistableBundle();
+        assertFalse(DisconnectCauseUtil.doesCarrierClassifyDisconnectCauseAsBusyCause(-1, config));
+    }
+
+    /**
+     * Ensure the helper doesCarrierClassifyDisconnectCauseAsBusyCause does not hit a NPE if an
+     * EMPTY array is defined for KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY.
+     */
+    @Test
+    public void testDoesCarrierClassifyDisconnectCauseAsBusyCause_ConfigHasEmptyArray() {
+        PersistableBundle config = new PersistableBundle();
+        int[] carrierBusyArr = {}; // NOTE: This is intentionally let empty
 
         config.putIntArray(
                 CarrierConfigManager.KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
                 carrierBusyArr);
 
-        android.telecom.DisconnectCause tcCause =
-                DisconnectCauseUtil.toTelecomDisconnectCause(
-                        DisconnectCause.ERROR_UNSPECIFIED, -1,
-                        EMPTY_STRING, PHONE_ID, null, config);
+        assertFalse(DisconnectCauseUtil.doesCarrierClassifyDisconnectCauseAsBusyCause(-1, config));
+    }
 
-        // CODE
-        assertEquals(android.telecom.DisconnectCause.BUSY, tcCause.getCode());
-        // LABEL
-        safeAssertLabel(R.string.callFailed_userBusy, tcCause);
-        // TONE
-        assertEquals(TONE_SUP_BUSY, tcCause.getTone());
+    /**
+     * Ensure {@link DisconnectCauseUtil#doesCarrierClassifyDisconnectCauseAsBusyCause} returns
+     * FALSE is the passed in disconnect cause is NOT the busy tone array
+     */
+    @Test
+    public void testDoesCarrierClassifyDisconnectCauseAsBusyCause_ConfigHasBusyToneButNotMatch() {
+        assertFalse(DisconnectCauseUtil.doesCarrierClassifyDisconnectCauseAsBusyCause(-1,
+                getBundleWithBusyToneArray()));
+    }
+
+    /**
+     * Ensure {@link DisconnectCauseUtil#doesCarrierClassifyDisconnectCauseAsBusyCause} returns
+     * TRUE if the disconnect cause is defined in the busy tone array (by the Carrier)
+     */
+    @Test
+    public void testDoesCarrierClassifyDisconnectCauseAsBusyCause_ConfigHasBusyTone() {
+        assertTrue(DisconnectCauseUtil.doesCarrierClassifyDisconnectCauseAsBusyCause(
+                DisconnectCause.BUSY, getBundleWithBusyToneArray()));
+    }
+
+    private void assertBusyCauseWithTargetLabel(Integer targetLabel,
+            android.telecom.DisconnectCause disconnectCause) {
+        // CODE: Describes the cause of a disconnected call
+        assertEquals(android.telecom.DisconnectCause.BUSY, disconnectCause.getCode());
+        // LABEL: This is the label that the user sees
+        safeAssertLabel(targetLabel, disconnectCause);
+        // TONE: This is the DTMF tone being played to the user
+        assertEquals(TONE_SUP_BUSY, disconnectCause.getTone());
+    }
+
+    private PersistableBundle getBundleWithBusyToneArray() {
+        int[] carrierBusyArr = {DisconnectCause.BUSY};
+        PersistableBundle config = new PersistableBundle();
+
+        config.putIntArray(
+                CarrierConfigManager.KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY,
+                carrierBusyArr);
+        return config;
     }
 
     private void setSinglePhone() throws Exception {
         Phone[] mPhones = new Phone[]{mMockPhone};
         replaceInstance(PhoneFactory.class, "sPhones", null, mPhones);
-    }
-
-
-    protected synchronized void replaceInstance(final Class c, final String instanceName,
-            final Object obj, final Object newValue)
-            throws Exception {
-        Field field = c.getDeclaredField(instanceName);
-        field.setAccessible(true);
-
-        InstanceKey key = new InstanceKey(c, instanceName, obj);
-        if (!mOldInstances.containsKey(key)) {
-            mOldInstances.put(key, field.get(obj));
-            mInstanceKeys.add(key);
-        }
-        field.set(obj, newValue);
-    }
-
-    protected synchronized void restoreInstance(final Class c, final String instanceName,
-            final Object obj) throws Exception {
-        InstanceKey key = new InstanceKey(c, instanceName, obj);
-        if (mOldInstances.containsKey(key)) {
-            Field field = c.getDeclaredField(instanceName);
-            field.setAccessible(true);
-            field.set(obj, mOldInstances.get(key));
-            mOldInstances.remove(key);
-            mInstanceKeys.remove(key);
-        }
     }
 
     private Resources getResourcesForLocale(Context context, Locale locale) {
