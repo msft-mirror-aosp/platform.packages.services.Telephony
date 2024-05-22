@@ -8795,12 +8795,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
-     * Returns the service state information on specified subscription.
+     * Returns the service state information on specified SIM slot.
      */
     @Override
-    public ServiceState getServiceStateForSubscriber(int subId,
-            boolean renounceFineLocationAccess, boolean renounceCoarseLocationAccess,
-            String callingPackage, String callingFeatureId) {
+    public ServiceState getServiceStateForSlot(int slotIndex, boolean renounceFineLocationAccess,
+            boolean renounceCoarseLocationAccess, String callingPackage, String callingFeatureId) {
+        Phone phone = PhoneFactory.getPhone(slotIndex);
+        if (phone == null) {
+            loge("getServiceStateForSlot retuning null for invalid slotIndex=" + slotIndex);
+            return null;
+        }
+
+        int subId = phone.getSubId();
         if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
                 mApp, subId, callingPackage, callingFeatureId, "getServiceStateForSubscriber")) {
             return null;
@@ -8819,7 +8825,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     .setCallingFeatureId(callingFeatureId)
                                     .setCallingPid(Binder.getCallingPid())
                                     .setCallingUid(Binder.getCallingUid())
-                                    .setMethod("getServiceStateForSubscriber")
+                                    .setMethod("getServiceStateForSlot")
                                     .setLogAsInfo(true)
                                     .setMinSdkVersionForFine(Build.VERSION_CODES.Q)
                                     .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
@@ -8837,7 +8843,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                                     .setCallingFeatureId(callingFeatureId)
                                     .setCallingPid(Binder.getCallingPid())
                                     .setCallingUid(Binder.getCallingUid())
-                                    .setMethod("getServiceStateForSubscriber")
+                                    .setMethod("getServiceStateForSlot")
                                     .setLogAsInfo(true)
                                     .setMinSdkVersionForCoarse(Build.VERSION_CODES.Q)
                                     .setMinSdkVersionForFine(Integer.MAX_VALUE)
@@ -8847,26 +8853,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     coarseLocationResult == LocationAccessPolicy.LocationPermissionResult.ALLOWED;
         }
 
-        final Phone phone = getPhone(subId);
-        if (phone == null) {
-            return null;
-        }
-
         final long identity = Binder.clearCallingIdentity();
-
-        boolean isCallingPackageDataService = phone.getDataServicePackages()
-                .contains(callingPackage);
         try {
-            // isActiveSubId requires READ_PHONE_STATE, which we already check for above
             SubscriptionInfoInternal subInfo = getSubscriptionManagerService()
                     .getSubscriptionInfoInternal(subId);
-            if (subInfo == null || !subInfo.isActive()) {
-                Rlog.d(LOG_TAG, "getServiceStateForSubscriber returning null for inactive "
-                        + "subId=" + subId);
+            if (subInfo != null && !subInfo.isActive()) {
+                log("getServiceStateForSlot returning null for inactive subId=" + subId);
                 return null;
             }
 
             ServiceState ss = phone.getServiceState();
+            boolean isCallingPackageDataService = phone.getDataServicePackages()
+                    .contains(callingPackage);
 
             // Scrub out the location info in ServiceState depending on what level of access
             // the caller has.
@@ -13758,6 +13756,26 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         return mSatelliteController.setDatagramControllerTimeoutDuration(
                 reset, timeoutType, timeoutMillis);
     }
+
+    /**
+     * This API can be used by only CTS to override the boolean configs used by the
+     * DatagramController module.
+     *
+     * @param enable Whether to enable or disable boolean config.
+     * @return {@code true} if the boolean config is set successfully, {@code false} otherwise.
+     */
+    public boolean setDatagramControllerBooleanConfig(
+            boolean reset, int booleanType, boolean enable) {
+        Log.d(LOG_TAG, "setDatagramControllerBooleanConfig: booleanType=" + booleanType
+                + ", reset=" + reset + ", enable=" + enable);
+        TelephonyPermissions.enforceShellOnly(
+                Binder.getCallingUid(), "setDatagramControllerBooleanConfig");
+        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
+                SubscriptionManager.INVALID_SUBSCRIPTION_ID,
+                "ssetDatagramControllerBooleanConfig");
+        return mSatelliteController.setDatagramControllerBooleanConfig(reset, booleanType, enable);
+    }
+
 
     /**
      * This API can be used by only CTS to override the timeout durations used by the
