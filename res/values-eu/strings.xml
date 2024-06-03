@@ -305,7 +305,7 @@
     <string name="keywords_carrier_settings_euicc" msgid="8540160967922063745">"operadorea, esim, esim txartela, sim, sim txartela, euicc, euicc txartela, aldatu operadoreak, aldatu operadorez, aldatu operadorea, gehitu operadorea, gehitu operadoreak"</string>
     <string name="carrier_settings_euicc_summary" msgid="2027941166597330117">"<xliff:g id="CARRIER_NAME">%1$s</xliff:g>: <xliff:g id="PHONE_NUMBER">%2$s</xliff:g>"</string>
     <string name="mobile_data_settings_title" msgid="7228249980933944101">"Datu-konexioa"</string>
-    <string name="mobile_data_settings_summary" msgid="5012570152029118471">"Atzitu datuak datu-konexioaren bidez"</string>
+    <string name="mobile_data_settings_summary" msgid="5012570152029118471">"Atzitu datuak sare mugikorraren bidez"</string>
     <string name="data_usage_disable_mobile" msgid="5669109209055988308">"Datu-konexioa desaktibatu nahi duzu?"</string>
     <string name="sim_selection_required_pref" msgid="6985901872978341314">"Hautatu egin behar da"</string>
     <string name="sim_change_data_title" msgid="9142726786345906606">"Datuetarako SIMa aldatu nahi duzu?"</string>
@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Ezin dira zain utzi deiak."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Deia egiteko, konektatu haririk gabeko sare batera."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Deia egiteko, gaitu wifi bidezko deiak."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Deiak egiteko, desgaitu satelite modua."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Dei bat egiteko, amaitu satelite bidezko konexioa."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Mezuak bidali eta jaso ditzakezu sare mugikorrik edo wifi-sarerik gabe."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Larrialdietarako informazioa"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Jabea"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Informazioa ikusteko, sakatu berriro"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Ezarri eSIM aldagarria lehenetsi gisa"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Sare mugikor bidezko irratiaren indarra"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simulatu gailua ez dabilela (arazketa-konpilazioa soilik)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Simulatu operadorearen satelite modua (arazketa-konpilazioa soilik)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Ikusi SIMeko kontaktuak"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Ikusi markatze finkoko zenbakiak"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Ikusi zerbitzuaren markatze-zenbakiak"</string>

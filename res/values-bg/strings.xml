@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Не може да се извършват обаждания."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Свържете се с безжична мрежа, за да осъществите обаждане."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"За да извършите обаждане, активирайте обажданията през Wi-Fi."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Деактивирайте сателитния режим, за да извършите обаждане."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"За да извършите обаждане, първо прекратете сателитната връзка."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Можете да изпращате и получавате съобщения без мобилна или Wi-Fi мрежа."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Информация за спешни случаи"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Собственик"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Докоснете отново, за да видите информация"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Задаване на електронната SIM карта с изваждащ се чип като основна"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Мощност на мобилното радио"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Симулиране на липса на услуга (само в компилацията за отстраняване на грешки)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Симулиран сателитен режим от оператора (само в компилацията за отстраняване на грешки)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Преглед на указателя на SIM картата"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Преглед на номера за фиксирано набиране"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Преглед на номера за набиране на услуги"</string>

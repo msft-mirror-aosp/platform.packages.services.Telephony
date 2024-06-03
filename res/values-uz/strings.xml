@@ -559,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Qo‘ng‘iroqlarni ushlab turib bo‘lmadi."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Qo‘ng‘iroq qilish uchun simsiz tarmoqqa ulaning"</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Qo‘ng‘iroq qilish uchun Wi-Fi qo‘ng‘iroqlar funksiyasini yoqing."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Telefon qilish uchun sputnik rejimini faolsizlantiring."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Telefon qilish uchun avval sputnik orqali aloqani uzing."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Mobil yoki Wi-Fi tarmoqsiz xabarlarni yuborish va qabul qilish mumkin."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Favqulodda vaziyatlar uchun axborot"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Egasi"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Axborotni ochish uchun yana bir marta bosing"</string>
@@ -843,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Olinadigan eSIM kartani birlamchi qilib belgilash"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Radio signal quvvati"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Xizmatdan tashqari simulyatsiya (faqat nosozliklarni aniqlash dasturi uchun)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Soxta operator sputnik rejimi (faqat debag nashrida)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"SIM kartadagi abonentlar ro‘yxatini ochish"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Ruxsat etilgan raqamlar ro‘yxatini ochish"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Xizmatlarni terish raqamlarini ochish"</string>

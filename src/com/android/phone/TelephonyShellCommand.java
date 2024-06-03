@@ -193,6 +193,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             "set-satellite-pointing-ui-class-name";
     private static final String SET_DATAGRAM_CONTROLLER_TIMEOUT_DURATION =
             "set-datagram-controller-timeout-duration";
+    private static final String SET_DATAGRAM_CONTROLLER_BOOLEAN_CONFIG =
+            "set-datagram-controller-boolean-config";
 
     private static final String SET_SATELLITE_CONTROLLER_TIMEOUT_DURATION =
             "set-satellite-controller-timeout-duration";
@@ -402,6 +404,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSetSatellitePointingUiClassNameCommand();
             case SET_DATAGRAM_CONTROLLER_TIMEOUT_DURATION:
                 return handleSetDatagramControllerTimeoutDuration();
+            case SET_DATAGRAM_CONTROLLER_BOOLEAN_CONFIG:
+                return handleSetDatagramControllerBooleanConfig();
             case SET_SATELLITE_CONTROLLER_TIMEOUT_DURATION:
                 return handleSetSatelliteControllerTimeoutDuration();
             case SET_EMERGENCY_CALL_TO_SATELLITE_HANDOVER_TYPE:
@@ -3416,6 +3420,47 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         return 0;
     }
 
+    private int handleSetDatagramControllerBooleanConfig() {
+        PrintWriter errPw = getErrPrintWriter();
+        boolean reset = false;
+        int booleanType = 0;
+        boolean enable = false;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-d": {
+                    enable = Boolean.parseBoolean(getNextArgRequired());
+                    break;
+                }
+                case "-r": {
+                    reset = true;
+                    break;
+                }
+                case "-t": {
+                    booleanType = Integer.parseInt(getNextArgRequired());
+                    break;
+                }
+            }
+        }
+        Log.d(LOG_TAG, "setDatagramControllerBooleanConfig: enable="
+                + enable + ", reset=" + reset + ", booleanType=" + booleanType);
+
+        try {
+            boolean result = mInterface.setDatagramControllerBooleanConfig(
+                    reset, booleanType, enable);
+            if (VDBG) {
+                Log.v(LOG_TAG, "setDatagramControllerBooleanConfig result = " + result);
+            }
+            getOutPrintWriter().println(result);
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "setDatagramControllerBooleanConfig: error = " + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
     private int handleSetSatelliteControllerTimeoutDuration() {
         PrintWriter errPw = getErrPrintWriter();
         boolean reset = false;
@@ -3883,7 +3928,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     /**
      * Building the string that can be used to build the JsonObject which supports to stub the data
      * in CarrierAllowListInfo for CTS testing. sample format is like
-     * {"com.android.example":{"carrierIds":[10000],"callerSHA1Id":["XXXXXXXXXXXXXX"]}}
+     * {"com.android.example":{"carrierIds":[10000],"callerSHA256Ids":["XXXXXXXXXXXXXX"]}}
      */
     private String convertToJsonString(int index, String param) {
 
