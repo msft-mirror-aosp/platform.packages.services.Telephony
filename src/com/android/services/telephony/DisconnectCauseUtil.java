@@ -23,15 +23,19 @@ import android.provider.Settings;
 import android.telecom.DisconnectCause;
 import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyManager;
 import android.telephony.ims.ImsReasonInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.telephony.CallFailCause;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
+import com.android.internal.telephony.flags.FeatureFlags;
+import com.android.internal.telephony.flags.FeatureFlagsImpl;
+import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.phone.ImsUtil;
 import com.android.phone.PhoneGlobals;
-import com.android.phone.common.R;
+import com.android.phone.R;
 
 public class DisconnectCauseUtil {
 
@@ -72,7 +76,7 @@ public class DisconnectCauseUtil {
     public static DisconnectCause toTelecomDisconnectCause(
             int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason) {
         return toTelecomDisconnectCause(telephonyDisconnectCause, telephonyPreciseDisconnectCause,
-                reason, SubscriptionManager.getDefaultVoicePhoneId(), null);
+                reason, SubscriptionManager.getDefaultVoicePhoneId(), null, new FlagsAdapterImpl());
     }
 
     /**
@@ -86,7 +90,7 @@ public class DisconnectCauseUtil {
     public static DisconnectCause toTelecomDisconnectCause(int telephonyDisconnectCause,
             String reason, int phoneId) {
         return toTelecomDisconnectCause(telephonyDisconnectCause, CallFailCause.NOT_VALID,
-                reason, phoneId, null);
+                reason, phoneId, null, new FlagsAdapterImpl(), false);
     }
 
    /**
@@ -101,9 +105,29 @@ public class DisconnectCauseUtil {
     */
     public static DisconnectCause toTelecomDisconnectCause(
             int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason,
-            int phoneId, ImsReasonInfo imsReasonInfo) {
+            int phoneId, ImsReasonInfo imsReasonInfo, FlagsAdapter featureFlags) {
         return toTelecomDisconnectCause(telephonyDisconnectCause, telephonyPreciseDisconnectCause,
-                reason, phoneId, imsReasonInfo, getCarrierConfigBundle(phoneId));
+                reason, phoneId, imsReasonInfo, getCarrierConfigBundle(phoneId), featureFlags,
+                false);
+    }
+
+   /**
+    * Converts from a disconnect code in {@link android.telephony.DisconnectCause} into a more
+    * generic {@link android.telecom.DisconnectCause}.object, possibly populated with a localized
+    * message and tone for Slot.
+    * @param telephonyDisconnectCause The code for the reason for the disconnect.
+    * @param telephonyPreciseDisconnectCause The code for the precise reason for the disconnect.
+    * @param reason Description of the reason for the disconnect, not intended for the user to see.
+    * @param phoneId To support localized message based on phoneId
+    * @param imsReasonInfo
+    */
+    public static DisconnectCause toTelecomDisconnectCause(
+            int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason,
+            int phoneId, ImsReasonInfo imsReasonInfo, FlagsAdapter featureFlags,
+            boolean shouldTreatAsEmergency) {
+        return toTelecomDisconnectCause(telephonyDisconnectCause, telephonyPreciseDisconnectCause,
+                reason, phoneId, imsReasonInfo, getCarrierConfigBundle(phoneId), featureFlags,
+                shouldTreatAsEmergency);
     }
 
     /**
@@ -115,19 +139,24 @@ public class DisconnectCauseUtil {
     @VisibleForTesting
     static DisconnectCause toTelecomDisconnectCause(
             int telephonyDisconnectCause, int telephonyPreciseDisconnectCause, String reason,
-            int phoneId, ImsReasonInfo imsReasonInfo, PersistableBundle carrierConfig) {
+            int phoneId, ImsReasonInfo imsReasonInfo, PersistableBundle carrierConfig,
+            FlagsAdapter featureFlags, boolean shouldTreatAsEmergency) {
         Context context = PhoneGlobals.getInstance();
 
-        return new DisconnectCause(
-                toTelecomDisconnectCauseCode(telephonyDisconnectCause, carrierConfig),
-                toTelecomDisconnectCauseLabel(context, telephonyDisconnectCause,
-                        telephonyPreciseDisconnectCause, carrierConfig),
-                toTelecomDisconnectCauseDescription(context, telephonyDisconnectCause, phoneId),
-                toTelecomDisconnectReason(context, telephonyDisconnectCause, reason, phoneId),
-                toTelecomDisconnectCauseTone(telephonyDisconnectCause, carrierConfig),
-                telephonyDisconnectCause,
-                telephonyPreciseDisconnectCause,
-                imsReasonInfo);
+        return new DisconnectCause.Builder(
+                toTelecomDisconnectCauseCode(telephonyDisconnectCause, carrierConfig))
+                .setLabel(toTelecomDisconnectCauseLabel(context, telephonyDisconnectCause,
+                        telephonyPreciseDisconnectCause, carrierConfig, featureFlags))
+                .setDescription(toTelecomDisconnectCauseDescription(
+                        context, telephonyDisconnectCause, phoneId, shouldTreatAsEmergency))
+                .setReason(toTelecomDisconnectReason(
+                        context, telephonyDisconnectCause, reason, phoneId))
+                .setTone(toTelecomDisconnectCauseTone(
+                        telephonyDisconnectCause, carrierConfig, featureFlags))
+                .setTelephonyDisconnectCause(telephonyDisconnectCause)
+                .setTelephonyPreciseDisconnectCause(telephonyPreciseDisconnectCause)
+                .setImsReasonInfo(imsReasonInfo)
+                .build();
     }
 
     /**
@@ -135,8 +164,8 @@ public class DisconnectCauseUtil {
      * {@link android.telecom.DisconnectCause} disconnect code.
      * @return The disconnect code as defined in {@link android.telecom.DisconnectCause}.
      */
-    private static int toTelecomDisconnectCauseCode(int telephonyDisconnectCause,
-            PersistableBundle carrierConfig) {
+    private static @DisconnectCause.DisconnectCauseCode int toTelecomDisconnectCauseCode(
+            int telephonyDisconnectCause, PersistableBundle carrierConfig) {
 
         // special case: some carriers determine what disconnect causes play the BUSY tone.
         // hence, must adjust the disconnectCause CODE to match the tone.
@@ -264,20 +293,29 @@ public class DisconnectCauseUtil {
      */
     private static CharSequence toTelecomDisconnectCauseLabel(
             Context context, int telephonyDisconnectCause, int telephonyPreciseDisconnectCause,
-            PersistableBundle carrierConfig) {
+            PersistableBundle carrierConfig, FlagsAdapter featureFlags) {
         CharSequence label;
-
-        // special case: some carriers determine what disconnect causes play the BUSY tone.
-        // hence, must adjust the disconnectCause LABEL to match the tone.
-        if (doesCarrierClassifyDisconnectCauseAsBusyCause(telephonyDisconnectCause,
-                carrierConfig)) {
-            return context.getResources().getString(R.string.callFailed_userBusy);
+        if (!featureFlags.doNotOverridePreciseLabel()) {
+            // special case: some carriers determine what disconnect causes play the BUSY tone.
+            // hence, must adjust the disconnectCause LABEL to match the tone.
+            if (doesCarrierClassifyDisconnectCauseAsBusyCause(telephonyDisconnectCause,
+                    carrierConfig)) {
+                return context.getResources().getString(R.string.callFailed_userBusy);
+            }
         }
 
         if (telephonyPreciseDisconnectCause != CallFailCause.NOT_VALID) {
             label = getLabelFromPreciseDisconnectCause(context, telephonyPreciseDisconnectCause,
                     telephonyDisconnectCause);
         } else {
+            if (featureFlags.doNotOverridePreciseLabel()) {
+                // special case: some carriers determine what disconnect causes play the BUSY tone.
+                // hence, must adjust the disconnectCause LABEL to match the tone.
+                if (doesCarrierClassifyDisconnectCauseAsBusyCause(telephonyDisconnectCause,
+                        carrierConfig)) {
+                    return context.getResources().getString(R.string.callFailed_userBusy);
+                }
+            }
             label = getLabelFromDisconnectCause(context, telephonyDisconnectCause);
         }
         return label;
@@ -420,7 +458,7 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_wfc_service_not_available_in_this_location;
                 break;
             case android.telephony.DisconnectCause.SATELLITE_ENABLED:
-                resourceId = R.string.incall_error_satellite_enabled;
+                resourceId = getSatelliteErrorString();
                 break;
             default:
                 break;
@@ -604,7 +642,7 @@ public class DisconnectCauseUtil {
                         resourceId = R.string.clh_incall_error_out_of_service_txt;
                         break;
                     case android.telephony.DisconnectCause.SATELLITE_ENABLED:
-                        resourceId = R.string.clh_callFailed_satelliteEnabled_txt;
+                        resourceId = getSatelliteErrorString();
                         break;
                     default:
                         resourceId = R.string.clh_card_title_call_ended_txt;
@@ -619,7 +657,8 @@ public class DisconnectCauseUtil {
      * Returns a description of the disconnect cause to be shown to the user.
      */
     private static CharSequence toTelecomDisconnectCauseDescription(
-            Context context, int telephonyDisconnectCause, int phoneId) {
+            Context context, int telephonyDisconnectCause, int phoneId,
+            boolean shouldTreatAsEmergency) {
         if (context == null ) {
             return "";
         }
@@ -742,14 +781,31 @@ public class DisconnectCauseUtil {
 
             case android.telephony.DisconnectCause.OUT_OF_SERVICE:
                 // No network connection.
+                FeatureFlags mFeatureFlags = new FeatureFlagsImpl();
                 if (ImsUtil.shouldPromoteWfc(context, phoneId)) {
                     resourceId = R.string.incall_error_promote_wfc;
                 } else if (ImsUtil.isWfcModeWifiOnly(context, phoneId)) {
                     resourceId = R.string.incall_error_wfc_only_no_wireless_network;
                 } else if (ImsUtil.isWfcEnabled(context, phoneId)) {
-                    resourceId = R.string.incall_error_out_of_service_wfc;
+                    if (!mFeatureFlags.showCallFailNotificationFor2gToggle()) {
+                        resourceId = R.string.incall_error_out_of_service_wfc;
+                        break;
+                    }
+                    if (is2gDisabled(phoneId) && !shouldTreatAsEmergency) {
+                        resourceId = R.string.incall_error_out_of_service_wfc_2g_user;
+                    } else {
+                        resourceId = R.string.incall_error_out_of_service_wfc;
+                    }
                 } else {
-                    resourceId = R.string.incall_error_out_of_service;
+                    if (!mFeatureFlags.showCallFailNotificationFor2gToggle()) {
+                        resourceId = R.string.incall_error_out_of_service;
+                        break;
+                    }
+                    if (is2gDisabled(phoneId) && !shouldTreatAsEmergency) {
+                        resourceId = R.string.incall_error_out_of_service_2g;
+                    } else {
+                        resourceId = R.string.incall_error_out_of_service;
+                    }
                 }
                 break;
 
@@ -830,7 +886,7 @@ public class DisconnectCauseUtil {
                 resourceId = R.string.callFailed_wfc_service_not_available_in_this_location;
                 break;
             case android.telephony.DisconnectCause.SATELLITE_ENABLED:
-                resourceId = R.string.incall_error_satellite_enabled;
+                resourceId = getSatelliteErrorString();
                 break;
             default:
                 break;
@@ -874,6 +930,8 @@ public class DisconnectCauseUtil {
                 return DisconnectCause.REASON_IMS_ACCESS_BLOCKED;
             case android.telephony.DisconnectCause.OUTGOING_EMERGENCY_CALL_PLACED:
                 return DisconnectCause.REASON_EMERGENCY_CALL_PLACED;
+            case android.telephony.DisconnectCause.SATELLITE_ENABLED:
+                return reason;
         }
 
         // If no specific code-mapping found, then fall back to using the reason.
@@ -889,7 +947,7 @@ public class DisconnectCauseUtil {
      * Returns the tone to play for the disconnect cause, or UNKNOWN if none should be played.
      */
     private static int toTelecomDisconnectCauseTone(int telephonyDisconnectCause,
-            PersistableBundle carrierConfig) {
+            PersistableBundle carrierConfig, FlagsAdapter featureFlags) {
 
         // special case: some carriers determine what disconnect causes play the BUSY tone.
         if (doesCarrierClassifyDisconnectCauseAsBusyCause(telephonyDisconnectCause,
@@ -898,6 +956,10 @@ public class DisconnectCauseUtil {
         }
 
         switch (telephonyDisconnectCause) {
+            case android.telephony.DisconnectCause.BUSY:
+                if (featureFlags.doNotOverridePreciseLabel()) {
+                    return ToneGenerator.TONE_SUP_BUSY;
+                }
             case android.telephony.DisconnectCause.CONGESTION:
                 return ToneGenerator.TONE_SUP_CONGESTION;
 
@@ -932,14 +994,21 @@ public class DisconnectCauseUtil {
     /**
      * Helper method that examines the carrierConfig KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY
      * containing the DisconnectCauses that are classified as DisconnectCause.BUSY
-     * @param telephonyDisconnectCause
+     *
      * @param carrierConfig object that holds all the carrier specific settings
      * @return whether the cause is in the carrier config busy tone array
      */
-    private static boolean doesCarrierClassifyDisconnectCauseAsBusyCause(
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PACKAGE)
+    public static boolean doesCarrierClassifyDisconnectCauseAsBusyCause(
             int telephonyDisconnectCause, PersistableBundle carrierConfig) {
+        if (carrierConfig == null) {
+            return false;
+        }
         int[] busyToneArray = carrierConfig.getIntArray(
                 CarrierConfigManager.KEY_DISCONNECT_CAUSE_PLAY_BUSYTONE_INT_ARRAY);
+        if (busyToneArray == null) {
+            return false;
+        }
         for (int busyTone : busyToneArray) {
             if (busyTone == telephonyDisconnectCause) {
                 return true;
@@ -961,4 +1030,25 @@ public class DisconnectCauseUtil {
         return config;
     }
 
+    /**
+     * Returns true if 2G is disabled.
+     */
+    protected static boolean is2gDisabled(int phoneId) {
+        Phone phone = PhoneFactory.getPhone(phoneId);
+        if (phone == null) {
+            return false;
+        }
+        long bitmask2g = TelephonyManager.NETWORK_CLASS_BITMASK_2G;
+        long currentlyAllowedNetworkTypes = phone.getAllowedNetworkTypes(
+                TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G);
+        boolean is2gEnabled = (currentlyAllowedNetworkTypes & bitmask2g) != 0;
+        return !is2gEnabled;
+    }
+
+    private static Integer getSatelliteErrorString() {
+        if (SatelliteController.getInstance().isSatelliteEnabled()) {
+            return R.string.incall_error_satellite_enabled;
+        }
+        return R.string.incall_error_carrier_roaming_satellite_mode;
+    }
 }

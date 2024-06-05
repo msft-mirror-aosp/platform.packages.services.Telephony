@@ -542,7 +542,9 @@
     <string name="incall_error_ecm_emergency_only" msgid="5622379058883722080">"Surt del mode de devolució de trucada d\'emergència per fer un altre tipus de trucada."</string>
     <string name="incall_error_emergency_only" msgid="8786127461027964653">"No registrat a la xarxa."</string>
     <string name="incall_error_out_of_service" msgid="1927265196942672791">"La xarxa mòbil no està disponible."</string>
+    <string name="incall_error_out_of_service_2g" msgid="904434080740846116">"La xarxa mòbil no està disponible.\n\nConnecta\'t a una xarxa sense fil per fer una trucada.\n\nEl 2G està desactivat en aquest dispositiu, cosa que pot afectar la connectivitat. Ves a Configuració i activa Permet 2G per continuar."</string>
     <string name="incall_error_out_of_service_wfc" msgid="4497663185857190885">"La xarxa mòbil no està disponible. Per fer una trucada, connecta\'t a una xarxa sense fil."</string>
+    <string name="incall_error_out_of_service_wfc_2g_user" msgid="8218768986365299663">"La xarxa mòbil no està disponible.\n\nConnecta\'t a una xarxa sense fil per fer una trucada.\n\nEl 2G està desactivat en aquest dispositiu, cosa que pot afectar la connectivitat. Ves a Configuració i activa Permet 2G per continuar."</string>
     <string name="incall_error_no_phone_number_supplied" msgid="8680831089508851894">"Per realitzar una trucada, introdueix un número vàlid."</string>
     <string name="incall_error_call_failed" msgid="393508653582682539">"No s\'ha pogut fer la trucada."</string>
     <string name="incall_error_cannot_add_call" msgid="5425764862628655443">"En aquest moment no es pot afegir la trucada. Prova d\'enviar un missatge."</string>
@@ -557,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"No es poden posar les trucades en espera."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Per fer una trucada, connecta amb una xarxa sense fil."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Activa les trucades per Wi-Fi per fer una trucada."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Per fer una trucada, desactiva el mode de satèl·lit."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Per fer una trucada, primer finalitza la connexió per satèl·lit."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Pots enviar i rebre missatges sense una xarxa mòbil o Wi‑Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Informació d\'emergència"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Propietari"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Torna a tocar per veure la informació"</string>
@@ -841,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Defineix l\'eSIM extraïble com a opció predeterminada"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Potència del senyal mòbil"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simula que està fora de servei (només per a la compilació de depuració)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Mode de satèl·lit d\'un operador de telefonia mòbil simulat (només per a la compilació de depuració)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Mostra la llibreta d\'adreces de la SIM"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Mostra els números de marcatge fix"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Mostra els números de marcatge de serveis"</string>
@@ -876,7 +880,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"Subidentificador de la SIM de dades predeterminada:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Amplada de banda de baixada (kbps):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Amplada de banda de pujada (kbps):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"Configuració del canal físic de LTE:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"Configuracions del canal físic:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"Freqüència d\'actualització de la informació del mòbil:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"Tota la informació de mesures del mòbil:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"Servei de dades:"</string>

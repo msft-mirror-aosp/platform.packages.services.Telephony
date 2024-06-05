@@ -542,7 +542,9 @@
     <string name="incall_error_ecm_emergency_only" msgid="5622379058883722080">"সাধাৰণ কল কৰিবৰ কাৰণে জৰুৰীকালীন কলবেক ম\'ডৰ পৰা বাহিৰ হওক।"</string>
     <string name="incall_error_emergency_only" msgid="8786127461027964653">"নেটৱৰ্কত পঞ্জীকৃত নহয়।"</string>
     <string name="incall_error_out_of_service" msgid="1927265196942672791">"ম’বাইল নেটৱৰ্ক উপলব্ধ নহয়।"</string>
+    <string name="incall_error_out_of_service_2g" msgid="904434080740846116">"ম’বাইল নেটৱৰ্ক উপলব্ধ নহয়।\n\nকল কৰিবলৈ এটা ৱায়াৰলেছ নেটৱৰ্কৰ সৈতে সংযোগ কৰক।\n\nএই ডিভাইচটোত 2G অক্ষম কৰা হৈছে, যিটোৱে আপোনাৰ সংযোগত প্ৰভাৱ পেলাব পাৰে। অব্যাহত ৰাখিবলৈ ছেটিঙলৈ গৈ 2Gক অনুমতি দিয়ক সক্ষম কৰক।"</string>
     <string name="incall_error_out_of_service_wfc" msgid="4497663185857190885">"ম’বাইল নেটৱৰ্ক উপলব্ধ নহয়। কল কৰিবৰ কাৰণে কোনো বেতাঁৰ নেটৱৰ্কৰ সৈতে সংযোগ কৰক।"</string>
+    <string name="incall_error_out_of_service_wfc_2g_user" msgid="8218768986365299663">"ম’বাইল নেটৱৰ্ক উপলব্ধ নহয়।\n\nকল কৰিবলৈ এটা বেতাঁৰ নেটৱৰ্কৰ সৈতে সংযোগ কৰক।\n\nএই ডিভাইচটোত 2G অক্ষম কৰা হৈছে, যিটোৱে আপোনাৰ সংযোগত প্ৰভাৱ পেলাব পাৰে। অব্যাহত ৰাখিবলৈ ছেটিঙলৈ গৈ 2Gক অনুমতি দিয়ক সক্ষম কৰক।"</string>
     <string name="incall_error_no_phone_number_supplied" msgid="8680831089508851894">"কল কৰিবৰ কাৰণে এটা মান্য নম্বৰ দিয়ক।"</string>
     <string name="incall_error_call_failed" msgid="393508653582682539">"কল বিফল হৈছে"</string>
     <string name="incall_error_cannot_add_call" msgid="5425764862628655443">"এই মুহূৰ্তত কল যোগ কৰিব নোৱাৰি। আপুনি এটা বাৰ্তা পঠাই যোগাযোগ কৰিবলৈ চেষ্টা কৰি চাব পাৰে।"</string>
@@ -557,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"কলসমূহ হ\'ল্ডত ৰাখিব নোৱাৰি।"</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"কল কৰিবলৈ কোনো বেতাঁৰ নেটৱৰ্কৰ সৈতে সংযোগ কৰক।"</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"কল কৰিবৰ কাৰণে ৱাই-ফাই কলিং সুবিধা সক্ষম কৰক।"</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"কল কৰিবলৈ উপগ্ৰহ ম’ডটো অক্ষম কৰক।"</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"কল কৰিবলৈ, প্ৰথমে উপগ্ৰহৰ সংযোগ বন্ধ কৰক।"</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"আপুনি কোনো ম’বাইল বা ৱাই-ফাই নেটৱৰ্ক নোহোৱাকৈ বাৰ্তা পঠিয়াব আৰু লাভ কৰিব পাৰে।"</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"জৰুৰীকালীন তথ্য"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"গৰাকী"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"তথ্য চাবলৈ পুনৰ টিপক"</string>
@@ -841,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"আঁতৰাব পৰা ই-ছিম ডিফ’ল্ট হিচাপে ছেট কৰক"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"ম’বাইলৰ ৰেডিঅ’ পাৱাৰ"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"সেৱাত নাই ছিমুলে’ট কৰক (কেৱল ডিবাগ বিল্ড)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"নকল বাহক উপগ্ৰহ ম’ড (কেৱল ডিবাগ বিল্ড)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"ছিম ঠিকনা সূচী চাওক"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"ফিক্সড্ ডায়েলিং নম্বৰসমূহ চাওক"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"সেৱা ডায়েলিং নম্বৰসমূহ চাওক"</string>
@@ -876,7 +880,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"ডিফ’ল্ট ডেটা ছিমৰ ছাবআইডি:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"DL বেণ্ডৱিথ (কেবিপিএছ):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"UL বেণ্ডৱিথ (কেবিপিএছ):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"LTE ফিজিকেল চেনেলৰ কনফিগাৰেশ্বন:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"ফিজিকেল চেনেল কনফিগাৰেশ্বন:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"চেল তথ্য ৰিফ্ৰেশ্বৰ হাৰ:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"সকলো চেল পৰিমাপৰ তথ্য:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"ডেটা সেৱা:"</string>

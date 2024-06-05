@@ -28,12 +28,13 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.DisconnectCause;
 import android.telephony.DomainSelectionService.SelectionAttributes;
 import android.telephony.NetworkRegistrationInfo;
+import android.telephony.PhoneNumberUtils;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionManager;
 import android.telephony.TransportSelectorCallback;
 import android.telephony.ims.ImsReasonInfo;
 
-import com.android.internal.telephony.domainselection.NormalCallDomainSelectionConnection;
+import com.android.internal.annotations.VisibleForTesting;
 
 /**
  * Implements domain selector for outgoing non-emergency calls.
@@ -43,8 +44,15 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
     private static final String LOG_TAG = "NCDS";
 
-    private boolean mStopDomainSelection = true;
-    private ServiceState mServiceState;
+    @VisibleForTesting
+    protected enum SelectorState {
+        ACTIVE,
+        INACTIVE,
+        DESTROYED
+    };
+
+    protected SelectorState mSelectorState = SelectorState.INACTIVE;
+    protected ServiceState mServiceState;
     private boolean mImsRegStateReceived;
     private boolean mMmTelCapabilitiesReceived;
     private boolean mReselectDomain;
@@ -67,9 +75,10 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
     public void selectDomain(SelectionAttributes attributes, TransportSelectorCallback callback) {
         mSelectionAttributes = attributes;
         mTransportSelectorCallback = callback;
-        mStopDomainSelection = false;
+        mSelectorState = SelectorState.ACTIVE;
 
         if (callback == null) {
+            mSelectorState = SelectorState.INACTIVE;
             loge("Invalid params: TransportSelectorCallback is null");
             return;
         }
@@ -80,7 +89,7 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
             return;
         }
 
-        int subId = attributes.getSubId();
+        int subId = attributes.getSubscriptionId();
         boolean validSubscriptionId = SubscriptionManager.isValidSubscriptionId(subId);
         if (attributes.getSelectorType() != SELECTOR_TYPE_CALLING || attributes.isEmergency()
                 || !validSubscriptionId) {
@@ -96,9 +105,10 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
             logd("NormalCallDomainSelection triggered. Sub-id:" + subId);
             post(() -> selectDomain());
         } else {
+            mSelectorState = SelectorState.INACTIVE;
             loge("Subscription-ids doesn't match. This instance is associated with sub-id:"
                     + getSubId() + ", requested sub-id:" + subId);
-            // TODO: Throw anamoly here. This condition should never occur.
+            // TODO: Throw anomaly here. This condition should never occur.
         }
     }
 
@@ -112,21 +122,44 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
     @Override
     public synchronized void finishSelection() {
         logd("finishSelection");
-        mStopDomainSelection = true;
-        mImsStateTracker.removeServiceStateListener(this);
-        mImsStateTracker.removeImsStateListener(this);
-        mSelectionAttributes = null;
-        mTransportSelectorCallback = null;
+        if (mSelectorState == SelectorState.ACTIVE) {
+            // This is cancel selection case.
+            cancelSelection();
+            return;
+        }
+
+        if (mSelectorState != SelectorState.DESTROYED) {
+            mImsStateTracker.removeServiceStateListener(this);
+            mImsStateTracker.removeImsStateListener(this);
+            mSelectionAttributes = null;
+            mTransportSelectorCallback = null;
+            destroy();
+        }
     }
 
-    /**
-     * Cancel an ongoing selection operation. It is up to the DomainSelectionService
-     * to clean up all ongoing operations with the framework.
-     */
     @Override
+    public void destroy() {
+        logd("destroy");
+        switch (mSelectorState) {
+            case INACTIVE:
+                mSelectorState = SelectorState.DESTROYED;
+                super.destroy();
+                break;
+
+            case ACTIVE:
+                loge("destroy is called when selector state is in ACTIVE state");
+                cancelSelection();
+                break;
+
+            case DESTROYED:
+                super.destroy();
+                break;
+        }
+    }
+
     public void cancelSelection() {
         logd("cancelSelection");
-        mStopDomainSelection = true;
+        mSelectorState = SelectorState.INACTIVE;
         mReselectDomain = false;
         if (mTransportSelectorCallback != null) {
             mTransportSelectorCallback.onSelectionTerminated(DisconnectCause.OUTGOING_CANCELED);
@@ -165,7 +198,7 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
     private void notifyPsSelected() {
         logd("notifyPsSelected");
-        mStopDomainSelection = true;
+        mSelectorState = SelectorState.INACTIVE;
         if (mImsStateTracker.isImsRegisteredOverWlan()) {
             logd("WLAN selected");
             mTransportSelectorCallback.onWlanSelected(false);
@@ -193,7 +226,7 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
     private void notifyCsSelected() {
         logd("notifyCsSelected");
-        mStopDomainSelection = true;
+        mSelectorState = SelectorState.INACTIVE;
         if (mWwanSelectorCallback == null) {
             mTransportSelectorCallback.onWwanSelected((callback) -> {
                 mWwanSelectorCallback = callback;
@@ -215,7 +248,7 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
     }
 
     private void notifySelectionTerminated(@DisconnectCauses int cause) {
-        mStopDomainSelection = true;
+        mSelectorState = SelectorState.INACTIVE;
         if (mTransportSelectorCallback != null) {
             mTransportSelectorCallback.onSelectionTerminated(cause);
             finishSelection();
@@ -233,7 +266,8 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
         PersistableBundle config = null;
         if (configManager != null) {
-            config = configManager.getConfigForSubId(mSelectionAttributes.getSubId());
+            config = configManager.getConfigForSubId(mSelectionAttributes.getSubscriptionId(),
+                    new String[] {CarrierConfigManager.KEY_SUPPORT_WPS_OVER_IMS_BOOL});
         }
 
         return (config != null)
@@ -260,7 +294,8 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
         PersistableBundle config = null;
         if (configManager != null) {
-            config = configManager.getConfigForSubId(mSelectionAttributes.getSubId());
+            config = configManager.getConfigForSubId(mSelectionAttributes.getSubscriptionId(),
+                    new String[] {CarrierConfigManager.KEY_CARRIER_VOLTE_TTY_SUPPORTED_BOOL});
         }
 
         return (config != null)
@@ -277,8 +312,9 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
     }
 
     private synchronized void selectDomain() {
-        if (mStopDomainSelection || mSelectionAttributes == null
+        if (mSelectorState != SelectorState.ACTIVE || mSelectionAttributes == null
                 || mTransportSelectorCallback == null) {
+            mSelectorState = SelectorState.INACTIVE;
             logd("Domain Selection is stopped.");
             return;
         }
@@ -292,9 +328,9 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
         // IMS -> CS
         ImsReasonInfo imsReasonInfo = mSelectionAttributes.getPsDisconnectCause();
         if (mReselectDomain && imsReasonInfo != null) {
-            logd("PsDisconnectCause:" + imsReasonInfo.mCode);
+            logd("PsDisconnectCause:" + imsReasonInfo.getCode());
             mReselectDomain = false;
-            if (imsReasonInfo.mCode == ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED) {
+            if (imsReasonInfo.getCode() == ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED) {
                 if (isOutOfService()) {
                     loge("Cannot place call in current ServiceState: " + mServiceState.getState());
                     notifySelectionTerminated(DisconnectCause.OUT_OF_SERVICE);
@@ -375,9 +411,8 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
         // Handle voice call.
         if (mImsStateTracker.isImsVoiceCapable()) {
             logd("IMS is voice capable");
-            // TODO(b/266175810) Remove this dependency.
-            if (NormalCallDomainSelectionConnection
-                    .isWpsCall(mSelectionAttributes.getNumber())) {
+            String number = mSelectionAttributes.getAddress().getSchemeSpecificPart();
+            if (PhoneNumberUtils.isWpsCallNumber(number)) {
                 handleWpsCall();
             } else {
                 notifyPsSelected();
@@ -392,5 +427,10 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
                 notifyCsSelected();
             }
         }
+    }
+
+    @VisibleForTesting
+    protected SelectorState getSelectorState() {
+        return mSelectorState;
     }
 }

@@ -542,7 +542,9 @@
     <string name="incall_error_ecm_emergency_only" msgid="5622379058883722080">"வழக்கமான அழைப்பிற்கு, அவசரகாலத் திரும்ப அழைக்கும் பயன்முறையிலிருந்து வெளியேறவும்."</string>
     <string name="incall_error_emergency_only" msgid="8786127461027964653">"நெட்வொர்க்கில் பதிவுசெய்யப்படவில்லை."</string>
     <string name="incall_error_out_of_service" msgid="1927265196942672791">"மொபைல் நெட்வொர்க் கிடைக்கவில்லை."</string>
+    <string name="incall_error_out_of_service_2g" msgid="904434080740846116">"மொபைல் நெட்வொர்க் கிடைக்கவில்லை.\n\nஅழைப்பைச் செய்ய வயர்லெஸ் நெட்வொர்க்குடன் இணைக்கவும்.\n\nஇந்தச் சாதனத்தில் 2G முடக்கப்பட்டுள்ளதால் இணைப்பு பாதிக்கப்பட்டிருக்கலாம். தொடர, அமைப்புகளுக்குச் சென்று \'2G சேவையை அனுமதி\' என்பதை இயக்கவும்."</string>
     <string name="incall_error_out_of_service_wfc" msgid="4497663185857190885">"மொபைல் நெட்வொர்க் கிடைக்கவில்லை. அழைக்க, வயர்லெஸ் நெட்வொர்க்குடன் இணைக்கவும்."</string>
+    <string name="incall_error_out_of_service_wfc_2g_user" msgid="8218768986365299663">"மொபைல் நெட்வொர்க் கிடைக்கவில்லை.\n\nஅழைப்பைச் செய்ய வயர்லெஸ் நெட்வொர்க்குடன் இணைக்கவும்.\n\nஇந்தச் சாதனத்தில் 2G முடக்கப்பட்டுள்ளதால் இணைப்பு பாதிக்கப்பட்டிருக்கலாம். தொடர, அமைப்புகளுக்குச் சென்று \'2G சேவையை அனுமதி\' என்பதை இயக்கவும்."</string>
     <string name="incall_error_no_phone_number_supplied" msgid="8680831089508851894">"அழைக்க, சரியான எண்ணை உள்ளிடவும்."</string>
     <string name="incall_error_call_failed" msgid="393508653582682539">"அழைப்பு தோல்வியடைந்தது."</string>
     <string name="incall_error_cannot_add_call" msgid="5425764862628655443">"தற்போது அழைக்க முடியவில்லை. செய்தியை அனுப்பி, தொடர்புகொள்ள முயலவும்."</string>
@@ -557,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"அழைப்புகளை ஹோல்டு செய்ய முடியாது."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"அழைக்க, வயர்லெஸ் நெட்வொர்க்குடன் இணைக்கவும்."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"அழைக்க, வைஃபை அழைப்பை இயக்கவும்."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"அழைப்பை மேற்கொள்ள சாட்டிலைட் பயன்முறையை முடக்கவும்."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"அழைக்க, முதலில் சாட்டிலைட் இணைப்பை ஆஃப் செய்யவும்."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"மொபைல்/வைஃபை நெட்வொர்க் இல்லாமல் நீங்கள் மெசேஜ்களை அனுப்பலாம் பெறலாம்."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"அவசரத் தகவல்"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"உரிமையாளர்"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"தகவலைப் பார்க்க, மீண்டும் தட்டவும்"</string>
@@ -841,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"அகற்றக்கூடிய eSIMமை இயல்பாக அமை"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"மொபைல் ரேடியோ பவர்"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"சாதனம் \'வேலை செய்யவில்லை\' என்பதை சிமுலேட் செய்தல் (பிழைதிருத்தப் பதிப்பில் மட்டும்)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Mock மொபைல் நிறுவன சாட்டிலைட் பயன்முறை (பிழைதிருத்த பதிப்பு மட்டும்)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"சிம் முகவரிப் புத்தகத்தைக் காட்டு"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"நிலையான அழைப்பு எண்களைக் காட்டு"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"சேவை அழைப்பு எண்களைக் காட்டு"</string>
@@ -876,7 +880,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"இயல்பான டேட்டா சிம்மின் துணை ஐடி:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"DL இணைய வேகம் (kbps):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"UL இணைய வேகம் (kbps):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"LTE ஃபிசிக்கல் சேனல் உள்ளமைவு:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"சேனல் உள்ளமைவுகள்:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"மொபைல் தகவலின் புதுப்பிப்பு விகிதம்:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"அனைத்து மொபைல் அளவீட்டுத் தகவல்:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"டேட்டா சேவை:"</string>

@@ -41,9 +41,14 @@ android_app {
         "com.android.phone.common-lib",
         "guava",
         "PlatformProperties",
+        "modules-utils-fastxmlserializer",
         "modules-utils-os",
         "nist-sip",
-        "service-entitlement"
+        "service-entitlement",
+        "android.permission.flags-aconfig-java-export",
+        "satellite-s2storage-ro",
+        "s2-geometry-library-java",
+        "dropbox_flags_lib",
     ],
 
     srcs: [
@@ -78,6 +83,8 @@ android_app {
     proto: {
         type: "lite",
     },
+
+    generate_product_characteristics_rro: true,
 }
 
 // Allow other applications to use public constants from SlicePurchaseController
@@ -87,10 +94,11 @@ java_library {
     libs: [
         "telephony-common",
         "service-entitlement"
-        ],
+    ],
 }
 
 platform_compat_config {
     name: "TeleService-platform-compat-config",
     src: ":TeleService",
 }
+

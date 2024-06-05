@@ -542,7 +542,9 @@
     <string name="incall_error_ecm_emergency_only" msgid="5622379058883722080">"Phuma kwimodi yokushayela emuva yesiko esiphuthumayo ukuze wenze ikholi yemodi engaphuthumi."</string>
     <string name="incall_error_emergency_only" msgid="8786127461027964653">"Ayibhalisiwe kwinethiwekhi."</string>
     <string name="incall_error_out_of_service" msgid="1927265196942672791">"Inethiwekhi yefoni ayitholakali"</string>
+    <string name="incall_error_out_of_service_2g" msgid="904434080740846116">"Inethiwekhi yeselula ayitholakali.\n\nXhuma kunethiwekhi e-wireless ukuze ufone.\n\nU-2G ukhutshaziwe kule divayisi, okungenzeka kunomthelela ekuxhumaneni kwakho. Iya Kumasethingi bese uvula u-Vumela u-2G ukuze uqhubeke."</string>
     <string name="incall_error_out_of_service_wfc" msgid="4497663185857190885">"Inethiwekhi yeselula ayitholakali. Xhumeka kunethiwekhi engenantambo ukuze wenze ikholi."</string>
+    <string name="incall_error_out_of_service_wfc_2g_user" msgid="8218768986365299663">"Inethiwekhi yeselula ayitholakali.\n\nXhuma kunethiwekhi e-wireless ukuze ufone.\n\nU-2G ukhutshaziwe kule divayisi, okungenzeka kunomthelela ekuxhumaneni kwakho. Iya Kumasethingi bese uvula u-Vumela u-2G ukuze uqhubeke."</string>
     <string name="incall_error_no_phone_number_supplied" msgid="8680831089508851894">"Ukuze wenze ikholi, faka inombolo evumelekile."</string>
     <string name="incall_error_call_failed" msgid="393508653582682539">"Ikholi ihlulekile."</string>
     <string name="incall_error_cannot_add_call" msgid="5425764862628655443">"Ikholi ayikwazi ukungezwa ngalesi sikhathi. Ungazama ukufinyelela ngokuthumela umlayezo."</string>
@@ -557,7 +559,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Ayikwazi ukubamba amakholi."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Xhumeka kunethiwekhi engenantambo ukuze wenze ikholi."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Nika amandla ukushaya kwevoyisimeyili ukuze wenze ikholi."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Khubaza umumo wesethelayithi ukuze wenze ikholi."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Ukuze ufone, qala ngokuvala uxhumano lwesathelayithi."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Ungathumela futhi wamukele imilayezo ngaphandle kwenethiwekhi yeselula noma ye-Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Ulwazi lwesimo esiphuthumayo"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Umnikazi"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Thepha futhi ukuze ubuke ulwazi"</string>
@@ -841,6 +844,7 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Setha i-eSim Esusekayo Njengezenzakalelayo"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Amandla erediyo yeselula"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Lingisa okuthi Ayikho Isevisi (Umakhiwo Wokususa Iphutha kuphela)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Imodi Yesethelayithi Yenkampani Yenethiwekhi ye-Mock (Susa Iphutha Esakhiweni kuphela)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Buka incwadi yekheli le-SIM"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Buka Izinombolo Zokudayela Okungaguquki"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Buka Izinombolo Zokudayela Isevisi"</string>
@@ -876,7 +880,7 @@
     <string name="radio_info_dds" msgid="1122593144425697126">"I-SubId ye-SIM yedatha yokuzenzakalela:"</string>
     <string name="radio_info_dl_kbps" msgid="2382922659525318726">"Umkhawulokudonsa we-DL (kbps):"</string>
     <string name="radio_info_ul_kbps" msgid="2102225400904799036">"Umkhawulokudonsa we-UL (kbps):"</string>
-    <string name="radio_info_phy_chan_config" msgid="1277949603275436081">"Ukulungiselelwa okuphathekayo kwesiteshi se-LTE:"</string>
+    <string name="radio_info_phy_chan_config" msgid="608045501232211303">"Ukucushwa Kwesiteshi Esiphathekayo:"</string>
     <string name="radio_info_cell_info_refresh_rate" msgid="670511448975997340">"Isilinganiso sokuqalisa kabusha solwazi lweseli:"</string>
     <string name="radio_info_cellinfo_label" msgid="8199062974670377659">"Ulwazi lwesilinganiso seseli:"</string>
     <string name="radio_info_gprs_service_label" msgid="6819204246355412952">"Isevisi yedatha:"</string>

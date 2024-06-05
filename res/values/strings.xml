@@ -1206,8 +1206,13 @@
     <string name="incall_error_emergency_only">Not registered on network.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
     <string name="incall_error_out_of_service">Mobile network not available.</string>
+    <!-- In-call screen: call failure message displayed in an error dialog if 2G is disabled -->
+    <string name="incall_error_out_of_service_2g">Mobile network not available.\n\nConnect to a wireless network to make a call.\n\n2G is disabled on this device, which may be impacting your connectivity. Go to Settings and enable "Allow 2G" to continue.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
     <string name="incall_error_out_of_service_wfc">Mobile network is not available. Connect to a wireless network to make a call.</string>
+    <!-- In-call screen: call failure message displayed in an error dialog if the user disabled 2G -->
+    <string name="incall_error_out_of_service_wfc_2g_user">Mobile network is not available.\n\nConnect to a wireless network to make a call.\n\n2G is disabled on this device, which may be impacting your connectivity. Go to Settings and enable "Allow 2G" to continue.</string>
+
     <!-- In-call screen: call failure message displayed in an error dialog -->
     <string name="incall_error_no_phone_number_supplied">To place a call, enter a valid number.</string>
     <!-- In-call screen: call failure message displayed in an error dialog -->
@@ -1240,7 +1245,9 @@
     <!-- In-call screen: call failure message displayed in an error dialog when the user is connected to a wireless network, but wifi calling is turned off. [CHAR_LIMIT=NONE] -->
     <string name="incall_error_promote_wfc">Enable Wi-Fi calling to make a call.</string>
     <!-- In-call screen: call failure message displayed in an error dialog when the satellite modem is on. [CHAR_LIMIT=NONE] -->
-    <string name="incall_error_satellite_enabled">Disable satellite mode to make a call.</string>
+    <string name="incall_error_satellite_enabled">To make a call, first end the satellite connection.</string>
+    <!-- In-call screen: call failure message displayed in an error dialog when device is connected to carrier roaming satellite network [CHAR_LIMIT=NONE] -->
+    <string name="incall_error_carrier_roaming_satellite_mode">You can send and receive messages without a mobile or Wi-Fi network.</string>
 
     <!-- Hint for the button of emergency information -->
     <string name="emergency_information_hint">Emergency information</string>
@@ -2019,6 +2026,9 @@
     <!-- Title for simulating device out of service. -->
     <string name="simulate_out_of_service_string">Simulate Out of Service (Debug Build only)</string>
 
+    <!-- Title for simulating SIM capable of satellite. -->
+    <string name="mock_carrier_roaming_satellite_string">Mock Carrier Satellite Mode (Debug Build only)</string>
+
     <!-- Phone Info screen. Menu item label.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radioInfo_menu_viewADN">View SIM Address Book</string>
     <!-- Phone Info screen. Menu item label.  Used for diagnostic info screens, precise translation isn't needed -->
@@ -2101,7 +2111,7 @@
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_ul_kbps">UL Bandwidth (kbps):</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
-    <string name="radio_info_phy_chan_config">LTE Physical Channel Configuration:</string>
+    <string name="radio_info_phy_chan_config">Physical Channel Configurations:</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_cell_info_refresh_rate">Cell Info Refresh Rate:</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
@@ -2180,6 +2190,8 @@
     <string name="radio_info_nr_frequency">NR Frequency:</string>
     <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="radio_info_network_slicing_config" translatable="false">Network Slicing Config:</string>
+    <!-- Radio Info screen. Label for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
+    <string name="radio_info_euicc_info" translatable="false">eUICC info:</string>
 
     <!-- Band Mode Selection -->
     <!-- Band mode screen.  Title of activity. -->
