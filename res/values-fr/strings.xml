@@ -184,7 +184,7 @@
     <string name="registration_done" msgid="5337407023566953292">"Enregistré sur le réseau."</string>
     <string name="already_auto" msgid="8607068290733079336">"La sélection automatique est déjà activée."</string>
     <string name="select_automatically" msgid="779750291257872651">"Sélectionner automatiquement le réseau"</string>
-    <string name="manual_mode_disallowed_summary" msgid="3970048592179890197">"Indisponibles lorsque vous êtes connecté à %1$s"</string>
+    <string name="manual_mode_disallowed_summary" msgid="3970048592179890197">"Indisponible lorsque vous êtes connecté à %1$s"</string>
     <string name="network_select_title" msgid="4117305053881611988">"Réseau"</string>
     <string name="register_automatically" msgid="3907580547590554834">"Enregistrement automatique…"</string>
     <string name="preferred_network_mode_title" msgid="5253395265169539830">"Type de réseau préféré"</string>
@@ -595,7 +595,7 @@
     <string name="singleContactImportedMsg" msgid="3619804066300998934">"Contact importé"</string>
     <string name="failedToImportSingleContactMsg" msgid="228095510489830266">"Échec de l\'importation du contact."</string>
     <string name="hac_mode_title" msgid="4127986689621125468">"Assistance auditive"</string>
-    <string name="hac_mode_summary" msgid="7774989500136009881">"Activer la compatibilité avec les prothèses auditives"</string>
+    <string name="hac_mode_summary" msgid="7774989500136009881">"Activer la compatibilité avec les appareils auditifs"</string>
     <string name="rtt_mode_title" msgid="3075948111362818043">"Appel texte en temps réel"</string>
     <string name="rtt_mode_summary" msgid="8631541375609989562">"Autoriser l\'échange de messages pendant les appels vocaux"</string>
     <string name="rtt_mode_more_information" msgid="587500128658756318">"La fonctionnalité de texte en temps réel vient en aide aux personnes sourdes, malentendantes, qui ont un trouble de la parole, ou qui ont besoin d\'une transcription en plus de la voix.&lt;br&gt; &lt;a href=<xliff:g id="URL">http://support.google.com/mobile?p=telephony_rtt</xliff:g>&gt;En savoir plus&lt;/a&gt;\n       &lt;br&gt;&lt;br&gt; - Les appels texte en temps réel sont enregistrés sous forme transcrite\n       &lt;br&gt; - Le mode texte en temps réel n\'est pas disponible pour les appels vidéo"</string>
@@ -619,7 +619,7 @@
     <string name="ota_hfa_activation_title" msgid="3300556778212729671">"Activation en cours…"</string>
     <string name="ota_hfa_activation_dialog_message" msgid="7921718445773342996">"Le service de données mobiles est en cours d\'activation sur le téléphone…\n\nCette opération peut prendre jusqu\'à cinq minutes."</string>
     <string name="ota_skip_activation_dialog_title" msgid="7666611236789203797">"Ignorer l\'activation ?"</string>
-    <string name="ota_skip_activation_dialog_message" msgid="6691722887019708713">"Si vous poursuivez sans activer votre mobile, vous ne pourrez ni téléphoner, ni vous connecter à des réseaux de données mobiles. La connexion à un réseau Wi-Fi reste possible. Vous serez invité à effectuer l\'activation à chaque démarrage du téléphone."</string>
+    <string name="ota_skip_activation_dialog_message" msgid="6691722887019708713">"Si vous poursuivez sans activer votre mobile, vous ne pourrez ni téléphoner, ni vous connecter à des réseaux de données mobiles. La connexion à un réseau Wi-Fi reste possible. L\'activation vous sera proposée à chaque démarrage du téléphone."</string>
     <string name="ota_skip_activation_dialog_skip_label" msgid="5908029466817825633">"Ignorer"</string>
     <string name="ota_activate" msgid="7939695753665438357">"Activer"</string>
     <string name="ota_title_activate_success" msgid="1272135024761004889">"Votre téléphone est activé"</string>
