@@ -84,6 +84,7 @@ import com.android.internal.telephony.uicc.UiccProfile;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.phone.settings.SettingsConstants;
 import com.android.phone.vvm.CarrierVvmPackageInstalledReceiver;
+import com.android.services.telephony.domainselection.DynamicRoutingController;
 import com.android.services.telephony.rcs.TelephonyRcsService;
 
 import java.io.FileDescriptor;
@@ -518,7 +519,9 @@ public class PhoneGlobals extends ContextWrapper {
 
         ContentResolver resolver = getContentResolver();
 
-        if (mFeatureFlags.enforceTelephonyFeatureMappingForPublicApis()) {
+        if (mFeatureFlags.enforceTelephonyFeatureMappingForPublicApis()
+                && !getResources().getBoolean(
+                    com.android.internal.R.bool.config_force_phone_globals_creation)) {
             if (!getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
                 Log.v(LOG_TAG, "onCreate()... but not defined FEATURE_TELEPHONY");
                 return;
@@ -564,6 +567,7 @@ public class PhoneGlobals extends ContextWrapper {
                 boolean isSuplDdsSwitchRequiredForEmergencyCall = getResources()
                         .getBoolean(R.bool.config_gnss_supl_requires_default_data_for_emergency);
                 EmergencyStateTracker.make(this, isSuplDdsSwitchRequiredForEmergencyCall);
+                DynamicRoutingController.getInstance().initialize(this);
             }
 
             // Only bring up ImsResolver if the device supports having an IMS stack.
