@@ -3198,7 +3198,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 phone.getDataSettingsManager().setDataEnabled(
                         TelephonyManager.DATA_ENABLED_REASON_USER, true, callingPackage);
                 return true;
@@ -3222,7 +3222,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 phone.getDataSettingsManager().setDataEnabled(
                         TelephonyManager.DATA_ENABLED_REASON_USER, false, callingPackage);
                 return true;
@@ -3962,6 +3962,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         mApp.enforceCallingOrSelfPermission(permission.SATELLITE_COMMUNICATION, message);
     }
 
+    /**
+     * Make sure the caller has PACKAGE_USAGE_STATS permission.
+     * @param message - log message to print.
+     * @throws SecurityException if the caller does not have the required permission
+     */
+    private void enforcePackageUsageStatsPermission(String message) {
+        mApp.enforceCallingOrSelfPermission(permission.PACKAGE_USAGE_STATS, message);
+    }
+
     private String createTelUrl(String number) {
         if (TextUtils.isEmpty(number)) {
             return null;
@@ -4267,10 +4276,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void enableVisualVoicemailSmsFilter(String callingPackage, int subId,
             VisualVoicemailSmsFilterSettings settings) {
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-
+        enforceVisualVoicemailPackage(callingPackage, subId);
         enforceTelephonyFeatureWithException(callingPackage,
                 PackageManager.FEATURE_TELEPHONY_CALLING, "enableVisualVoicemailSmsFilter");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             VisualVoicemailSmsFilterConfig.enableVisualVoicemailSmsFilter(
@@ -4283,7 +4291,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void disableVisualVoicemailSmsFilter(String callingPackage, int subId) {
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-
+        enforceVisualVoicemailPackage(callingPackage, subId);
         enforceTelephonyFeatureWithException(callingPackage,
                 PackageManager.FEATURE_TELEPHONY_CALLING, "disableVisualVoicemailSmsFilter");
 
@@ -7505,12 +7513,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int phoneId = SubscriptionManager.getPhoneId(subId);
             Phone phone = PhoneFactory.getPhone(phoneId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 boolean retVal = phone.getDataSettingsManager().isDataEnabled();
                 if (DBG) log("isDataEnabled: " + retVal + ", subId=" + subId);
                 return retVal;
             } else {
-                if (DBG) loge("isDataEnabled: no phone subId=" + subId + " retVal=false");
+                if (DBG) {
+                    loge("isDataEnabled: no phone or no DataSettingsManager subId="
+                            + subId + " retVal=false");
+                }
                 return false;
             }
         } finally {
@@ -7558,14 +7569,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + " reason=" + reason);
             }
             Phone phone = PhoneFactory.getPhone(phoneId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 boolean retVal;
                 retVal = phone.getDataSettingsManager().isDataEnabledForReason(reason);
                 if (DBG) log("isDataEnabledForReason: retVal=" + retVal);
                 return retVal;
             } else {
                 if (DBG) {
-                    loge("isDataEnabledForReason: no phone subId="
+                    loge("isDataEnabledForReason: no phone or no DataSettingsManager subId="
                             + subId + " retVal=false");
                 }
                 return false;
@@ -9445,7 +9456,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     + android.Manifest.permission.DUMP);
             return;
         }
-        DumpsysHandler.dump(mApp, fd, writer, args);
+        try {
+            DumpsysHandler.dump(mApp, fd, writer, args);
+        } catch (Exception e) {
+            writer.println("Failed to dump phone information: " + e);
+        }
     }
 
     @Override
@@ -9495,7 +9510,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 if (reason == TelephonyManager.DATA_ENABLED_REASON_CARRIER) {
                     phone.carrierActionSetMeteredApnsEnabled(enabled);
-                } else {
+                } else if (phone.getDataSettingsManager() != null) {
                     phone.getDataSettingsManager().setDataEnabled(
                             reason, enabled, callingPackage);
                 }
@@ -10837,7 +10852,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             isMetered = phone.getDataNetworkController().getDataConfigManager()
                     .isMeteredCapability(DataUtils.apnTypeToNetworkCapability(apnType),
                             phone.getServiceState().getDataRoaming());
-            isDataEnabled = phone.getDataSettingsManager().isDataEnabled(apnType);
+            isDataEnabled = (phone.getDataSettingsManager() != null)
+                    ?  phone.getDataSettingsManager().isDataEnabled(apnType) : false;
             return !isMetered || isDataEnabled;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -11027,7 +11043,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             Phone phone = getPhone(subscriptionId);
-            if (phone == null) return false;
+            if (phone == null || phone.getDataSettingsManager() == null) return false;
 
             return phone.getDataSettingsManager().isMobileDataPolicyEnabled(policy);
         } finally {
@@ -11046,7 +11062,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             Phone phone = getPhone(subscriptionId);
-            if (phone == null) return;
+            if (phone == null || phone.getDataSettingsManager() == null) return;
 
             phone.getDataSettingsManager().setMobileDataPolicy(policy, enabled);
         } finally {
@@ -14239,5 +14255,21 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int subId, @NonNull ISatelliteCommunicationAllowedStateCallback callback) {
         enforceSatelliteCommunicationPermission("unregisterForCommunicationAllowedStateChanged");
         mSatelliteAccessController.unregisterForCommunicationAllowedStateChanged(subId, callback);
+    }
+
+    /**
+     * Request to get the {@link SatelliteSessionStats} of the satellite service.
+     *
+     * @param subId The subId of the subscription to the satellite session stats for.
+     * @param result The result receiver that returns the {@link SatelliteSessionStats}
+     *               if the request is successful or an error code if the request failed.
+     *
+     * @throws SecurityException if the caller doesn't have required permission.
+     */
+    @Override
+    public void requestSatelliteSessionStats(int subId, @NonNull ResultReceiver result) {
+        enforceModifyPermission();
+        enforcePackageUsageStatsPermission("requestSatelliteSessionStats");
+        mSatelliteController.requestSatelliteSessionStats(subId, result);
     }
 }
