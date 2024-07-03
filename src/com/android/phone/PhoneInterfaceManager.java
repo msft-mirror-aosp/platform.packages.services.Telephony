@@ -165,6 +165,7 @@ import android.telephony.satellite.ISatelliteSupportedStateCallback;
 import android.telephony.satellite.ISatelliteTransmissionUpdateCallback;
 import android.telephony.satellite.NtnSignalStrength;
 import android.telephony.satellite.NtnSignalStrengthCallback;
+import android.telephony.satellite.ProvisionSubscriberId;
 import android.telephony.satellite.SatelliteCapabilities;
 import android.telephony.satellite.SatelliteDatagram;
 import android.telephony.satellite.SatelliteDatagramCallback;
@@ -3198,7 +3199,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 phone.getDataSettingsManager().setDataEnabled(
                         TelephonyManager.DATA_ENABLED_REASON_USER, true, callingPackage);
                 return true;
@@ -3222,7 +3223,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int subId = SubscriptionManager.getDefaultDataSubscriptionId();
             final Phone phone = getPhone(subId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 phone.getDataSettingsManager().setDataEnabled(
                         TelephonyManager.DATA_ENABLED_REASON_USER, false, callingPackage);
                 return true;
@@ -4276,10 +4277,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void enableVisualVoicemailSmsFilter(String callingPackage, int subId,
             VisualVoicemailSmsFilterSettings settings) {
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-
+        enforceVisualVoicemailPackage(callingPackage, subId);
         enforceTelephonyFeatureWithException(callingPackage,
                 PackageManager.FEATURE_TELEPHONY_CALLING, "enableVisualVoicemailSmsFilter");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             VisualVoicemailSmsFilterConfig.enableVisualVoicemailSmsFilter(
@@ -4292,7 +4292,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void disableVisualVoicemailSmsFilter(String callingPackage, int subId) {
         mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-
+        enforceVisualVoicemailPackage(callingPackage, subId);
         enforceTelephonyFeatureWithException(callingPackage,
                 PackageManager.FEATURE_TELEPHONY_CALLING, "disableVisualVoicemailSmsFilter");
 
@@ -7514,12 +7514,15 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         try {
             int phoneId = SubscriptionManager.getPhoneId(subId);
             Phone phone = PhoneFactory.getPhone(phoneId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 boolean retVal = phone.getDataSettingsManager().isDataEnabled();
                 if (DBG) log("isDataEnabled: " + retVal + ", subId=" + subId);
                 return retVal;
             } else {
-                if (DBG) loge("isDataEnabled: no phone subId=" + subId + " retVal=false");
+                if (DBG) {
+                    loge("isDataEnabled: no phone or no DataSettingsManager subId="
+                            + subId + " retVal=false");
+                }
                 return false;
             }
         } finally {
@@ -7567,14 +7570,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                         + " reason=" + reason);
             }
             Phone phone = PhoneFactory.getPhone(phoneId);
-            if (phone != null) {
+            if (phone != null && phone.getDataSettingsManager() != null) {
                 boolean retVal;
                 retVal = phone.getDataSettingsManager().isDataEnabledForReason(reason);
                 if (DBG) log("isDataEnabledForReason: retVal=" + retVal);
                 return retVal;
             } else {
                 if (DBG) {
-                    loge("isDataEnabledForReason: no phone subId="
+                    loge("isDataEnabledForReason: no phone or no DataSettingsManager subId="
                             + subId + " retVal=false");
                 }
                 return false;
@@ -9508,7 +9511,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             if (phone != null) {
                 if (reason == TelephonyManager.DATA_ENABLED_REASON_CARRIER) {
                     phone.carrierActionSetMeteredApnsEnabled(enabled);
-                } else {
+                } else if (phone.getDataSettingsManager() != null) {
                     phone.getDataSettingsManager().setDataEnabled(
                             reason, enabled, callingPackage);
                 }
@@ -10850,7 +10853,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             isMetered = phone.getDataNetworkController().getDataConfigManager()
                     .isMeteredCapability(DataUtils.apnTypeToNetworkCapability(apnType),
                             phone.getServiceState().getDataRoaming());
-            isDataEnabled = phone.getDataSettingsManager().isDataEnabled(apnType);
+            isDataEnabled = (phone.getDataSettingsManager() != null)
+                    ?  phone.getDataSettingsManager().isDataEnabled(apnType) : false;
             return !isMetered || isDataEnabled;
         } finally {
             Binder.restoreCallingIdentity(identity);
@@ -11040,7 +11044,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             Phone phone = getPhone(subscriptionId);
-            if (phone == null) return false;
+            if (phone == null || phone.getDataSettingsManager() == null) return false;
 
             return phone.getDataSettingsManager().isMobileDataPolicyEnabled(policy);
         } finally {
@@ -11059,7 +11063,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             Phone phone = getPhone(subscriptionId);
-            if (phone == null) return;
+            if (phone == null || phone.getDataSettingsManager() == null) return;
 
             phone.getDataSettingsManager().setMobileDataPolicy(policy, enabled);
         } finally {
@@ -14268,5 +14272,49 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         enforceModifyPermission();
         enforcePackageUsageStatsPermission("requestSatelliteSessionStats");
         mSatelliteController.requestSatelliteSessionStats(subId, result);
+    }
+
+    /**
+     * Request to get list of prioritized satellite subscriber ids to be used for provision.
+     *
+     * @param result The result receiver, which returns the list of prioritized satellite tokens
+     * to be used for provision if the request is successful or an error code if the request failed.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void requestProvisionSubscriberIds(@NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("requestProvisionSubscriberIds");
+        mSatelliteController.requestProvisionSubscriberIds(result);
+    }
+
+    /**
+     * Request to get provisioned status for given a satellite subscriber id.
+     *
+     * @param satelliteSubscriberId Satellite subscriber id requiring provisioned status check.
+     * @param result The result receiver, which returns the provisioned status of the token if the
+     * request is successful or an error code if the request failed.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void requestIsProvisioned(String satelliteSubscriberId, @NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("requestIsProvisioned");
+        mSatelliteController.requestIsProvisioned(satelliteSubscriberId, result);
+    }
+
+    /**
+     * Deliver the list of provisioned satellite subscriber ids.
+     *
+     * @param list List of provisioned satellite subscriber ids.
+     * @param result The result receiver that returns whether deliver success or fail.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void provisionSatellite(List<ProvisionSubscriberId> list,
+            @NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("provisionSatellite");
+        mSatelliteController.provisionSatellite(list, result);
     }
 }
