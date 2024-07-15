@@ -1328,10 +1328,10 @@ public class TelecomAccountRegistry {
         if (sInstance == null && context != null) {
             int vendorApiLevel = SystemProperties.getInt("ro.vendor.api_level",
                     Build.VERSION.DEVICE_INITIAL_SDK_INT);
+            PackageManager pm = context.getPackageManager();
 
             if (Flags.enforceTelephonyFeatureMappingForPublicApis()
                     && vendorApiLevel >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-                PackageManager pm = context.getPackageManager();
                 if (pm != null && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
                         && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING)) {
                     sInstance = new TelecomAccountRegistry(context);
@@ -1340,7 +1340,14 @@ public class TelecomAccountRegistry {
                             + "missing telephony/calling feature(s)");
                 }
             } else {
-                sInstance = new TelecomAccountRegistry(context);
+                // One of features is defined, create instance
+                if (pm != null && (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+                        || pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING))) {
+                    sInstance = new TelecomAccountRegistry(context);
+                } else {
+                    Log.d(LOG_TAG, "Not initializing TelecomAccountRegistry: "
+                            + "missing telephony or calling feature(s)");
+                }
             }
         }
         return sInstance;
