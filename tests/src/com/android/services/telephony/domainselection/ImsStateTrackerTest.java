@@ -33,6 +33,7 @@ import android.content.Context;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.telephony.AccessNetworkConstants.AccessNetworkType;
 import android.telephony.BarringInfo;
 import android.telephony.ServiceState;
@@ -46,8 +47,8 @@ import android.telephony.ims.ImsStateCallback;
 import android.telephony.ims.RegistrationManager;
 import android.telephony.ims.feature.MmTelFeature.MmTelCapabilities;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
-import android.test.suitebuilder.annotation.SmallTest;
 
+import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.TestContext;
@@ -74,6 +75,7 @@ public class ImsStateTrackerTest {
     private static final int SUB_1 = 1;
     private static final int SUB_2 = 2;
     private static final long TIMEOUT_MS = 100;
+    private static final long MSG_PROCESS_DELAY_MS = 10;
 
     @Mock private ImsMmTelManager mMmTelManager;
     @Mock private ImsMmTelManager mMmTelManager2;
@@ -262,6 +264,9 @@ public class ImsStateTrackerTest {
     @Test
     @SmallTest
     public void testAddAndRemoveServiceStateListener() {
+        mImsStateTracker.getHandler().post(() -> {
+            SystemClock.sleep(MSG_PROCESS_DELAY_MS);
+        });
         mImsStateTracker.updateServiceState(mServiceState);
         mImsStateTracker.addServiceStateListener(mServiceStateListener);
         mImsStateTracker.removeServiceStateListener(mServiceStateListener);
@@ -307,6 +312,9 @@ public class ImsStateTrackerTest {
     @Test
     @SmallTest
     public void testAddAndRemoveBarringInfoListener() {
+        mImsStateTracker.getHandler().post(() -> {
+            SystemClock.sleep(MSG_PROCESS_DELAY_MS);
+        });
         mImsStateTracker.updateBarringInfo(mBarringInfo);
         mImsStateTracker.addBarringInfoListener(mBarringInfoListener);
         mImsStateTracker.removeBarringInfoListener(mBarringInfoListener);
