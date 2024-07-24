@@ -44,7 +44,11 @@ android_app {
         "modules-utils-fastxmlserializer",
         "modules-utils-os",
         "nist-sip",
-        "service-entitlement"
+        "service-entitlement",
+        "telephony_flags_core_java_lib",
+        "android.permission.flags-aconfig-java",
+        "satellite-s2storage-ro",
+        "s2-geometry-library-java",
     ],
 
     srcs: [
@@ -90,7 +94,7 @@ java_library {
     libs: [
         "telephony-common",
         "service-entitlement"
-        ],
+    ],
 }
 
 platform_compat_config {
