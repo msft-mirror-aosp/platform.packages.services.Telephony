@@ -547,7 +547,8 @@ countries {
   }
   eccs {
     phone_number: "1414"
-    types: TYPE_UNSPECIFIED
+    types: MOUNTAIN_RESCUE
+    routing: NORMAL
   }
   eccs {
     phone_number: "0800117117"
@@ -1019,6 +1020,7 @@ countries {
   eccs {
     phone_number: "114"
     types: TYPE_UNSPECIFIED
+    routing: NORMAL
   }
   eccs {
     phone_number: "191"
