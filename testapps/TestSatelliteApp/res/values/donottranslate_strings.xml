@@ -44,6 +44,8 @@
     <string name="stopSatelliteTransmissionUpdates">stopSatelliteTransmissionUpdates</string>
     <string name="showDatagramSendStateTransition">showDatagramSendStateTransition</string>
     <string name="showDatagramReceiveStateTransition">showDatagramReceiveStateTransition</string>
+    <string name="registerForCommunicationAllowedStateChanged">registerForCommunicationAllowedStateChanged</string>
+    <string name="unregisterForCommunicationAllowedStateChanged">unregisterForCommunicationAllowedStateChanged</string>
 
     <string name="provisionSatelliteService">provisionSatelliteService</string>
     <string name="deprovisionSatelliteService">deprovisionSatelliteService</string>
@@ -91,6 +93,13 @@
     <string name="reportSatelliteNotSupportedFromModem">reportSatelliteNotSupportedFromModem</string>
     <string name="showCurrentSatelliteSupportedStated">showCurrentSatelliteSupportedStated</string>
 
+    <string name="requestProvisionSubscriberIds">requestProvisionSubscriberIds</string>
+    <string name="requestIsProvisioned">requestIsProvisioned</string>
+    <string name="provisionSatellite">provisionSatellite</string>
+
     <string name="Back">Back</string>
     <string name="ClearLog">Clear Log</string>
+
+    <string name="registerForCarrierRoamingNtnModeChanged">registerForCarrierRoamingNtnModeChanged</string>
+    <string name="unregisterForCarrierRoamingNtnModeChanged">unregisterForCarrierRoamingNtnModeChanged</string>
 </resources>
