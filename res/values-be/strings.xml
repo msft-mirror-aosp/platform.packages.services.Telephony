@@ -582,7 +582,7 @@
     <string name="onscreenShowDialpadText" msgid="658465753816164079">"Кнопкі набору"</string>
     <string name="onscreenMuteText" msgid="5470306116733843621">"Выключыць гук"</string>
     <string name="onscreenAddCallText" msgid="9075675082903611677">"Дадаць выклік"</string>
-    <string name="onscreenMergeCallsText" msgid="3692389519611225407">"Аб\'яднаць выклікі"</string>
+    <string name="onscreenMergeCallsText" msgid="3692389519611225407">"Аб’яднаць выклікі"</string>
     <string name="onscreenSwapCallsText" msgid="2682542150803377991">"Пераключыць"</string>
     <string name="onscreenManageCallsText" msgid="1162047856081836469">"Кіраваць выклікамі"</string>
     <string name="onscreenManageConferenceText" msgid="4700574060601755137">"Кірав. канферэнцыяй"</string>
