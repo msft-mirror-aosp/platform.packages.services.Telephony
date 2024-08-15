@@ -20,7 +20,6 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingTop="40dp"
     android:layoutDirection="locale"
     android:textDirection="locale">
 
@@ -249,6 +248,14 @@
                 android:layout_height="wrap_content"
                 android:text="@string/simulate_out_of_service_string"/>
 
+        <!-- Enforce camping on satellite channel -->
+        <Switch android:id="@+id/enforce_satellite_channel"
+            android:textSize="14sp"
+            android:layout_marginTop="8dip"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/enforce_satellite_channel_string"/>
+
         <!-- Simulate this SIM to be satellite -->
         <Switch android:id="@+id/mock_carrier_roaming_satellite"
                 android:textSize="14sp"
@@ -256,6 +263,25 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:text="@string/mock_carrier_roaming_satellite_string"/>
+
+        <!-- ESOS -->
+        <Button android:id="@+id/esos_questionnaire"
+                android:textSize="14sp"
+                android:layout_marginTop="8dip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAllCaps="false"
+                android:text="@string/esos_satellite_string"
+        />
+
+        <!-- Satellite enable non-emergency mode-->
+        <Button android:id="@+id/satellite_enable_non_emergency_mode"
+            android:textSize="14sp"
+            android:layout_marginTop="8dip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAllCaps="false"
+            android:text="@string/satellite_enable_non_emergency_mode_string" />
 
         <!-- VoLTE provisioned -->
         <Switch android:id="@+id/volte_provisioned_switch"
