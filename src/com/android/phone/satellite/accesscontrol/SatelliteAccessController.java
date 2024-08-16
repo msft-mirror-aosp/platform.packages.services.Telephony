@@ -58,6 +58,7 @@ import android.telephony.satellite.ISatelliteCommunicationAllowedStateCallback;
 import android.telephony.satellite.ISatelliteProvisionStateCallback;
 import android.telephony.satellite.ISatelliteSupportedStateCallback;
 import android.telephony.satellite.SatelliteManager;
+import android.telephony.satellite.SatelliteSubscriberProvisionStatus;
 import android.text.TextUtils;
 import android.util.Pair;
 
@@ -329,6 +330,13 @@ public class SatelliteAccessController extends Handler {
                                 }
                             });
                 }
+            }
+
+            @Override
+            public void onSatelliteSubscriptionProvisionStateChanged(
+                    List<SatelliteSubscriberProvisionStatus> satelliteSubscriberProvisionStatus) {
+                logd("onSatelliteSubscriptionProvisionStateChanged: "
+                        + satelliteSubscriberProvisionStatus);
             }
         };
         mSatelliteController.registerForSatelliteProvisionStateChanged(
@@ -1541,6 +1549,25 @@ public class SatelliteAccessController extends Handler {
         }
 
         mSatelliteCommunicationAllowedStateChangedListeners.put(callback.asBinder(), callback);
+
+        if (!mFeatureFlags.geofenceEnhancementForBetterUx()) {
+            plogd("The feature flag geofenceEnhancementForBetterUx is not enabled");
+            return SATELLITE_RESULT_SUCCESS;
+        }
+
+        this.post(() -> {
+            try {
+                synchronized (mSatelliteCommunicationAllowStateLock) {
+                    callback.onSatelliteCommunicationAllowedStateChanged(
+                            mCurrentSatelliteAllowedState);
+                    logd("registerForCommunicationAllowedStateChanged: "
+                            + "mCurrentSatelliteAllowedState " + mCurrentSatelliteAllowedState);
+                }
+            } catch (RemoteException ex) {
+                ploge("registerForCommunicationAllowedStateChanged: RemoteException ex=" + ex);
+            }
+        });
+
         return SATELLITE_RESULT_SUCCESS;
     }
 

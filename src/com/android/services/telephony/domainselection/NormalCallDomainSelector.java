@@ -21,6 +21,7 @@ import static android.telephony.DomainSelectionService.SELECTOR_TYPE_CALLING;
 import android.annotation.NonNull;
 import android.content.Context;
 import android.os.Looper;
+import android.os.Message;
 import android.os.PersistableBundle;
 import android.telecom.TelecomManager;
 import android.telephony.Annotation.DisconnectCauses;
@@ -45,6 +46,13 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
     private static final String LOG_TAG = "NCDS";
 
+    // Wait-time for IMS state change callback.
+    @VisibleForTesting
+    protected static final int WAIT_FOR_IMS_STATE_TIMEOUT_MS = 3000; // 3 seconds
+
+    @VisibleForTesting
+    protected static final int MSG_WAIT_FOR_IMS_STATE_TIMEOUT = 11;
+
     @VisibleForTesting
     protected enum SelectorState {
         ACTIVE,
@@ -67,8 +75,36 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
             logd("Subscribing to state callbacks. Subid:" + subId);
             mImsStateTracker.addServiceStateListener(this);
             mImsStateTracker.addImsStateListener(this);
+
         } else {
             loge("Invalid Subscription. Subid:" + subId);
+        }
+    }
+
+    @Override
+    public void handleMessage(Message message) {
+        switch (message.what) {
+
+            case MSG_WAIT_FOR_IMS_STATE_TIMEOUT: {
+                loge("ImsStateTimeout. ImsState callback not received");
+                if (mSelectorState != SelectorState.ACTIVE) {
+                    return;
+                }
+
+                if (!mImsRegStateReceived) {
+                    onImsRegistrationStateChanged();
+                }
+
+                if (!mMmTelCapabilitiesReceived) {
+                    onImsMmTelCapabilitiesChanged();
+                }
+            }
+            break;
+
+            default: {
+                super.handleMessage(message);
+            }
+            break;
         }
     }
 
@@ -104,6 +140,7 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
 
         if (subId == getSubId()) {
             logd("NormalCallDomainSelection triggered. Sub-id:" + subId);
+            sendEmptyMessageDelayed(MSG_WAIT_FOR_IMS_STATE_TIMEOUT, WAIT_FOR_IMS_STATE_TIMEOUT_MS);
             post(() -> selectDomain());
         } else {
             mSelectorState = SelectorState.INACTIVE;
@@ -290,6 +327,49 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
         }
     }
 
+    private void handleReselectDomain(ImsReasonInfo imsReasonInfo) {
+        mReselectDomain = false;
+
+        // Out of service
+        if (isOutOfService()) {
+            loge("Cannot place call in current ServiceState: " + mServiceState.getState());
+            notifySelectionTerminated(DisconnectCause.OUT_OF_SERVICE);
+            return;
+        }
+
+        // IMS -> CS
+        if (imsReasonInfo != null) {
+            logd("PsDisconnectCause:" + imsReasonInfo.getCode());
+            if (imsReasonInfo.getCode() == ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED) {
+                logd("Redialing over CS");
+                notifyCsSelected();
+            } else {
+                // Not a valid redial
+                logd("Redialing cancelled.");
+                notifySelectionTerminated(DisconnectCause.NOT_VALID);
+            }
+            return;
+        }
+
+        // CS -> IMS
+        int csDisconnectCause = mSelectionAttributes.getCsDisconnectCause();
+        if (csDisconnectCause == CallFailCause.EMC_REDIAL_ON_IMS
+                || csDisconnectCause == CallFailCause.EMC_REDIAL_ON_VOWIFI) {
+            // Check IMS registration state.
+            if (mImsStateTracker.isImsRegistered()) {
+                logd("IMS is registered");
+                notifyPsSelected();
+                return;
+            }
+
+            logd("IMS is NOT registered");
+        }
+
+        // Not a valid redial
+        logd("Redialing cancelled.");
+        notifySelectionTerminated(DisconnectCause.NOT_VALID);
+    }
+
     private boolean isTtySupportedByIms() {
         CarrierConfigManager configManager = mContext.getSystemService(CarrierConfigManager.class);
 
@@ -326,50 +406,8 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
         }
 
         // Check if this is a re-dial scenario
-        ImsReasonInfo imsReasonInfo = mSelectionAttributes.getPsDisconnectCause();
         if (mReselectDomain) {
-            mReselectDomain = false;
-
-            // Out of service
-            if (isOutOfService()) {
-                loge("Cannot place call in current ServiceState: " + mServiceState.getState());
-                notifySelectionTerminated(DisconnectCause.OUT_OF_SERVICE);
-
-                return;
-            }
-
-            // IMS -> CS
-            if (imsReasonInfo != null) {
-                logd("PsDisconnectCause:" + imsReasonInfo.getCode());
-                if (imsReasonInfo.getCode() == ImsReasonInfo.CODE_LOCAL_CALL_CS_RETRY_REQUIRED) {
-                    logd("Redialing over CS");
-                    notifyCsSelected();
-                } else {
-                    // Not a valid redial
-                    logd("Redialing cancelled.");
-                    notifySelectionTerminated(DisconnectCause.NOT_VALID);
-                }
-                return;
-            }
-
-            // CS -> IMS
-            int csDisconnectCause = mSelectionAttributes.getCsDisconnectCause();
-            switch (csDisconnectCause) {
-                case CallFailCause.EMC_REDIAL_ON_IMS:
-                case CallFailCause.EMC_REDIAL_ON_VOWIFI:
-                    // Check IMS registration state.
-                    if (mImsStateTracker.isImsRegistered()) {
-                        logd("IMS is registered");
-                        notifyPsSelected();
-                        return;
-                    } else {
-                        logd("IMS is NOT registered");
-                    }
-            }
-
-            // Not a valid redial
-            logd("Redialing cancelled.");
-            notifySelectionTerminated(DisconnectCause.NOT_VALID);
+            handleReselectDomain(mSelectionAttributes.getPsDisconnectCause());
             return;
         }
 
@@ -387,6 +425,10 @@ public class NormalCallDomainSelector extends DomainSelectorBase implements
         if (!mImsRegStateReceived || !mMmTelCapabilitiesReceived) {
             loge("Waiting for ImsState and MmTelCapabilities callbacks");
             return;
+        }
+
+        if (hasMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT)) {
+            removeMessages(MSG_WAIT_FOR_IMS_STATE_TIMEOUT);
         }
 
         // Check IMS registration state.
