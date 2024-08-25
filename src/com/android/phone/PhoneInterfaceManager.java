@@ -9322,11 +9322,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public void getCarrierRestrictionStatus(IIntegerConsumer callback, String packageName) {
-        enforceReadPermission("getCarrierRestrictionStatus");
-
+        String functionName = "getCarrierRestrictionStatus";
         enforceTelephonyFeatureWithException(packageName,
-                PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION, "getCarrierRestrictionStatus");
-
+                PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION, functionName);
+        try {
+            mApp.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.READ_BASIC_PHONE_STATE,
+                    functionName);
+        } catch (SecurityException e) {
+            mApp.enforceCallingOrSelfPermission(permission.READ_PHONE_STATE,
+                    functionName);
+        }
         Set<Integer> carrierIds = validateCallerAndGetCarrierIds(packageName);
         if (carrierIds.contains(CarrierAllowListInfo.INVALID_CARRIER_ID)) {
             Rlog.e(LOG_TAG, "getCarrierRestrictionStatus: caller is not registered");
@@ -13966,9 +13972,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
                 SubscriptionManager.INVALID_SUBSCRIPTION_ID,
                 "setCachedLocationCountryCode");
-        return TelephonyCountryDetector.getInstance(getDefaultPhone().getContext()).setCountryCodes(
-                reset, currentNetworkCountryCodes, cachedNetworkCountryCodes, locationCountryCode,
-                locationCountryCodeTimestampNanos);
+        return TelephonyCountryDetector.getInstance(getDefaultPhone().getContext(), mFeatureFlags)
+                .setCountryCodes(reset, currentNetworkCountryCodes, cachedNetworkCountryCodes,
+                        locationCountryCode, locationCountryCodeTimestampNanos);
     }
 
     /**
@@ -14312,8 +14318,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @SatelliteManager.SatelliteResult public int registerForCommunicationAllowedStateChanged(
             int subId, @NonNull ISatelliteCommunicationAllowedStateCallback callback) {
         enforceSatelliteCommunicationPermission("registerForCommunicationAllowedStateChanged");
-        return mSatelliteAccessController.registerForCommunicationAllowedStateChanged(
-                subId, callback);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mSatelliteAccessController.registerForCommunicationAllowedStateChanged(
+                    subId, callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -14331,7 +14342,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void unregisterForCommunicationAllowedStateChanged(
             int subId, @NonNull ISatelliteCommunicationAllowedStateCallback callback) {
         enforceSatelliteCommunicationPermission("unregisterForCommunicationAllowedStateChanged");
-        mSatelliteAccessController.unregisterForCommunicationAllowedStateChanged(subId, callback);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteAccessController.unregisterForCommunicationAllowedStateChanged(subId,
+                    callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -14347,7 +14364,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void requestSatelliteSessionStats(int subId, @NonNull ResultReceiver result) {
         enforceModifyPermission();
         enforcePackageUsageStatsPermission("requestSatelliteSessionStats");
-        mSatelliteController.requestSatelliteSessionStats(subId, result);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.requestSatelliteSessionStats(subId, result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -14361,7 +14383,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public void requestSatelliteSubscriberProvisionStatus(@NonNull ResultReceiver result) {
         enforceSatelliteCommunicationPermission("requestSatelliteSubscriberProvisionStatus");
-        mSatelliteController.requestSatelliteSubscriberProvisionStatus(result);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.requestSatelliteSubscriberProvisionStatus(result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -14376,6 +14403,11 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void provisionSatellite(@NonNull List<SatelliteSubscriberInfo> list,
             @NonNull ResultReceiver result) {
         enforceSatelliteCommunicationPermission("provisionSatellite");
-        mSatelliteController.provisionSatellite(list, result);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.provisionSatellite(list, result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 }
