@@ -333,7 +333,7 @@ public class SatelliteAccessController extends Handler {
                 logd("onSatelliteSupportedStateChanged: isSupported=" + isSupported);
                 if (isSupported) {
                     requestIsCommunicationAllowedForCurrentLocation(
-                            SubscriptionManager.DEFAULT_SUBSCRIPTION_ID, new ResultReceiver(null) {
+                            new ResultReceiver(null) {
                                 @Override
                                 protected void onReceiveResult(int resultCode, Bundle resultData) {
                                     // do nothing
@@ -343,7 +343,6 @@ public class SatelliteAccessController extends Handler {
             }
         };
         mSatelliteController.registerForSatelliteSupportedStateChanged(
-                SubscriptionManager.DEFAULT_SUBSCRIPTION_ID,
                 mInternalSatelliteSupportedStateCallback);
 
         mInternalSatelliteProvisionStateCallback = new ISatelliteProvisionStateCallback.Stub() {
@@ -352,7 +351,7 @@ public class SatelliteAccessController extends Handler {
                 logd("onSatelliteProvisionStateChanged: isProvisioned=" + isProvisioned);
                 if (isProvisioned) {
                     requestIsCommunicationAllowedForCurrentLocation(
-                            SubscriptionManager.DEFAULT_SUBSCRIPTION_ID, new ResultReceiver(null) {
+                            new ResultReceiver(null) {
                                 @Override
                                 protected void onReceiveResult(int resultCode, Bundle resultData) {
                                     // do nothing
@@ -369,7 +368,6 @@ public class SatelliteAccessController extends Handler {
             }
         };
         mSatelliteController.registerForSatelliteProvisionStateChanged(
-                SubscriptionManager.DEFAULT_SUBSCRIPTION_ID,
                 mInternalSatelliteProvisionStateCallback);
 
         // Init the SatelliteOnDeviceAccessController so that the S2 level can be cached
@@ -432,20 +430,19 @@ public class SatelliteAccessController extends Handler {
     /**
      * Request to get whether satellite communication is allowed for the current location.
      *
-     * @param subId  The subId of the subscription to check whether satellite communication is
-     *               allowed for the current location for.
      * @param result The result receiver that returns whether satellite communication is allowed
      *               for the current location if the request is successful or an error code
      *               if the request failed.
      */
-    public void requestIsCommunicationAllowedForCurrentLocation(int subId,
+    public void requestIsCommunicationAllowedForCurrentLocation(
             @NonNull ResultReceiver result) {
         if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
             plogd("oemEnabledSatelliteFlag is disabled");
             result.send(SATELLITE_RESULT_REQUEST_NOT_SUPPORTED, null);
             return;
         }
-        sendRequestAsync(CMD_IS_SATELLITE_COMMUNICATION_ALLOWED, new Pair<>(subId, result));
+        sendRequestAsync(CMD_IS_SATELLITE_COMMUNICATION_ALLOWED,
+                new Pair<>(mSatelliteController.getSatellitePhone().getSubId(), result));
     }
 
     /**
@@ -771,7 +768,8 @@ public class SatelliteAccessController extends Handler {
         mConfigUpdaterMetricsStats.reportConfigUpdateSuccess();
     }
 
-    private void loadOverlayConfigs(@NonNull Context context) {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    protected void loadOverlayConfigs(@NonNull Context context) {
         mSatelliteCountryCodes = getSatelliteCountryCodesFromOverlayConfig(context);
         mIsSatelliteAllowAccessControl = getSatelliteAccessAllowFromOverlayConfig(context);
         String satelliteS2CellFileName = getSatelliteS2CellFileFromOverlayConfig(context);
@@ -893,7 +891,7 @@ public class SatelliteAccessController extends Handler {
             }
             mTotalCheckingStartTimeMillis = System.currentTimeMillis();
             mSatelliteController.requestIsSatelliteSupported(
-                    requestArguments.first, mInternalSatelliteSupportedResultReceiver);
+                    mInternalSatelliteSupportedResultReceiver);
         }
     }
 
@@ -911,6 +909,30 @@ public class SatelliteAccessController extends Handler {
         }
     }
 
+    /**
+     * At country borders, a multi-SIM device might connect to multiple cellular base
+     * stations and thus might have multiple different MCCs.
+     * In such cases, framework is not sure whether the region should be disallowed or not,
+     * and thus the geofence data will be used to decide whether to allow satellite.
+     */
+    private boolean isRegionDisallowed(List<String> networkCountryIsoList) {
+        if (networkCountryIsoList.isEmpty()) {
+            plogd("isRegionDisallowed : true : it's not sure if empty is disallowed");
+            return false;
+        }
+
+        for (String countryCode : networkCountryIsoList) {
+            if (isSatelliteAccessAllowedForLocation(List.of(countryCode))) {
+                plogd("isRegionDisallowed : false : Country Code " + countryCode
+                        + " is in the list from the configuration");
+                return false;
+            }
+        }
+
+        plogd("isRegionDisallowed : true : " + networkCountryIsoList);
+        return true;
+    }
+
     private void handleIsSatelliteSupportedResult(int resultCode, Bundle resultData) {
         plogd("handleIsSatelliteSupportedResult: resultCode=" + resultCode);
         synchronized (mLock) {
@@ -925,7 +947,19 @@ public class SatelliteAccessController extends Handler {
                         sendSatelliteAllowResultToReceivers(resultCode, bundle, false);
                     } else {
                         plogd("Satellite is supported");
-                        checkSatelliteAccessRestrictionUsingGPS();
+                        List<String> networkCountryIsoList =
+                                mCountryDetector.getCurrentNetworkCountryIso();
+                        if (isRegionDisallowed(networkCountryIsoList)) {
+                            Bundle bundle = new Bundle();
+                            bundle.putBoolean(KEY_SATELLITE_COMMUNICATION_ALLOWED, false);
+                            mAccessControllerMetricsStats.setAccessControlType(
+                                    SatelliteConstants.ACCESS_CONTROL_TYPE_NETWORK_COUNTRY_CODE)
+                                    .setCountryCodes(networkCountryIsoList);
+                            sendSatelliteAllowResultToReceivers(SATELLITE_RESULT_SUCCESS, bundle,
+                                    false);
+                        } else {
+                            checkSatelliteAccessRestrictionUsingGPS();
+                        }
                     }
                 } else {
                     ploge("KEY_SATELLITE_SUPPORTED does not exist.");
@@ -1054,7 +1088,6 @@ public class SatelliteAccessController extends Handler {
             logd("handleSatelliteAllowedRegionPossiblyChanged");
             setIsSatelliteAllowedRegionPossiblyChanged(true);
             requestIsCommunicationAllowedForCurrentLocation(
-                    SubscriptionManager.DEFAULT_SUBSCRIPTION_ID,
                     mHandlerForSatelliteAllowedResult);
         }
     }
@@ -1336,7 +1369,8 @@ public class SatelliteAccessController extends Handler {
         return true;
     }
 
-    private boolean isSatelliteAccessAllowedForLocation(
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    protected boolean isSatelliteAccessAllowedForLocation(
             @NonNull List<String> networkCountryIsoList) {
         if (isSatelliteAllowAccessControl()) {
             // The current country is unidentified, we're uncertain and thus returning false
