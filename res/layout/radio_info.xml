@@ -20,7 +20,6 @@
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:paddingTop="40dp"
     android:layoutDirection="locale"
     android:textDirection="locale">
 
@@ -275,6 +274,25 @@
                 android:text="@string/esos_satellite_string"
         />
 
+        <!-- Satellite enable non-emergency mode-->
+        <Button android:id="@+id/satellite_enable_non_emergency_mode"
+            android:textSize="14sp"
+            android:layout_marginTop="8dip"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textAllCaps="false"
+            android:text="@string/satellite_enable_non_emergency_mode_string" />
+
+        <!-- Demo ESOS -->
+        <Button android:id="@+id/demo_esos_questionnaire"
+                android:textSize="14sp"
+                android:layout_marginTop="8dip"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:textAllCaps="false"
+                android:text="@string/demo_esos_satellite_string"
+        />
+
         <!-- VoLTE provisioned -->
         <Switch android:id="@+id/volte_provisioned_switch"
                 android:textSize="14sp"
@@ -520,19 +538,5 @@
                       android:layout_toStartOf="@id/update_smsc"
                       android:layout_toEndOf="@id/smsc_label" />
         </RelativeLayout>
-
-        <!-- Test setting to ignore bad DNS, useful in lab environments -->
-        <LinearLayout style="@style/RadioInfo_entry_layout">
-            <Button android:id="@+id/dns_check_toggle"
-                    android:textSize="14sp"
-                    android:layout_marginTop="8dip"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="@string/radio_info_toggle_dns_check_label"
-                    />
-            <TextView android:id="@+id/dnsCheckState" style="@style/info_value" />
-        </LinearLayout>
-
-
     </LinearLayout>
 </ScrollView>

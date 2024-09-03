@@ -84,6 +84,8 @@ import android.telephony.ims.ImsRcsManager;
 import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
+import android.telephony.satellite.EnableRequestAttributes;
+import android.telephony.satellite.SatelliteManager;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.Menu;
@@ -106,15 +108,16 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
+import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.euicc.EuiccConnector;
 import com.android.internal.telephony.util.TelephonyUtils;
 import com.android.phone.R;
-import com.android.phone.utils.Utils;
 
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -133,9 +136,6 @@ public class RadioInfo extends AppCompatActivity {
     private static final String TAG = "RadioInfo";
 
     private static final boolean IS_USER_BUILD = "user".equals(Build.TYPE);
-
-    private static final String ACTION_ESOS_TEST =
-            "com.google.android.apps.stargate.ACTION_ESOS_QUESTIONNAIRE";
 
     private static final String[] PREFERRED_NETWORK_LABELS = {
             "GSM/WCDMA preferred",
@@ -205,7 +205,7 @@ public class RadioInfo extends AppCompatActivity {
             ServiceState.RIL_RADIO_TECHNOLOGY_LTE_CA,
             ServiceState.RIL_RADIO_TECHNOLOGY_NR
     };
-    private static String[] sPhoneIndexLabels;
+    private static String[] sPhoneIndexLabels = new String[0];
 
     private static final int sCellInfoListRateDisabled = Integer.MAX_VALUE;
     private static final int sCellInfoListRateMax = 0;
@@ -292,7 +292,6 @@ public class RadioInfo extends AppCompatActivity {
     private TextView mPingHostnameV6;
     private TextView mHttpClientTest;
     private TextView mPhyChanConfig;
-    private TextView mDnsCheckState;
     private TextView mDownlinkKbps;
     private TextView mUplinkKbps;
     private TextView mEndcAvailable;
@@ -307,7 +306,6 @@ public class RadioInfo extends AppCompatActivity {
     private Switch mSimulateOutOfServiceSwitch;
     private Switch mEnforceSatelliteChannel;
     private Switch mMockSatellite;
-    private Button mDnsCheckToggleButton;
     private Button mPingTestButton;
     private Button mUpdateSmscButton;
     private Button mRefreshSmscButton;
@@ -315,6 +313,8 @@ public class RadioInfo extends AppCompatActivity {
     private Button mCarrierProvisioningButton;
     private Button mTriggerCarrierProvisioningButton;
     private Button mEsosButton;
+    private Button mSatelliteEnableNonEmergencyModeButton;
+    private Button mEsosDemoButton;
     private Switch mImsVolteProvisionedSwitch;
     private Switch mImsVtProvisionedSwitch;
     private Switch mImsWfcProvisionedSwitch;
@@ -347,8 +347,7 @@ public class RadioInfo extends AppCompatActivity {
     private boolean mCfiValue = false;
 
     private final PersistableBundle[] mCarrierSatelliteOriginalBundle = new PersistableBundle[2];
-    private final ForceSatelliteChannelBundle[] mOriginalSystemChannels =
-            new ForceSatelliteChannelBundle[2];
+    private final PersistableBundle[] mOriginalSystemChannels = new PersistableBundle[2];
     private List<CellInfo> mCellInfoResult = null;
     private final boolean[] mSimulateOos = new boolean[2];
     private int[] mSelectedSignalStrengthIndex = new int[2];
@@ -358,6 +357,9 @@ public class RadioInfo extends AppCompatActivity {
     private int mPreferredNetworkTypeResult;
     private int mCellInfoRefreshRateIndex;
     private int mSelectedPhoneIndex;
+
+    private String mActionEsos;
+    private String mActionEsosDemo;
 
     private final NetworkRequest mDefaultNetworkRequest = new NetworkRequest.Builder()
             .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
@@ -545,9 +547,10 @@ public class RadioInfo extends AppCompatActivity {
     @Override
     public void onCreate(Bundle icicle) {
         super.onCreate(icicle);
-        Utils.setupEdgeToEdge(this);
-        if (!android.os.Process.myUserHandle().isSystem()) {
-            Log.e(TAG, "Not run from system user, don't do anything.");
+        try {
+            PhoneFactory.getDefaultPhone();
+        } catch (Exception e) {
+            loge("Do nothing due to getDefaultPhone " + e);
             finish();
             return;
         }
@@ -564,6 +567,16 @@ public class RadioInfo extends AppCompatActivity {
         setContentView(R.layout.radio_info);
 
         log("Started onCreate");
+
+        Resources r = getResources();
+        mActionEsos =
+            r.getString(
+                    com.android.internal.R.string
+                            .config_satellite_emergency_handover_intent_action);
+
+        mActionEsosDemo =
+            r.getString(
+                    com.android.internal.R.string.config_satellite_demo_mode_sos_intent_action);
 
         mQueuedWork = new ThreadPoolExecutor(1, 1, RUNNABLE_TIMEOUT_MS, TimeUnit.MICROSECONDS,
                 new LinkedBlockingDeque<Runnable>());
@@ -608,7 +621,6 @@ public class RadioInfo extends AppCompatActivity {
         mSent = (TextView) findViewById(R.id.sent);
         mReceived = (TextView) findViewById(R.id.received);
         mSmsc = (EditText) findViewById(R.id.smsc);
-        mDnsCheckState = (TextView) findViewById(R.id.dnsCheckState);
         mPingHostnameV4 = (TextView) findViewById(R.id.pingHostnameV4);
         mPingHostnameV6 = (TextView) findViewById(R.id.pingHostnameV6);
         mHttpClientTest = (TextView) findViewById(R.id.httpClientTest);
@@ -732,8 +744,6 @@ public class RadioInfo extends AppCompatActivity {
         mUpdateSmscButton.setOnClickListener(mUpdateSmscButtonHandler);
         mRefreshSmscButton = (Button) findViewById(R.id.refresh_smsc);
         mRefreshSmscButton.setOnClickListener(mRefreshSmscButtonHandler);
-        mDnsCheckToggleButton = (Button) findViewById(R.id.dns_check_toggle);
-        mDnsCheckToggleButton.setOnClickListener(mDnsCheckButtonHandler);
         mCarrierProvisioningButton = (Button) findViewById(R.id.carrier_provisioning);
         if (!TextUtils.isEmpty(getCarrierProvisioningAppString())) {
             mCarrierProvisioningButton.setOnClickListener(mCarrierProvisioningButtonHandler);
@@ -751,14 +761,37 @@ public class RadioInfo extends AppCompatActivity {
         }
 
         mEsosButton = (Button) findViewById(R.id.esos_questionnaire);
+        mEsosDemoButton  = (Button) findViewById(R.id.demo_esos_questionnaire);
+        mSatelliteEnableNonEmergencyModeButton = (Button) findViewById(
+                R.id.satellite_enable_non_emergency_mode);
+        CarrierConfigManager cm = mPhone.getContext().getSystemService(CarrierConfigManager.class);
+        if (!cm.getConfigForSubId(mPhone.getSubId(),
+                        CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)
+                .getBoolean(CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)) {
+            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
+        }
         if (!TelephonyUtils.IS_DEBUGGABLE) {
-            mEsosButton.setVisibility(View.GONE);
+            if (!TextUtils.isEmpty(mActionEsos)) {
+                mEsosButton.setVisibility(View.GONE);
+            }
+            if (!TextUtils.isEmpty(mActionEsosDemo)) {
+                mEsosDemoButton.setVisibility(View.GONE);
+            }
+            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
         } else {
             mEsosButton.setOnClickListener(v ->
                     mPhone.getContext().startActivity(
-                        new Intent(ACTION_ESOS_TEST)
+                        new Intent(mActionEsos)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK))
             );
+            mEsosDemoButton.setOnClickListener(v ->
+                    mPhone.getContext().startActivity(
+                            new Intent(mActionEsosDemo)
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK
+                                            | Intent.FLAG_ACTIVITY_CLEAR_TASK))
+            );
+            mSatelliteEnableNonEmergencyModeButton.setOnClickListener(v ->
+                    enableSatelliteNonEmergencyMode());
         }
 
         mOemInfoButton = (Button) findViewById(R.id.oem_info);
@@ -810,7 +843,6 @@ public class RadioInfo extends AppCompatActivity {
         updateRadioPowerState();
         updateImsProvisionedState();
         updateProperties();
-        updateDnsCheckState();
         updateNetworkType();
         updateNrStats();
         updateEuiccInfo();
@@ -856,7 +888,7 @@ public class RadioInfo extends AppCompatActivity {
         mSimulateOutOfServiceSwitch.setOnCheckedChangeListener(mSimulateOosOnChangeListener);
         mMockSatellite.setChecked(mCarrierSatelliteOriginalBundle[mPhone.getPhoneId()] != null);
         mMockSatellite.setOnCheckedChangeListener(mMockSatelliteListener);
-        mEnforceSatelliteChannel.setChecked(mOriginalSystemChannels[mPhone.getPhoneId()] != null);
+        updateSatelliteChannelDisplay(mPhone.getPhoneId());
         mEnforceSatelliteChannel.setOnCheckedChangeListener(mForceSatelliteChannelOnChangeListener);
         mImsVolteProvisionedSwitch.setOnCheckedChangeListener(mImsVolteCheckedChangeListener);
         mImsVtProvisionedSwitch.setOnCheckedChangeListener(mImsVtCheckedChangeListener);
@@ -969,6 +1001,7 @@ public class RadioInfo extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        log("onDestroy");
         clearOverride();
         super.onDestroy();
         if (mQueuedWork != null) {
@@ -1056,12 +1089,6 @@ public class RadioInfo extends AppCompatActivity {
         mNrFrequency.setVisibility(visibility);
         ((TextView) findViewById(R.id.network_slicing_config_label)).setVisibility(visibility);
         mNetworkSlicingConfig.setVisibility(visibility);
-    }
-
-    private void updateDnsCheckState() {
-        //FIXME: Replace with a TelephonyManager call
-        mDnsCheckState.setText(mPhone.isDnsCheckDisabled()
-                ? "0.0.0.0 allowed" : "0.0.0.0 not allowed");
     }
 
     private void updateBandwidths(int dlbw, int ulbw) {
@@ -1877,15 +1904,19 @@ public class RadioInfo extends AppCompatActivity {
         }
     };
 
-    private record ForceSatelliteChannelBundle(PersistableBundle bundle,
-                                               List<RadioAccessSpecifier> specifiers) {}
-
+    private static final int SATELLITE_CHANNEL = 8665;
     private final OnCheckedChangeListener mForceSatelliteChannelOnChangeListener =
             (buttonView, isChecked) -> {
-                if (mPhone == null || mPhone.getSubId() < 1) return;
+                if (mPhone == null || mPhone.getSubId() < 1) {
+                    loge("Force satellite channel mPhone.getSubId() < 1");
+                    return;
+                }
                 CarrierConfigManager cm = mPhone.getContext()
                         .getSystemService(CarrierConfigManager.class);
-                if (cm == null) return;
+                if (cm == null) {
+                    loge("Force satellite channel cm == null");
+                    return;
+                }
                 TelephonyManager tm = mTelephonyManager.createForSubscriptionId(mPhone.getSubId());
                 // To be used in thread in case mPhone changes.
                 int subId = mPhone.getSubId();
@@ -1906,28 +1937,24 @@ public class RadioInfo extends AppCompatActivity {
                         overrideBundle.putBoolean(CarrierConfigManager
                                 .KEY_EMERGENCY_MESSAGING_SUPPORTED_BOOL, true);
 
-                        // Force channel selection
-                        List<RadioAccessSpecifier> originalChannels;
+                        // Set only allow LTE network type
                         try {
-                            originalChannels = tm.getSystemSelectionChannels();
+                            tm.setAllowedNetworkTypesForReason(
+                                    TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_TEST,
+                                    RadioAccessFamily.getRafFromNetworkType(
+                                            RILConstants.NETWORK_MODE_LTE_ONLY));
+                            log("Force satellite channel set to LTE only");
                         } catch (Exception e) {
-                            loge("Force satellite channel failed to get channels " + e);
+                            loge("Force satellite channel failed to set network type to LTE " + e);
                             return;
                         }
+
+                        // Set force channel selection
                         List<RadioAccessSpecifier> mock = List.of(
                                 new RadioAccessSpecifier(
                                         AccessNetworkConstants.AccessNetworkType.EUTRAN,
                                         new int[]{AccessNetworkConstants.EutranBand.BAND_25},
-                                        new int[]{8665}),
-                                new RadioAccessSpecifier(
-                                        AccessNetworkConstants.AccessNetworkType.NGRAN,
-                                        new int[0],  new int[0]),
-                                new RadioAccessSpecifier(
-                                        AccessNetworkConstants.AccessNetworkType.UTRAN,
-                                        new int[0],  new int[0]),
-                                new RadioAccessSpecifier(
-                                        AccessNetworkConstants.AccessNetworkType.GERAN,
-                                        new int[0],  new int[0]));
+                                        new int[]{SATELLITE_CHANNEL}));
                         try {
                             log("Force satellite channel new channels " + mock);
                             tm.setSystemSelectionChannels(mock);
@@ -1937,31 +1964,65 @@ public class RadioInfo extends AppCompatActivity {
                         }
                         log("Force satellite channel new config " + overrideBundle);
                         cm.overrideConfig(subId, overrideBundle, false);
-                        ForceSatelliteChannelBundle original =
-                                new ForceSatelliteChannelBundle(originalBundle, originalChannels);
-                        mOriginalSystemChannels[phoneId] = original;
-                        log("Force satellite channel old " + original);
+
+                        mOriginalSystemChannels[phoneId] = originalBundle;
+                        log("Force satellite channel old " + mock  + originalBundle);
                     })).start();
                 } else {
-                    ForceSatelliteChannelBundle original;
-                    original = mOriginalSystemChannels[phoneId];
-                    if (original == null) return;
-                    log("Force satellite channel restoring to " + original);
                     (new Thread(() -> {
                         try {
-                            tm.setSystemSelectionChannels(original.specifiers);
-                            log("Force satellite channel successfully restored channels to "
-                                    + original.specifiers);
-                            cm.overrideConfig(subId, original.bundle, false);
-                            log("Force satellite channel successfully restored config to "
-                                    + original.bundle);
-                            mOriginalSystemChannels[phoneId] = null;
+                            tm.setSystemSelectionChannels(
+                                    Collections.emptyList() /* isSpecifyChannels false */);
+                            log("Force satellite channel successfully cleared channels ");
+                            tm.setAllowedNetworkTypesForReason(
+                                    TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_TEST,
+                                    TelephonyManager.getAllNetworkTypesBitmask());
+                            log("Force satellite channel successfully reset network type to "
+                                    + TelephonyManager.getAllNetworkTypesBitmask());
+                            PersistableBundle original = mOriginalSystemChannels[phoneId];
+                            if (original != null) {
+                                cm.overrideConfig(subId, original, false);
+                                log("Force satellite channel successfully restored config to "
+                                        + original);
+                                mOriginalSystemChannels[phoneId] = null;
+                            }
                         } catch (Exception e) {
                             loge("Force satellite channel: Can't clear mock " + e);
                         }
                     })).start();
                 }
     };
+
+    private void updateSatelliteChannelDisplay(int phoneId) {
+        if (mEnforceSatelliteChannel.isChecked()) return;
+        // Assume in testing mode
+        (new Thread(() -> {
+            TelephonyManager tm = mTelephonyManager.createForSubscriptionId(
+                    SubscriptionManager.getSubscriptionId(phoneId));
+            try {
+                List<RadioAccessSpecifier> channels = tm.getSystemSelectionChannels();
+                long networkTypeBitMask = tm.getAllowedNetworkTypesForReason(
+                        TelephonyManager.ALLOWED_NETWORK_TYPES_REASON_TEST);
+                long lteNetworkBitMask = RadioAccessFamily.getRafFromNetworkType(
+                        RILConstants.NETWORK_MODE_LTE_ONLY);
+                mHandler.post(() -> {
+                    log("Force satellite get channel " + channels
+                            + " get networkTypeBitMask " + networkTypeBitMask
+                            + " lte " + lteNetworkBitMask);
+                    // if SATELLITE_CHANNEL is the current channel
+                    mEnforceSatelliteChannel.setChecked(channels.stream().filter(specifier ->
+                                    specifier.getRadioAccessNetwork()
+                                            == AccessNetworkConstants.AccessNetworkType.EUTRAN)
+                            .flatMapToInt(specifier -> Arrays.stream(specifier.getChannels()))
+                            .anyMatch(channel -> channel == SATELLITE_CHANNEL)
+                            // OR ALLOWED_NETWORK_TYPES_REASON_TEST is LTE only.
+                            || (networkTypeBitMask & lteNetworkBitMask) == networkTypeBitMask);
+                });
+            } catch (Exception e) {
+                loge("updateSatelliteChannelDisplay " + e);
+            }
+        })).start();
+    }
 
     private final OnCheckedChangeListener mMockSatelliteListener =
             (buttonView, isChecked) -> {
@@ -2025,6 +2086,29 @@ public class RadioInfo extends AppCompatActivity {
                     }
                 }
             };
+
+    /**
+     * Enable modem satellite for non-emergency mode.
+     */
+    private void enableSatelliteNonEmergencyMode() {
+        SatelliteManager sm = mPhone.getContext().getSystemService(SatelliteManager.class);
+        CarrierConfigManager cm = mPhone.getContext().getSystemService(CarrierConfigManager.class);
+        if (sm == null || cm == null) {
+            loge("enableSatelliteNonEmergencyMode: sm or cm is null");
+            return;
+        }
+        if (!cm.getConfigForSubId(mPhone.getSubId(),
+                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)
+                .getBoolean(CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)) {
+            loge("enableSatelliteNonEmergencyMode: KEY_SATELLITE_ATTACH_SUPPORTED_BOOL is false");
+            return;
+        }
+        log("enableSatelliteNonEmergencyMode: requestEnabled");
+        sm.requestEnabled(new EnableRequestAttributes.Builder(true)
+                        .setDemoMode(false).setEmergencyMode(false).build(),
+                Runnable::run, res -> log("enableSatelliteNonEmergencyMode: " + res)
+        );
+    }
 
     private boolean isImsVolteProvisioned() {
         return getImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
@@ -2167,14 +2251,6 @@ public class RadioInfo extends AppCompatActivity {
         mEabProvisionedSwitch.setEnabled(!IS_USER_BUILD
                 && isEnabledByPlatform && isEabProvisioningRequired());
     }
-
-    OnClickListener mDnsCheckButtonHandler = new OnClickListener() {
-        public void onClick(View v) {
-            //FIXME: Replace with a TelephonyManager call
-            mPhone.disableDnsCheck(!mPhone.isDnsCheckDisabled());
-            updateDnsCheckState();
-        }
-    };
 
     OnClickListener mOemInfoButtonHandler = new OnClickListener() {
         public void onClick(View v) {
