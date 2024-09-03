@@ -28,7 +28,10 @@ import static com.android.internal.telephony.satellite.SatelliteController.SATEL
 import android.annotation.ArrayRes;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.res.Resources;
 import android.location.Location;
@@ -133,7 +136,8 @@ public class SatelliteAccessController extends Handler {
     protected static final int EVENT_WAIT_FOR_CURRENT_LOCATION_TIMEOUT = 2;
     protected static final int EVENT_KEEP_ON_DEVICE_ACCESS_CONTROLLER_RESOURCES_TIMEOUT = 3;
     protected static final int EVENT_CONFIG_DATA_UPDATED = 4;
-    protected static final int CMD_HANDLE_COUNTRY_CODE_CHANGED = 5;
+    protected static final int EVENT_COUNTRY_CODE_CHANGED = 5;
+    protected static final int EVENT_LOCATION_SETTINGS_ENABLED = 6;
 
     private static SatelliteAccessController sInstance;
 
@@ -194,7 +198,7 @@ public class SatelliteAccessController extends Handler {
     };
     @GuardedBy("mLock")
     @Nullable
-    CancellationSignal mLocationRequestCancellationSignal = null;
+    protected CancellationSignal mLocationRequestCancellationSignal = null;
     private int mS2Level = DEFAULT_S2_LEVEL;
     @GuardedBy("mLock")
     @Nullable
@@ -263,6 +267,19 @@ public class SatelliteAccessController extends Handler {
     private long mOnDeviceLookupStartTimeMillis;
     private long mTotalCheckingStartTimeMillis;
 
+    protected BroadcastReceiver mLocationModeChangedBroadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (intent.getAction().equals(LocationManager.MODE_CHANGED_ACTION)) {
+                plogd("LocationManager mode is changed");
+                if (mLocationManager.isLocationEnabled()) {
+                    plogd("Location settings is just enabled");
+                    sendRequestAsync(EVENT_LOCATION_SETTINGS_ENABLED, null);
+                }
+            }
+        }
+    };
+
     /**
      * Create a SatelliteAccessController instance.
      *
@@ -295,7 +312,7 @@ public class SatelliteAccessController extends Handler {
 
         mCountryDetector = TelephonyCountryDetector.getInstance(context, mFeatureFlags);
         mCountryDetector.registerForCountryCodeChanged(this,
-                CMD_HANDLE_COUNTRY_CODE_CHANGED, null);
+                EVENT_COUNTRY_CODE_CHANGED, null);
         initializeHandlerForSatelliteAllowedResult();
         setIsSatelliteAllowedRegionPossiblyChanged(false);
 
@@ -372,6 +389,7 @@ public class SatelliteAccessController extends Handler {
 
         // Init the SatelliteOnDeviceAccessController so that the S2 level can be cached
         initSatelliteOnDeviceAccessController();
+        registerLocationModeChangedBroadcastReceiver(context);
     }
 
     private void updateCurrentSatelliteAllowedState(boolean isAllowed) {
@@ -418,7 +436,9 @@ public class SatelliteAccessController extends Handler {
                 AsyncResult ar = (AsyncResult) msg.obj;
                 updateSatelliteConfigData((Context) ar.userObj);
                 break;
-            case CMD_HANDLE_COUNTRY_CODE_CHANGED:
+            case EVENT_LOCATION_SETTINGS_ENABLED:
+                // Fall through
+            case EVENT_COUNTRY_CODE_CHANGED:
                 handleSatelliteAllowedRegionPossiblyChanged();
                 break;
             default:
@@ -909,6 +929,17 @@ public class SatelliteAccessController extends Handler {
         }
     }
 
+    private void registerLocationModeChangedBroadcastReceiver(Context context) {
+        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
+            plogd("registerLocationModeChangedBroadcastReceiver: Flag "
+                    + "oemEnabledSatellite is disabled");
+            return;
+        }
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(LocationManager.MODE_CHANGED_ACTION);
+        context.registerReceiver(mLocationModeChangedBroadcastReceiver, intentFilter);
+    }
+
     /**
      * At country borders, a multi-SIM device might connect to multiple cellular base
      * stations and thus might have multiple different MCCs.
@@ -917,14 +948,14 @@ public class SatelliteAccessController extends Handler {
      */
     private boolean isRegionDisallowed(List<String> networkCountryIsoList) {
         if (networkCountryIsoList.isEmpty()) {
-            plogd("isRegionDisallowed : true : it's not sure if empty is disallowed");
+            plogd("isRegionDisallowed : false : network country code is not available");
             return false;
         }
 
         for (String countryCode : networkCountryIsoList) {
             if (isSatelliteAccessAllowedForLocation(List.of(countryCode))) {
                 plogd("isRegionDisallowed : false : Country Code " + countryCode
-                        + " is in the list from the configuration");
+                        + " is allowed but not sure if current location should be allowed.");
                 return false;
             }
         }
@@ -1248,18 +1279,20 @@ public class SatelliteAccessController extends Handler {
         }
     }
 
-    private void queryCurrentLocation() {
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    protected void queryCurrentLocation() {
         synchronized (mLock) {
             if (mLocationRequestCancellationSignal != null) {
-                plogd("Request for current location was already sent to LocationManager");
+                plogd("queryCurrentLocation : "
+                        + "Request for current location was already sent to LocationManager");
                 return;
             }
             mLocationRequestCancellationSignal = new CancellationSignal();
             mLocationQueryStartTimeMillis = System.currentTimeMillis();
-            mLocationManager.getCurrentLocation(LocationManager.GPS_PROVIDER,
+            mLocationManager.getCurrentLocation(LocationManager.FUSED_PROVIDER,
                     new LocationRequest.Builder(0)
                             .setQuality(LocationRequest.QUALITY_HIGH_ACCURACY)
-                            .setLocationSettingsIgnored(true)
+                            .setLocationSettingsIgnored(isInEmergency())
                             .build(),
                     mLocationRequestCancellationSignal, this::post,
                     this::onCurrentLocationAvailable);
