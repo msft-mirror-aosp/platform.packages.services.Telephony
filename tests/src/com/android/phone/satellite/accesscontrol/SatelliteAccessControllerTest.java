@@ -18,8 +18,13 @@ package com.android.phone.satellite.accesscontrol;
 
 import static android.location.LocationManager.MODE_CHANGED_ACTION;
 import static android.telephony.satellite.SatelliteManager.KEY_SATELLITE_COMMUNICATION_ALLOWED;
+import static android.telephony.satellite.SatelliteManager.KEY_SATELLITE_PROVISIONED;
+import static android.telephony.satellite.SatelliteManager.KEY_SATELLITE_SUPPORTED;
+import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_ERROR;
+import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_LOCATION_DISABLED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_LOCATION_NOT_AVAILABLE;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_MODEM_ERROR;
+import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_NOT_SUPPORTED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_REQUEST_NOT_SUPPORTED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_SUCCESS;
 
@@ -106,6 +111,7 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -135,7 +141,7 @@ public class SatelliteAccessControllerTest {
     private static final long TIMEOUT = 500;
     private static final List<String> EMPTY_STRING_LIST = new ArrayList<>();
     private static final List<String> LOCATION_PROVIDERS =
-            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.GPS_PROVIDER);
+            listOf(LocationManager.NETWORK_PROVIDER, LocationManager.FUSED_PROVIDER);
     private static final int SUB_ID = 0;
 
     @Mock
@@ -177,6 +183,10 @@ public class SatelliteAccessControllerTest {
             mMockCachedAccessRestrictionMap;
     @Mock
     private Intent mMockLocationIntent;
+    @Mock
+    private Set<ResultReceiver> mMockSatelliteAllowResultReceivers;
+    @Mock
+    private ResultReceiver mMockSatelliteSupportedResultReceiver;
 
     private Looper mLooper;
     private TestableLooper mTestableLooper;
@@ -203,6 +213,14 @@ public class SatelliteAccessControllerTest {
     private ArgumentCaptor<BroadcastReceiver> mLocationBroadcastReceiverCaptor;
     @Captor
     private ArgumentCaptor<IntentFilter> mIntentFilterCaptor;
+    @Captor
+    private ArgumentCaptor<LocationRequest> mLocationRequestCaptor;
+    @Captor
+    private ArgumentCaptor<String> mLocationProviderStringCaptor;
+    @Captor
+    private ArgumentCaptor<Integer> mResultCodeIntCaptor;
+    @Captor
+    private ArgumentCaptor<Bundle> mResultDataBundleCaptor;
 
     private boolean mQueriedSatelliteAllowed = false;
     private int mQueriedSatelliteAllowedResultCode = SATELLITE_RESULT_SUCCESS;
@@ -294,7 +312,7 @@ public class SatelliteAccessControllerTest {
         when(mMockLocationManager.getProviders(true)).thenReturn(LOCATION_PROVIDERS);
         when(mMockLocationManager.getLastKnownLocation(LocationManager.NETWORK_PROVIDER))
                 .thenReturn(mMockLocation0);
-        when(mMockLocationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER))
+        when(mMockLocationManager.getLastKnownLocation(LocationManager.FUSED_PROVIDER))
                 .thenReturn(mMockLocation1);
         when(mMockLocation0.getLatitude()).thenReturn(0.0);
         when(mMockLocation0.getLongitude()).thenReturn(0.0);
@@ -635,7 +653,7 @@ public class SatelliteAccessControllerTest {
         mTestableLooper.processAllMessages();
         assertTrue(waitForRequestIsSatelliteAllowedForCurrentLocationResult(
                 mSatelliteAllowedSemaphore, 1));
-        assertEquals(SATELLITE_RESULT_SUCCESS, mQueriedSatelliteAllowedResultCode);
+        assertEquals(SATELLITE_RESULT_NOT_SUPPORTED, mQueriedSatelliteAllowedResultCode);
         assertFalse(mQueriedSatelliteAllowed);
 
         // Failed to query whether satellite is supported or not
@@ -701,7 +719,7 @@ public class SatelliteAccessControllerTest {
         mTestableLooper.processAllMessages();
         assertFalse(
                 mSatelliteAccessControllerUT.isKeepOnDeviceAccessControllerResourcesTimerStarted());
-        verify(mMockLocationManager).getCurrentLocation(eq(LocationManager.GPS_PROVIDER),
+        verify(mMockLocationManager).getCurrentLocation(eq(LocationManager.FUSED_PROVIDER),
                 any(LocationRequest.class), mLocationRequestCancellationSignalCaptor.capture(),
                 any(Executor.class), mLocationRequestConsumerCaptor.capture());
         assertTrue(mSatelliteAccessControllerUT.isWaitForCurrentLocationTimerStarted());
@@ -759,6 +777,7 @@ public class SatelliteAccessControllerTest {
         mSatelliteAccessControllerUT.elapsedRealtimeNanos = TEST_LOCATION_FRESH_DURATION_NANOS + 1;
         when(mMockLocation0.getElapsedRealtimeNanos()).thenReturn(0L);
         when(mMockLocation1.getElapsedRealtimeNanos()).thenReturn(0L);
+        doReturn(false).when(mMockLocationManager).isLocationEnabled();
         mSatelliteAccessControllerUT.requestIsCommunicationAllowedForCurrentLocation(
                 mSatelliteAllowedReceiver);
         mTestableLooper.processAllMessages();
@@ -769,7 +788,7 @@ public class SatelliteAccessControllerTest {
                 any(SatelliteOnDeviceAccessController.LocationToken.class));
         assertTrue(waitForRequestIsSatelliteAllowedForCurrentLocationResult(
                 mSatelliteAllowedSemaphore, 1));
-        assertEquals(SATELLITE_RESULT_SUCCESS, mQueriedSatelliteAllowedResultCode);
+        assertEquals(SATELLITE_RESULT_LOCATION_DISABLED, mQueriedSatelliteAllowedResultCode);
         assertFalse(mQueriedSatelliteAllowed);
     }
 
@@ -799,19 +818,20 @@ public class SatelliteAccessControllerTest {
                 ALLOWED_STATE_CACHE_VALID_DURATION_NANOS - 10;
 
         // cash is valid and never queried before
-        mSatelliteAccessControllerUT.mLastLocationQueryForPossibleChangeInAllowedRegionTimeNanos = 0;
+        mSatelliteAccessControllerUT.mLastLocationQueryForPossibleChangeInAllowedRegionTimeNanos =
+                0;
         assertTrue(mSatelliteAccessControllerUT.allowLocationQueryForSatelliteAllowedCheck());
 
         // cash is valid and throttled
         mSatelliteAccessControllerUT.mLastLocationQueryForPossibleChangeInAllowedRegionTimeNanos =
                 mSatelliteAccessControllerUT.elapsedRealtimeNanos
-                - TEST_LOCATION_QUERY_THROTTLE_INTERVAL_NANOS + 100;
+                        - TEST_LOCATION_QUERY_THROTTLE_INTERVAL_NANOS + 100;
         assertFalse(mSatelliteAccessControllerUT.allowLocationQueryForSatelliteAllowedCheck());
 
         // cash is valid and not throttled
         mSatelliteAccessControllerUT.mLastLocationQueryForPossibleChangeInAllowedRegionTimeNanos =
                 mSatelliteAccessControllerUT.elapsedRealtimeNanos
-                - TEST_LOCATION_QUERY_THROTTLE_INTERVAL_NANOS - 100;
+                        - TEST_LOCATION_QUERY_THROTTLE_INTERVAL_NANOS - 100;
         assertTrue(mSatelliteAccessControllerUT.allowLocationQueryForSatelliteAllowedCheck());
     }
 
@@ -994,7 +1014,7 @@ public class SatelliteAccessControllerTest {
 
         // Captor and Verify if the mockReceiver and mocContext is registered well
         verify(mMockContext).registerReceiver(mLocationBroadcastReceiverCaptor.capture(),
-                 mIntentFilterCaptor.capture());
+                mIntentFilterCaptor.capture());
         assertSame(mSatelliteAccessControllerUT.getLocationBroadcastReceiver(),
                 mLocationBroadcastReceiverCaptor.getValue());
         assertSame(MODE_CHANGED_ACTION, mIntentFilterCaptor.getValue().getAction(0));
@@ -1029,6 +1049,114 @@ public class SatelliteAccessControllerTest {
         verify(mMockLocationManager, times(1)).isLocationEnabled();
         mTestableLooper.processAllMessages();
         assertEquals(false, mSatelliteAccessControllerUT.isSatelliteAllowedRegionPossiblyChanged());
+    }
+
+    @Test
+    public void testCheckSatelliteAccessRestrictionUsingGPS() {
+        // In emergency case,
+        // verify if the location manager get FUSED provider and ignore location settings
+        doReturn(true).when(mMockTelecomManager).isInEmergencyCall();
+        mSatelliteAccessControllerUT.setLocationRequestCancellationSignalAsNull();
+        mSatelliteAccessControllerUT.queryCurrentLocation();
+
+        verify(mMockLocationManager, times(1))
+                .getCurrentLocation(mLocationProviderStringCaptor.capture(),
+                        mLocationRequestCaptor.capture(), any(), any(), any());
+        assertEquals(LocationManager.FUSED_PROVIDER, mLocationProviderStringCaptor.getValue());
+        assertTrue(mLocationRequestCaptor.getValue().isLocationSettingsIgnored());
+
+        // In non-emergency case,
+        // verify if the location manager get FUSED provider and not ignore location settings
+        clearInvocations(mMockLocationManager);
+        doReturn(false).when(mMockTelecomManager).isInEmergencyCall();
+        doReturn(false).when(mMockPhone).isInEcm();
+        doReturn(false).when(mMockPhone2).isInEcm();
+        doReturn(false).when(mMockSatelliteController).isInEmergencyMode();
+        mSatelliteAccessControllerUT.setLocationRequestCancellationSignalAsNull();
+        mSatelliteAccessControllerUT.queryCurrentLocation();
+
+        verify(mMockLocationManager, times(1))
+                .getCurrentLocation(mLocationProviderStringCaptor.capture(),
+                        mLocationRequestCaptor.capture(), any(), any(), any());
+        assertEquals(LocationManager.FUSED_PROVIDER, mLocationProviderStringCaptor.getValue());
+        assertFalse(mLocationRequestCaptor.getValue().isLocationSettingsIgnored());
+    }
+
+    @Test
+    public void testHandleIsSatelliteSupportedResult() throws Exception {
+        // Setup for this test case
+        Iterator<ResultReceiver> mockIterator = mock(Iterator.class);
+        doReturn(mockIterator).when(mMockSatelliteAllowResultReceivers).iterator();
+        doReturn(true, false).when(mockIterator).hasNext();
+        doReturn(mMockSatelliteSupportedResultReceiver).when(mockIterator).next();
+
+        replaceInstance(SatelliteAccessController.class, "mSatelliteAllowResultReceivers",
+                mSatelliteAccessControllerUT, mMockSatelliteAllowResultReceivers);
+        doNothing().when(mMockSatelliteAllowResultReceivers).clear();
+
+        // case that resultCode is not SATELLITE_RESULT_SUCCESS
+        int resultCode = SATELLITE_RESULT_ERROR;
+        Bundle bundle = new Bundle();
+        doReturn(true, false).when(mockIterator).hasNext();
+        clearInvocations(mMockSatelliteSupportedResultReceiver);
+        mSatelliteAccessControllerUT.handleIsSatelliteSupportedResult(resultCode, bundle);
+        verify(mMockSatelliteSupportedResultReceiver)
+                .send(mResultCodeIntCaptor.capture(), any());
+        assertEquals(Integer.valueOf(SATELLITE_RESULT_ERROR), mResultCodeIntCaptor.getValue());
+
+        // case no KEY_SATELLITE_SUPPORTED in the bundle data.
+        // verify that the resultCode is delivered as it were
+        resultCode = SATELLITE_RESULT_SUCCESS;
+        bundle.putBoolean(KEY_SATELLITE_PROVISIONED, false);
+        doReturn(true, false).when(mockIterator).hasNext();
+        clearInvocations(mMockSatelliteSupportedResultReceiver);
+        mSatelliteAccessControllerUT.handleIsSatelliteSupportedResult(resultCode, bundle);
+        verify(mMockSatelliteSupportedResultReceiver)
+                .send(mResultCodeIntCaptor.capture(), any());
+        assertEquals(Integer.valueOf(SATELLITE_RESULT_SUCCESS), mResultCodeIntCaptor.getValue());
+
+        // case KEY_SATELLITE_SUPPORTED is false
+        // verify SATELLITE_RESULT_NOT_SUPPORTED is captured
+        bundle.putBoolean(KEY_SATELLITE_SUPPORTED, false);
+        doReturn(true, false).when(mockIterator).hasNext();
+        clearInvocations(mMockSatelliteSupportedResultReceiver);
+        mSatelliteAccessControllerUT.handleIsSatelliteSupportedResult(resultCode, bundle);
+        verify(mMockSatelliteSupportedResultReceiver)
+                .send(mResultCodeIntCaptor.capture(), mResultDataBundleCaptor.capture());
+        assertEquals(Integer.valueOf(SATELLITE_RESULT_NOT_SUPPORTED),
+                mResultCodeIntCaptor.getValue());
+        assertEquals(false,
+                mResultDataBundleCaptor.getValue().getBoolean(KEY_SATELLITE_COMMUNICATION_ALLOWED));
+
+        // case KEY_SATELLITE_SUPPORTED is success and region is not allowed
+        // verify SATELLITE_RESULT_SUCCESS is captured
+        bundle.putBoolean(KEY_SATELLITE_SUPPORTED, true);
+        when(mMockCountryDetector.getCurrentNetworkCountryIso())
+                .thenReturn(List.of(TEST_SATELLITE_COUNTRY_CODE_KR));
+        doReturn(true, false).when(mockIterator).hasNext();
+        clearInvocations(mMockSatelliteSupportedResultReceiver);
+        mSatelliteAccessControllerUT.handleIsSatelliteSupportedResult(resultCode, bundle);
+        verify(mMockSatelliteSupportedResultReceiver)
+                .send(mResultCodeIntCaptor.capture(), mResultDataBundleCaptor.capture());
+        assertEquals(Integer.valueOf(SATELLITE_RESULT_SUCCESS),
+                mResultCodeIntCaptor.getValue());
+        assertEquals(false,
+                mResultDataBundleCaptor.getValue().getBoolean(KEY_SATELLITE_COMMUNICATION_ALLOWED));
+
+        // case KEY_SATELLITE_SUPPORTED is success and locationManager is disabled
+        // verify SATELLITE_RESULT_LOCATION_DISABLED is captured
+        when(mMockCountryDetector.getCurrentNetworkCountryIso())
+                .thenReturn(List.of(TEST_SATELLITE_COUNTRY_CODE_US));
+        doReturn(false).when(mMockLocationManager).isLocationEnabled();
+        doReturn(true, false).when(mockIterator).hasNext();
+        clearInvocations(mMockSatelliteSupportedResultReceiver);
+        mSatelliteAccessControllerUT.handleIsSatelliteSupportedResult(resultCode, bundle);
+        verify(mMockSatelliteSupportedResultReceiver)
+                .send(mResultCodeIntCaptor.capture(), mResultDataBundleCaptor.capture());
+        assertEquals(Integer.valueOf(SATELLITE_RESULT_LOCATION_DISABLED),
+                mResultCodeIntCaptor.getValue());
+        assertEquals(false,
+                mResultDataBundleCaptor.getValue().getBoolean(KEY_SATELLITE_COMMUNICATION_ALLOWED));
     }
 
     private void sendSatelliteCommunicationAllowedEvent() {
@@ -1114,7 +1242,7 @@ public class SatelliteAccessControllerTest {
             ResultReceiver resultReceiver = invocation.getArgument(0);
             if (error == SATELLITE_RESULT_SUCCESS) {
                 Bundle bundle = new Bundle();
-                bundle.putBoolean(SatelliteManager.KEY_SATELLITE_PROVISIONED,
+                bundle.putBoolean(KEY_SATELLITE_PROVISIONED,
                         isSatelliteProvisioned);
                 resultReceiver.send(error, bundle);
             } else {
@@ -1213,6 +1341,12 @@ public class SatelliteAccessControllerTest {
 
         public BroadcastReceiver getLocationBroadcastReceiver() {
             return mLocationModeChangedBroadcastReceiver;
+        }
+
+        public void setLocationRequestCancellationSignalAsNull() {
+            synchronized (mLock) {
+                mLocationRequestCancellationSignal = null;
+            }
         }
     }
 }
