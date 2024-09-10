@@ -1344,7 +1344,10 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             return new PersistableBundle();
         }
 
-        enforceTelephonyFeatureWithException(callingPackage, "getConfigForSubIdWithFeature");
+        if (!mContext.getResources().getBoolean(
+                com.android.internal.R.bool.config_force_phone_globals_creation)) {
+            enforceTelephonyFeatureWithException(callingPackage, "getConfigForSubIdWithFeature");
+        }
 
         int phoneId = SubscriptionManager.getPhoneId(subscriptionId);
         PersistableBundle retConfig = CarrierConfigManager.getDefaultConfig();
@@ -1494,10 +1497,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         if (!SubscriptionManager.isValidPhoneId(phoneId)) {
             final String msg =
                     "Ignore invalid phoneId: " + phoneId + " for subId: " + subscriptionId;
-            if (mFeatureFlags.addAnomalyWhenNotifyConfigChangedWithInvalidPhone()) {
-                AnomalyReporter.reportAnomaly(
-                        UUID.fromString(UUID_NOTIFY_CONFIG_CHANGED_WITH_INVALID_PHONE), msg);
-            }
+            AnomalyReporter.reportAnomaly(
+                    UUID.fromString(UUID_NOTIFY_CONFIG_CHANGED_WITH_INVALID_PHONE), msg);
             logd(msg);
             throw new IllegalArgumentException(msg);
         }
