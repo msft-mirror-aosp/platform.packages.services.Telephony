@@ -377,9 +377,9 @@
     <item msgid="6685082338652847671">"7"</item>
   </string-array>
     <string name="list_language_dtitle" msgid="7457017255633587047">"Мовы"</string>
-    <string name="enable_disable_local_weather" msgid="7734933941872511543">"Мясцовае надвор\'е"</string>
-    <string name="local_weather_enable" msgid="2143929735295254729">"Мясцовае надвор\'е ўключана"</string>
-    <string name="local_weather_disable" msgid="4209936355998349647">"Мясцовае надвор\'е адключана"</string>
+    <string name="enable_disable_local_weather" msgid="7734933941872511543">"Мясцовае надвор’е"</string>
+    <string name="local_weather_enable" msgid="2143929735295254729">"Мясцовае надвор’е ўключана"</string>
+    <string name="local_weather_disable" msgid="4209936355998349647">"Мясцовае надвор’е адключана"</string>
     <string name="enable_disable_atr" msgid="821714821057385390">"Мясцовыя транспартныя паведамленні"</string>
     <string name="atr_enable" msgid="1799097759998768186">"Мясцовыя транспартныя паведамленні ўключаны"</string>
     <string name="atr_disable" msgid="6456758173289065766">"Мясцовыя транспартныя паведамленні адключаны"</string>
@@ -682,7 +682,7 @@
     <string name="status_hint_label_wifi_call" msgid="942993035689809853">"Выклік праз Wi-Fi"</string>
     <string name="message_decode_error" msgid="1061856591500290887">"Памылка расшыфравання паведамлення."</string>
     <string name="callFailed_cdma_activation" msgid="5392057031552253550">"SIM-карта актывавала вашу службу і абнавіла функцыі роўмінгу вашага тэлефона."</string>
-    <string name="callFailed_cdma_call_limit" msgid="1074219746093031412">"Занадта шмат актыўных выклікаў. Скончыце ці аб\'яднайце існуючыя выклікі, перш чым рабіць новы выклік."</string>
+    <string name="callFailed_cdma_call_limit" msgid="1074219746093031412">"Занадта шмат актыўных выклікаў. Скончыце ці аб’яднайце існуючыя выклікі, перш чым рабіць новы выклік."</string>
     <string name="callFailed_imei_not_accepted" msgid="7257903653685147251">"Немагчыма падключыцца, устаўце сапраўдную SIM-карту."</string>
     <string name="callFailed_wifi_lost" msgid="1788036730589163141">"Страчана падключэнне да Wi-Fi. Выклік завершаны."</string>
     <string name="dialFailed_low_battery" msgid="6857904237423407056">"Немагчыма наладзіць злучэнне для відэавыкліку: нізкі зарад акумулятара."</string>
