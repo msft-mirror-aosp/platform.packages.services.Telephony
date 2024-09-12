@@ -32,14 +32,12 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.PersistableBundle;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Telephony;
@@ -1326,12 +1324,8 @@ public class TelecomAccountRegistry {
      */
     public static synchronized TelecomAccountRegistry getInstance(Context context) {
         if (sInstance == null && context != null) {
-            int vendorApiLevel = SystemProperties.getInt("ro.vendor.api_level",
-                    Build.VERSION.DEVICE_INITIAL_SDK_INT);
-            PackageManager pm = context.getPackageManager();
-
-            if (Flags.enforceTelephonyFeatureMappingForPublicApis()
-                    && vendorApiLevel >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
+            if (Flags.enforceTelephonyFeatureMappingForPublicApis()) {
+                PackageManager pm = context.getPackageManager();
                 if (pm != null && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
                         && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING)) {
                     sInstance = new TelecomAccountRegistry(context);
@@ -1340,14 +1334,7 @@ public class TelecomAccountRegistry {
                             + "missing telephony/calling feature(s)");
                 }
             } else {
-                // One of features is defined, create instance
-                if (pm != null && (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
-                        || pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING))) {
-                    sInstance = new TelecomAccountRegistry(context);
-                } else {
-                    Log.d(LOG_TAG, "Not initializing TelecomAccountRegistry: "
-                            + "missing telephony or calling feature(s)");
-                }
+                sInstance = new TelecomAccountRegistry(context);
             }
         }
         return sInstance;
