@@ -925,8 +925,7 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
                 requestScan(true);
                 return;
             }
-            // If NGRAN, request scan to trigger emergency registration.
-            if (mPsNetworkType == EUTRAN) {
+            if (mPsNetworkType != UNKNOWN) {
                 onWwanNetworkTypeSelected(mPsNetworkType);
             } else if (mCsNetworkType != UNKNOWN) {
                 checkAndSetTerminateAfterCsFailure(mLastRegResult);
@@ -1344,13 +1343,19 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
 
         int accessNetwork = regResult.getAccessNetwork();
         List<Integer> ratList = getImsNetworkTypeConfiguration();
+        if (!inService && !ratList.contains(NGRAN) && !isSimReady()
+                && !TextUtils.isEmpty(regResult.getCountryIso())) {
+            ratList.add(NGRAN);
+            logi("getSelectablePsNetworkType ratList=" + ratList);
+        }
         if (ratList.contains(accessNetwork)) {
             if (mIsEmergencyBarred) {
                 logi("getSelectablePsNetworkType barred");
                 return UNKNOWN;
             }
             if (accessNetwork == NGRAN) {
-                return (regResult.getNwProvidedEmc() > 0 && regResult.isVopsSupported())
+                return (regResult.getNwProvidedEmc() > 0
+                        && (regResult.isVopsSupported() || !inService))
                         ? NGRAN : UNKNOWN;
             } else if (accessNetwork == EUTRAN) {
                 return (regResult.isEmcBearerSupported()
@@ -1487,6 +1492,16 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         for (int i = 0; i < rats.length; i++) {
             ratList.add(rats[i]);
         }
+
+        // Prefer LTE if UE is located in non-NR coverage.
+        if (ratList.contains(NGRAN) && mLastRegResult != null
+                && mLastRegResult.getAccessNetwork() != UNKNOWN
+                && mLastRegResult.getAccessNetwork() != NGRAN
+                && !TextUtils.isEmpty(mLastRegResult.getCountryIso())) {
+            ratList.remove(Integer.valueOf(NGRAN));
+            ratList.add(NGRAN);
+        }
+
         return ratList;
     }
 
@@ -1825,13 +1840,26 @@ public class EmergencyCallDomainSelector extends DomainSelectorBase
         logi("notifyCrossStackTimerExpired");
 
         mCrossStackTimerExpired = true;
-        if (mDomainSelected && !hangupOngoingDialing()) {
+        boolean isHangupOngoingDialing = hangupOngoingDialing();
+        if (mDomainSelected && !isHangupOngoingDialing) {
             // When reselecting domain, terminateSelection will be called.
             return;
         }
         mIsWaitingForDataDisconnection = false;
         removeMessages(MSG_WAIT_DISCONNECTION_TIMEOUT);
-        terminateSelectionForCrossSimRedialing(false);
+        terminateSelectionForCrossSimRedialing(isHangupOngoingDialing);
+    }
+
+    /**
+     * If another slot has already permanently failed,
+     * and IMS REG is not completed in the current slot, hang up the ongoing call.
+     */
+    public void maybeHangupOngoingDialing() {
+        logi("maybeHangupOngoingDialing");
+
+        if (mDomainSelected && hangupOngoingDialing()) {
+            notifyCrossStackTimerExpired();
+        }
     }
 
     private boolean hangupOngoingDialing() {
