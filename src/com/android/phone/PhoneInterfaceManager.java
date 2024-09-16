@@ -3673,9 +3673,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return null;
         }
 
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_GSM, "getImeiForSlot");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             return phone.getImei();
@@ -3692,9 +3689,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             throw new SecurityException("Caller does not have permission");
         }
 
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_GSM, "getPrimaryImei");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             for (Phone phone : PhoneFactory.getPhones()) {
@@ -3710,9 +3704,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public String getTypeAllocationCodeForSlot(int slotIndex) {
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_GSM, "getTypeAllocationCodeForSlot");
-
         Phone phone = PhoneFactory.getPhone(slotIndex);
         String tac = null;
         if (phone != null) {
