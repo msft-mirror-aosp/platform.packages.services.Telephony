@@ -37,11 +37,17 @@
             android:textSize="20dp"
             android:text="Satellite Control APIs"/>
         <Button
-            android:id="@+id/enableSatellite"
+            android:id="@+id/enableSatelliteDemoMode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:paddingRight="4dp"
-            android:text="@string/enableSatellite"/>
+            android:text="@string/enableSatelliteDemoMode"/>
+        <Button
+            android:id="@+id/enableSatelliteRealMode"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingRight="4dp"
+            android:text="@string/enableSatelliteRealMode"/>
         <Button
             android:id="@+id/disableSatellite"
             android:layout_width="match_parent"
