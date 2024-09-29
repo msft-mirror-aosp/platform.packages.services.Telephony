@@ -187,6 +187,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             "set-satellite-gateway-service-package-name";
     private static final String SET_SATELLITE_LISTENING_TIMEOUT_DURATION =
             "set-satellite-listening-timeout-duration";
+    private static final String SET_SATELLITE_IGNORE_CELLULAR_SERVICE_STATE =
+            "set-satellite-ignore-cellular-service-state";
     private static final String SET_SATELLITE_POINTING_UI_CLASS_NAME =
             "set-satellite-pointing-ui-class-name";
     private static final String SET_DATAGRAM_CONTROLLER_TIMEOUT_DURATION =
@@ -400,6 +402,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSetSatelliteGatewayServicePackageNameCommand();
             case SET_SATELLITE_LISTENING_TIMEOUT_DURATION:
                 return handleSetSatelliteListeningTimeoutDuration();
+            case SET_SATELLITE_IGNORE_CELLULAR_SERVICE_STATE:
+                return handleSetSatelliteIgnoreCellularServiceState();
             case SET_SATELLITE_POINTING_UI_CLASS_NAME:
                 return handleSetSatellitePointingUiClassNameCommand();
             case SET_DATAGRAM_CONTROLLER_TIMEOUT_DURATION:
@@ -3348,6 +3352,37 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             getOutPrintWriter().println(result);
         } catch (RemoteException e) {
             Log.w(LOG_TAG, "setSatelliteListeningTimeoutDuration: " + timeoutMillis
+                    + ", error = " + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleSetSatelliteIgnoreCellularServiceState() {
+        PrintWriter errPw = getErrPrintWriter();
+        boolean enabled = false;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-d": {
+                    enabled = Boolean.parseBoolean(getNextArgRequired());
+                    break;
+                }
+            }
+        }
+        Log.d(LOG_TAG, "handleSetSatelliteIgnoreCellularServiceState: enabled =" + enabled);
+
+        try {
+            boolean result = mInterface.setSatelliteIgnoreCellularServiceState(enabled);
+            if (VDBG) {
+                Log.v(LOG_TAG, "handleSetSatelliteIgnoreCellularServiceState " + enabled
+                        + ", result = " + result);
+            }
+            getOutPrintWriter().println(result);
+        } catch (RemoteException e) {
+            Log.w(LOG_TAG, "handleSetSatelliteIgnoreCellularServiceState: " + enabled
                     + ", error = " + e.getMessage());
             errPw.println("Exception: " + e.getMessage());
             return -1;
