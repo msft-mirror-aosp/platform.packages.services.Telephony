@@ -7746,6 +7746,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public List<String> getPackagesWithCarrierPrivileges(int phoneId) {
         enforceReadPrivilegedPermission("getPackagesWithCarrierPrivileges");
+
+        enforceTelephonyFeatureWithException(
+                getCurrentPackageName(),
+                PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION,
+                "getPackagesWithCarrierPrivileges");
+
         Phone phone = PhoneFactory.getPhone(phoneId);
         if (phone == null) {
             return Collections.emptyList();
@@ -14504,5 +14510,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public ComponentName getTestEuiccUiComponent() {
         enforceReadPrivilegedPermission("getTestEuiccUiComponent");
         return mTestEuiccUiComponent;
+    }
+
+    /**
+     * This API can be used only for test purpose to override the carrier roaming Ntn eligibility
+     *
+     * @param state        to update Ntn Eligibility.
+     * @param resetRequired to reset the overridden flag in satellite controller.
+     * @return {@code true} if the shell command is successful, {@code false} otherwise.
+     */
+    public boolean overrideCarrierRoamingNtnEligibilityChanged(boolean state,
+            boolean resetRequired) {
+        return mSatelliteAccessController.overrideCarrierRoamingNtnEligibilityChanged(state,
+                resetRequired);
     }
 }
