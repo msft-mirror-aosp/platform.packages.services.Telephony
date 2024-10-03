@@ -94,6 +94,8 @@ public class SatelliteControl extends Activity {
                 .setOnClickListener(this::requestSatelliteSubscriberProvisionStatusApp);
         findViewById(R.id.provisionSatellite)
                 .setOnClickListener(this::provisionSatelliteApp);
+        findViewById(R.id.deprovisionSatellite)
+                .setOnClickListener(this::deprovisionSatelliteApp);
         findViewById(R.id.Back).setOnClickListener(new OnClickListener() {
             @Override
             public void onClick(View view) {
@@ -459,5 +461,37 @@ public class SatelliteControl extends Activity {
             list.add(status.getSatelliteSubscriberInfo());
         }
         mSatelliteManager.provisionSatellite(list, Runnable::run, receiver);
+    }
+
+    private void deprovisionSatelliteApp(View view) {
+        final AtomicReference<Boolean> enabled = new AtomicReference<>();
+        final AtomicReference<Integer> errorCode = new AtomicReference<>();
+        OutcomeReceiver<Boolean, SatelliteManager.SatelliteException> receiver =
+                new OutcomeReceiver<>() {
+                    @Override
+                    public void onResult(Boolean result) {
+                        enabled.set(result);
+                        TextView textView = findViewById(R.id.text_id);
+                        if (enabled.get()) {
+                            textView.setText("deprovisionSatellite is true");
+                        } else {
+                            textView.setText("Status for deprovisionSatellite result : "
+                                    + enabled.get());
+                        }
+                    }
+
+                    @Override
+                    public void onError(SatelliteManager.SatelliteException exception) {
+                        errorCode.set(exception.getErrorCode());
+                        TextView textView = findViewById(R.id.text_id);
+                        textView.setText("Status for deprovisionSatellite error : "
+                                + SatelliteErrorUtils.mapError(errorCode.get()));
+                    }
+                };
+        List<SatelliteSubscriberInfo> list = new ArrayList<>();
+        for (SatelliteSubscriberProvisionStatus status : mSatelliteSubscriberProvisionStatuses) {
+            list.add(status.getSatelliteSubscriberInfo());
+        }
+        mSatelliteManager.deprovisionSatellite(list, Runnable::run, receiver);
     }
 }
