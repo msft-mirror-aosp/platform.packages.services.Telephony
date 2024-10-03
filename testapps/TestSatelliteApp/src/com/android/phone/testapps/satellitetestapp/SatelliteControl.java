@@ -35,6 +35,7 @@ import android.widget.TextView;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import android.util.Log;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -44,7 +45,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class SatelliteControl extends Activity {
 
-    private static final long TIMEOUT = 3000;
+    private static final long TIMEOUT = TimeUnit.SECONDS.toMillis(3);
 
     private SatelliteManager mSatelliteManager;
     private SubscriptionManager mSubscriptionManager;
@@ -110,18 +111,24 @@ public class SatelliteControl extends Activity {
                         .setEmergencyMode(true)
                         .build(), Runnable::run, error::offer);
         TextView textView = findViewById(R.id.text_id);
+        Log.d("SatelliteTestApp", "enableSatelliteApp: isDemoMode=" + isDemoMode);
         try {
             Integer value = error.poll(TIMEOUT, TimeUnit.MILLISECONDS);
             if (value == null) {
                 textView.setText("Timed out to enable the satellite");
+                Log.d("SatelliteTestApp", "Timed out to enable the satellite");
             } else if (value != SatelliteResult.SATELLITE_RESULT_SUCCESS) {
                 textView.setText("Failed to enable the satellite, error ="
                         + SatelliteErrorUtils.mapError(value));
+                Log.d("SatelliteTestApp", "Failed to enable the satellite, error ="
+                        + SatelliteErrorUtils.mapError(value));
             } else {
                 textView.setText("Successfully enabled the satellite");
+                Log.d("SatelliteTestApp", "Successfully enabled the satellite");
             }
         } catch (InterruptedException e) {
             textView.setText("Enable SatelliteService exception caught =" + e);
+            Log.d("SatelliteTestApp", "Enable SatelliteService exception caught =" + e);
         }
     }
 
