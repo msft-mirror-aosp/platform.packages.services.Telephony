@@ -14444,6 +14444,26 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     /**
+     * Deliver the list of deprovisioned satellite subscriber ids.
+     *
+     * @param list List of deprovisioned satellite subscriber ids.
+     * @param result The result receiver that returns whether deliver success or fail.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void deprovisionSatellite(@NonNull List<SatelliteSubscriberInfo> list,
+            @NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("deprovisionSatellite");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.deprovisionSatellite(list, result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
      * This API can be used by only CTS to override the cached value for the device overlay config
      * value :
      * config_satellite_gateway_service_package and
