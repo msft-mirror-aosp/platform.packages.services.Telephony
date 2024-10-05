@@ -3679,9 +3679,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             return null;
         }
 
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_GSM, "getImeiForSlot");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             return phone.getImei();
@@ -3698,9 +3695,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             throw new SecurityException("Caller does not have permission");
         }
 
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_GSM, "getPrimaryImei");
-
         final long identity = Binder.clearCallingIdentity();
         try {
             for (Phone phone : PhoneFactory.getPhones()) {
@@ -3716,9 +3710,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public String getTypeAllocationCodeForSlot(int slotIndex) {
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_GSM, "getTypeAllocationCodeForSlot");
-
         Phone phone = PhoneFactory.getPhone(slotIndex);
         String tac = null;
         if (phone != null) {
@@ -11709,10 +11700,10 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     @Override
     public boolean setBoundGbaServiceOverride(int subId, String packageName) {
         enforceModifyPermission();
-
+        int userId = ActivityManager.getCurrentUser();
         final long identity = Binder.clearCallingIdentity();
         try {
-            return getGbaManager(subId).overrideServicePackage(packageName);
+            return getGbaManager(subId).overrideServicePackage(packageName, userId);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
@@ -14447,6 +14438,26 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             mSatelliteController.provisionSatellite(list, result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Deliver the list of deprovisioned satellite subscriber ids.
+     *
+     * @param list List of deprovisioned satellite subscriber ids.
+     * @param result The result receiver that returns whether deliver success or fail.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void deprovisionSatellite(@NonNull List<SatelliteSubscriberInfo> list,
+            @NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("deprovisionSatellite");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.deprovisionSatellite(list, result);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
