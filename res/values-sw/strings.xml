@@ -562,7 +562,7 @@
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Mmiliki"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Gusa tena ili uangalie maelezo"</string>
     <string name="emergency_enable_radio_dialog_title" msgid="2667568200755388829">"Simu ya dharura"</string>
-    <string name="single_emergency_number_title" msgid="8413371079579067196">"Nambari ya dharura"</string>
+    <string name="single_emergency_number_title" msgid="8413371079579067196">"Namba ya dharura"</string>
     <string name="numerous_emergency_numbers_title" msgid="8972398932506755510">"Nambari za dharura"</string>
     <string name="emergency_call_shortcut_hint" msgid="1290485125107779500">"Gusa tena ili upige <xliff:g id="EMERGENCY_NUMBER">%s</xliff:g>"</string>
     <string name="emergency_enable_radio_dialog_message" msgid="1695305158151408629">"Inawasha redio..."</string>

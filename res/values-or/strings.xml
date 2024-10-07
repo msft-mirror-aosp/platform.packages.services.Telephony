@@ -620,7 +620,7 @@
     <string name="ota_hfa_activation_dialog_message" msgid="7921718445773342996">"ଏହି ଫୋନ୍‌ ଆପଣଙ୍କର ମୋବାଇଲ୍‌ ଡାଟା ସେବାକୁ ସକ୍ରିୟ କରୁଛି। \n\nଏଥି ପାଇଁ ପ୍ରାୟ 5 ମିନିଟ୍‌ ସମୟ ଲାଗିପାରେ।"</string>
     <string name="ota_skip_activation_dialog_title" msgid="7666611236789203797">"ସକ୍ରିୟ କରିବା ଛାଡ଼ିଯିବେ?"</string>
     <string name="ota_skip_activation_dialog_message" msgid="6691722887019708713">"ଯଦି ଆପଣ ସକ୍ରିୟ କରିବା କାର୍ଯ୍ୟକୁ ଛାଡ଼ିଯା’ନ୍ତି ତେବେ ଆପଣ କଲ୍ କରିପାରିବେ ନାହିଁ କିମ୍ବା ମୋବାଇଲ୍ ନେଟ୍‌ୱର୍କ (ଯଦିଓ ଆପଣ ୱାଇ-ଫାଇ ନେଟ୍‌ୱର୍କ ସହିତ ଯୋଡ଼ିହୋ‌ଇପାରିବେ) ସହିତ ଯୋଡ଼ିହୋ‌ଇପାରିବେ ନାହିଁ। ଆପଣ ନିଜର ଫୋନ୍‌କୁ ସକ୍ରିୟ ନକରିବା ପର୍ଯ୍ୟନ୍ତ ପ୍ରତ୍ୟେକଥର ଏହାକୁ ଚାଲୁ କରିବା ସମୟରେ ସକ୍ରିୟ କରିବା ପାଇଁ କୁହାଯିବ।"</string>
-    <string name="ota_skip_activation_dialog_skip_label" msgid="5908029466817825633">"ଛାଡ଼ିଦିଅନ୍ତୁ"</string>
+    <string name="ota_skip_activation_dialog_skip_label" msgid="5908029466817825633">"ବାଦ ଦିଅନ୍ତୁ"</string>
     <string name="ota_activate" msgid="7939695753665438357">"ସକ୍ରିୟ କରନ୍ତୁ"</string>
     <string name="ota_title_activate_success" msgid="1272135024761004889">"ଫୋନ୍ ସକ୍ରିୟ ହୋ‌ଇଯାଇଛି।"</string>
     <string name="ota_title_problem_with_activation" msgid="7019745985413368726">"ସକ୍ରିୟ ହେବାରେ ସମସ୍ୟା"</string>

@@ -305,7 +305,7 @@
     <string name="keywords_carrier_settings_euicc" msgid="8540160967922063745">"이동통신사, esim, sim, euicc, 이동통신사 전환, 이동통신사 추가"</string>
     <string name="carrier_settings_euicc_summary" msgid="2027941166597330117">"<xliff:g id="CARRIER_NAME">%1$s</xliff:g> — <xliff:g id="PHONE_NUMBER">%2$s</xliff:g>"</string>
     <string name="mobile_data_settings_title" msgid="7228249980933944101">"모바일 데이터"</string>
-    <string name="mobile_data_settings_summary" msgid="5012570152029118471">"모바일 네트워크를 사용하여 데이터 액세스"</string>
+    <string name="mobile_data_settings_summary" msgid="5012570152029118471">"모바일 네트워크를 사용하여 데이터에 액세스합니다."</string>
     <string name="data_usage_disable_mobile" msgid="5669109209055988308">"모바일 데이터를 사용 중지하시겠습니까?"</string>
     <string name="sim_selection_required_pref" msgid="6985901872978341314">"선택 필요"</string>
     <string name="sim_change_data_title" msgid="9142726786345906606">"데이터 SIM을 변경하시겠습니까?"</string>
