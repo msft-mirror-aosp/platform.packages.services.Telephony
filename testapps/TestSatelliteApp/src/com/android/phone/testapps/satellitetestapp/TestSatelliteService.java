@@ -33,6 +33,7 @@ import android.telephony.satellite.stub.PointingInfo;
 import android.telephony.satellite.stub.SatelliteCapabilities;
 import android.telephony.satellite.stub.SatelliteDatagram;
 import android.telephony.satellite.stub.SatelliteImplBase;
+import android.telephony.satellite.stub.SatelliteModemEnableRequestAttributes;
 import android.telephony.satellite.stub.SatelliteModemState;
 import android.telephony.satellite.stub.SatelliteResult;
 import android.telephony.satellite.stub.SatelliteService;
@@ -59,7 +60,7 @@ public class TestSatelliteService extends SatelliteImplBase {
     private static final int SATELLITE_ALWAYS_VISIBLE = 0;
     /** SatelliteCapabilities constant indicating that the radio technology is proprietary. */
     private static final int[] SUPPORTED_RADIO_TECHNOLOGIES =
-            new int[]{NTRadioTechnology.PROPRIETARY};
+            new int[]{NTRadioTechnology.NB_IOT_NTN};
     /** SatelliteCapabilities constant indicating that pointing to satellite is required. */
     private static final boolean POINTING_TO_SATELLITE_REQUIRED = true;
     /** SatelliteCapabilities constant indicating the maximum number of characters per datagram. */
@@ -184,33 +185,37 @@ public class TestSatelliteService extends SatelliteImplBase {
     }
 
     @Override
-    public void requestSatelliteEnabled(boolean enableSatellite, boolean enableDemoMode,
-            boolean isEmergency, @NonNull IIntegerConsumer errorCallback) {
-        logd("requestSatelliteEnabled: mErrorCode=" + mErrorCode + " enable = " + enableSatellite
-                + " isEmergency=" + isEmergency);
+    public void requestSatelliteEnabled(SatelliteModemEnableRequestAttributes enableAttributes,
+            @NonNull IIntegerConsumer errorCallback) {
+        logd("requestSatelliteEnabled: mErrorCode=" + mErrorCode
+                + ", isEnabled=" + enableAttributes.isEnabled
+                + ", isDemoMode=" + enableAttributes.isDemoMode
+                + ", isEmergency= " + enableAttributes.isEmergencyMode
+                + ", iccId=" + enableAttributes.satelliteSubscriptionInfo.iccId
+                + ", niddApn=" + enableAttributes.satelliteSubscriptionInfo.niddApn);
         if (mErrorCode != SatelliteResult.SATELLITE_RESULT_SUCCESS) {
             runWithExecutor(() -> errorCallback.accept(mErrorCode));
             return;
         }
 
-        if (enableSatellite) {
+        if (enableAttributes.isEnabled) {
             enableSatellite(errorCallback);
         } else {
             disableSatellite(errorCallback);
         }
-        mIsEmergnecy = isEmergency;
+        mIsEmergnecy = enableAttributes.isEmergencyMode;
     }
 
     private void enableSatellite(@NonNull IIntegerConsumer errorCallback) {
         mIsEnabled = true;
-        updateSatelliteModemState(SatelliteModemState.SATELLITE_MODEM_STATE_IDLE);
         runWithExecutor(() -> errorCallback.accept(SatelliteResult.SATELLITE_RESULT_SUCCESS));
+        updateSatelliteModemState(SatelliteModemState.SATELLITE_MODEM_STATE_IN_SERVICE);
     }
 
     private void disableSatellite(@NonNull IIntegerConsumer errorCallback) {
         mIsEnabled = false;
-        updateSatelliteModemState(SatelliteModemState.SATELLITE_MODEM_STATE_OFF);
         runWithExecutor(() -> errorCallback.accept(SatelliteResult.SATELLITE_RESULT_SUCCESS));
+        updateSatelliteModemState(SatelliteModemState.SATELLITE_MODEM_STATE_OFF);
     }
 
     @Override
@@ -489,6 +494,7 @@ public class TestSatelliteService extends SatelliteImplBase {
      * @param modemState The {@link SatelliteModemState} to update.
      */
     private void updateSatelliteModemState(int modemState) {
+        logd("updateSatelliteModemState: new modemState=" + modemState);
         if (modemState == mModemState) {
             return;
         }
