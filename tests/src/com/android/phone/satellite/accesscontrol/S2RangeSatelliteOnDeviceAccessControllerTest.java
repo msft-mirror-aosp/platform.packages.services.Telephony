@@ -21,8 +21,8 @@ import static org.junit.Assert.fail;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 
-import com.android.storage.s2.S2LevelRange;
 import com.android.telephony.sats2range.read.SatS2RangeFileFormat;
+import com.android.telephony.sats2range.read.SuffixTableRange;
 import com.android.telephony.sats2range.utils.TestUtils;
 import com.android.telephony.sats2range.write.SatS2RangeFileWriter;
 
@@ -166,24 +166,24 @@ public class S2RangeSatelliteOnDeviceAccessControllerTest {
     private SatS2RangeFileFormat createSatS2File(
             File file, boolean isAllowedList) throws Exception {
         SatS2RangeFileFormat fileFormat;
-        S2LevelRange range1, range2, range3;
+        SuffixTableRange range1, range2, range3;
         try (SatS2RangeFileWriter satS2RangeFileWriter = SatS2RangeFileWriter.open(
                 file, TestUtils.createS2RangeFileFormat(isAllowedList))) {
             fileFormat = satS2RangeFileWriter.getFileFormat();
 
             // Two ranges that share a prefix.
-            range1 = new S2LevelRange(
+            range1 = new SuffixTableRange(
                     TestUtils.createCellId(fileFormat, 1, 1000, 1000),
                     TestUtils.createCellId(fileFormat, 1, 1000, 2000));
-            range2 = new S2LevelRange(
+            range2 = new SuffixTableRange(
                     TestUtils.createCellId(fileFormat, 1, 1000, 2001),
                     TestUtils.createCellId(fileFormat, 1, 1000, 3000));
             // This range has a different prefix, so will be in a different suffix table.
-            range3 = new S2LevelRange(
+            range3 = new SuffixTableRange(
                     TestUtils.createCellId(fileFormat, 1, 1001, 1000),
                     TestUtils.createCellId(fileFormat, 1, 1001, 2000));
 
-            List<S2LevelRange> ranges = new ArrayList<>();
+            List<SuffixTableRange> ranges = new ArrayList<>();
             ranges.add(range1);
             ranges.add(range2);
             ranges.add(range3);
