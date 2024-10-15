@@ -18,8 +18,8 @@ package com.android.phone.satellite.accesscontrol;
 import android.annotation.NonNull;
 import android.telephony.Rlog;
 
-import com.android.storage.s2.S2LevelRange;
 import com.android.telephony.sats2range.read.SatS2RangeFileReader;
+import com.android.telephony.sats2range.read.SuffixTableRange;
 
 import com.google.common.geometry.S2CellId;
 import com.google.common.geometry.S2LatLng;
@@ -84,7 +84,7 @@ final class S2RangeSatelliteOnDeviceAccessController extends SatelliteOnDeviceAc
     }
 
     private boolean isSatCommunicationAllowedAtLocation(long s2CellId) throws IOException {
-        S2LevelRange entry = mSatS2RangeFileReader.findEntryByCellId(s2CellId);
+        SuffixTableRange entry = mSatS2RangeFileReader.findEntryByCellId(s2CellId);
         if (mSatS2RangeFileReader.isAllowedList()) {
             // The file contains an allowed list of S2 cells. Thus, satellite is allowed if an
             // entry is found
