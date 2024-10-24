@@ -23,6 +23,7 @@ import static android.telephony.TelephonyManager.ENABLE_FEATURE_MAPPING;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.compat.CompatChanges;
 import android.content.BroadcastReceiver;
@@ -899,8 +900,11 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
             mServiceConnection[phoneId] = serviceConnection;
         }
         try {
-            if (mContext.bindService(carrierService, serviceConnection,
-                    Context.BIND_AUTO_CREATE)) {
+            if (mFeatureFlags.supportCarrierServicesForHsum()
+                    ? mContext.bindServiceAsUser(carrierService, serviceConnection,
+                    Context.BIND_AUTO_CREATE, UserHandle.of(ActivityManager.getCurrentUser()))
+                    : mContext.bindService(carrierService, serviceConnection,
+                            Context.BIND_AUTO_CREATE)) {
                 if (eventId == EVENT_CONNECTED_TO_DEFAULT_FOR_NO_SIM_CONFIG) {
                     mServiceBoundForNoSimConfig[phoneId] = true;
                 } else {
@@ -1261,7 +1265,10 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
     @Nullable
     private String getPackageVersion(@NonNull String packageName) {
         try {
-            PackageInfo info = mContext.getPackageManager().getPackageInfo(packageName, 0);
+            PackageInfo info = mFeatureFlags.supportCarrierServicesForHsum()
+                    ? mContext.getPackageManager().getPackageInfoAsUser(packageName, 0,
+                    ActivityManager.getCurrentUser())
+                    : mContext.getPackageManager().getPackageInfo(packageName, 0);
             return Long.toString(info.getLongVersionCode());
         } catch (PackageManager.NameNotFoundException e) {
             return null;
@@ -1497,10 +1504,8 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
         if (!SubscriptionManager.isValidPhoneId(phoneId)) {
             final String msg =
                     "Ignore invalid phoneId: " + phoneId + " for subId: " + subscriptionId;
-            if (mFeatureFlags.addAnomalyWhenNotifyConfigChangedWithInvalidPhone()) {
-                AnomalyReporter.reportAnomaly(
-                        UUID.fromString(UUID_NOTIFY_CONFIG_CHANGED_WITH_INVALID_PHONE), msg);
-            }
+            AnomalyReporter.reportAnomaly(
+                    UUID.fromString(UUID_NOTIFY_CONFIG_CHANGED_WITH_INVALID_PHONE), msg);
             logd(msg);
             throw new IllegalArgumentException(msg);
         }
@@ -1874,9 +1879,16 @@ public class CarrierConfigLoader extends ICarrierConfigLoader.Stub {
      */
     @Nullable
     private String getCurrentPackageName() {
+        if (mFeatureFlags.hsumPackageManager()) {
+            PackageManager pm = mContext.createContextAsUser(Binder.getCallingUserHandle(), 0)
+                    .getPackageManager();
+            if (pm == null) return null;
+            String[] callingPackageNames = pm.getPackagesForUid(Binder.getCallingUid());
+            return (callingPackageNames == null) ? null : callingPackageNames[0];
+        }
         if (mPackageManager == null) return null;
-        String[] callingUids = mPackageManager.getPackagesForUid(Binder.getCallingUid());
-        return (callingUids == null) ? null : callingUids[0];
+        String[] callingPackageNames = mPackageManager.getPackagesForUid(Binder.getCallingUid());
+        return (callingPackageNames == null) ? null : callingPackageNames[0];
     }
 
     /**

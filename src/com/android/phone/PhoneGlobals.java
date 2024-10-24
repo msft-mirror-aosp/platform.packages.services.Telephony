@@ -566,7 +566,8 @@ public class PhoneGlobals extends ContextWrapper {
                 // Initialize EmergencyStateTracker if domain selection is supported
                 boolean isSuplDdsSwitchRequiredForEmergencyCall = getResources()
                         .getBoolean(R.bool.config_gnss_supl_requires_default_data_for_emergency);
-                EmergencyStateTracker.make(this, isSuplDdsSwitchRequiredForEmergencyCall);
+                EmergencyStateTracker.make(this, isSuplDdsSwitchRequiredForEmergencyCall,
+                        mFeatureFlags);
                 DynamicRoutingController.getInstance().initialize(this);
             }
 
@@ -600,7 +601,7 @@ public class PhoneGlobals extends ContextWrapper {
                         }
                     }
                 }
-                RcsProvisioningMonitor.make(this);
+                RcsProvisioningMonitor.make(this, mFeatureFlags);
             }
 
             // Start TelephonyDebugService After the default phone is created.
