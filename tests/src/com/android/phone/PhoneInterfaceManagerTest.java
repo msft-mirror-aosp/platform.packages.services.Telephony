@@ -57,6 +57,7 @@ import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.RILConstants;
 import com.android.internal.telephony.flags.FeatureFlags;
 import com.android.internal.telephony.subscription.SubscriptionManagerService;
+import com.android.phone.satellite.accesscontrol.SatelliteAccessController;
 
 import libcore.junit.util.compat.CoreCompatChangeRule.EnableCompatChanges;
 
@@ -66,6 +67,7 @@ import org.junit.Test;
 import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -107,6 +109,9 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
     public void setUp() throws Exception {
         super.setUp();
         doReturn(sDebugPackageName).when(mPhoneGlobals).getOpPackageName();
+
+        replaceInstance(SatelliteAccessController.class, "sInstance", null,
+                Mockito.mock(SatelliteAccessController.class));
 
         // Note that PhoneInterfaceManager is a singleton. Calling init gives us a handle to the
         // global singleton, but the context that is passed in is unused if the phone app is already
