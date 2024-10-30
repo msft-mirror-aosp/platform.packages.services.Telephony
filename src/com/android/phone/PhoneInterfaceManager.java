@@ -13359,8 +13359,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             @NonNull String token, @NonNull byte[] provisionData,
             @NonNull IIntegerConsumer callback) {
         enforceSatelliteCommunicationPermission("provisionSatelliteService");
-        return mSatelliteController.provisionSatelliteService(token, provisionData,
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return mSatelliteController.provisionSatelliteService(token, provisionData,
                 callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
@@ -13378,7 +13383,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void deprovisionSatelliteService(
             @NonNull String token, @NonNull IIntegerConsumer callback) {
         enforceSatelliteCommunicationPermission("deprovisionSatelliteService");
-        mSatelliteController.deprovisionSatelliteService(token, callback);
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.deprovisionSatelliteService(token, callback);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
