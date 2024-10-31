@@ -434,7 +434,7 @@ public class TelecomAccountRegistry {
             boolean isVideoEnabledByPlatform = ImsManager.getInstance(mPhone.getContext(),
                     mPhone.getPhoneId()).isVtEnabledByPlatform();
 
-            if (!mIsPrimaryUser) {
+            if (!mDoesUserSupportVideoCalling) {
                 Log.i(this, "Disabling video calling for secondary user.");
                 mIsVideoCapable = false;
                 isVideoEnabledByPlatform = false;
@@ -508,14 +508,9 @@ public class TelecomAccountRegistry {
             // Set CAPABILITY_EMERGENCY_CALLS_ONLY flag if either
             // - Carrier config overrides subscription is not voice capable, or
             // - Resource config overrides it be emergency_calls_only
-            // TODO(b/316183370:): merge the two cases when clearing up flag
-            if (Flags.dataOnlyServiceAllowEmergencyCallOnly()) {
-                if (!isSubscriptionVoiceCapableByCarrierConfig()) {
-                    capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
-                }
-            }
-            if (isEmergency && mContext.getResources().getBoolean(
-                    R.bool.config_emergency_account_emergency_calls_only)) {
+            if (!isSubscriptionVoiceCapableByCarrierConfig()
+                    || (isEmergency && mContext.getResources().getBoolean(
+                    R.bool.config_emergency_account_emergency_calls_only))) {
                 capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
             }
 
@@ -1219,7 +1214,7 @@ public class TelecomAccountRegistry {
                 Log.i(this, "TelecomAccountRegistry: User changed, re-registering phone accounts.");
 
                 UserHandle currentUser = intent.getParcelableExtra(Intent.EXTRA_USER);
-                mIsPrimaryUser = currentUser == null ? true : currentUser.isSystem();
+                mDoesUserSupportVideoCalling = currentUser == null ? true : currentUser.isSystem();
 
                 // Any time the user changes, re-register the accounts.
                 tearDownAccounts();
@@ -1292,7 +1287,8 @@ public class TelecomAccountRegistry {
     private int mSubscriptionListenerState = LISTENER_STATE_UNREGISTERED;
     private int mServiceState = ServiceState.STATE_POWER_OFF;
     private int mActiveDataSubscriptionId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-    private boolean mIsPrimaryUser = UserHandle.of(ActivityManager.getCurrentUser()).isSystem();
+    private boolean mDoesUserSupportVideoCalling =
+            UserHandle.of(ActivityManager.getCurrentUser()).isSystem();
     private ExponentialBackoff mRegisterSubscriptionListenerBackoff;
     private ExponentialBackoff mTelecomReadyBackoff;
     private final HandlerThread mHandlerThread = new HandlerThread("TelecomAccountRegistry");
