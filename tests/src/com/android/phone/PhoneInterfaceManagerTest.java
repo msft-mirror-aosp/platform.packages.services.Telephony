@@ -44,11 +44,13 @@ import android.os.Build;
 import android.os.UserHandle;
 import android.permission.flags.Flags;
 import android.platform.test.flag.junit.SetFlagsRule;
+import android.preference.PreferenceManager;
 import android.telephony.RadioAccessFamily;
 import android.telephony.TelephonyManager;
 
 import androidx.test.annotation.UiThreadTest;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.TelephonyTestBase;
 import com.android.internal.telephony.IIntegerConsumer;
@@ -112,6 +114,13 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
         replaceInstance(SatelliteAccessController.class, "sInstance", null,
                 Mockito.mock(SatelliteAccessController.class));
 
+        mSharedPreferences = PreferenceManager.getDefaultSharedPreferences(
+                InstrumentationRegistry.getInstrumentation().getTargetContext());
+        doReturn(mSharedPreferences).when(mPhoneGlobals)
+                .getSharedPreferences(anyString(), anyInt());
+        mSharedPreferences.edit().remove(Phone.PREF_NULL_CIPHER_AND_INTEGRITY_ENABLED).commit();
+        mSharedPreferences.edit().remove(Phone.PREF_NULL_CIPHER_NOTIFICATIONS_ENABLED).commit();
+
         // Note that PhoneInterfaceManager is a singleton. Calling init gives us a handle to the
         // global singleton, but the context that is passed in is unused if the phone app is already
         // alive on a test devices. You must use the spy to mock behavior. Mocks stemming from the
@@ -123,9 +132,6 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
         doReturn(mSubscriptionManagerService).when(mPhoneInterfaceManager)
                 .getSubscriptionManagerService();
         TelephonyManager.setupISubForTest(mSubscriptionManagerService);
-        mSharedPreferences = mPhoneInterfaceManager.getSharedPreferences();
-        mSharedPreferences.edit().remove(Phone.PREF_NULL_CIPHER_AND_INTEGRITY_ENABLED).commit();
-        mSharedPreferences.edit().remove(Phone.PREF_NULL_CIPHER_NOTIFICATIONS_ENABLED).commit();
 
         // In order not to affect the existing implementation, define a telephony features
         // and disabled enforce_telephony_feature_mapping_for_public_apis feature flag
