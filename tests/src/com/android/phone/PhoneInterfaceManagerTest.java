@@ -139,7 +139,9 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
         doReturn(false).when(mFeatureFlags).enforceTelephonyFeatureMappingForPublicApis();
         doReturn(true).when(mFeatureFlags).hsumPackageManager();
         mPhoneInterfaceManager.setPackageManager(mPackageManager);
+        doReturn(mPackageManager).when(mPhoneGlobals).getPackageManager();
         doReturn(true).when(mPackageManager).hasSystemFeature(anyString());
+        doReturn(new String[]{sDebugPackageName}).when(mPackageManager).getPackagesForUid(anyInt());
 
         mPhoneInterfaceManager.setAppOpsManager(mAppOps);
     }
