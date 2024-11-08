@@ -13204,11 +13204,14 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             if (enableSatellite) {
+                String caller = "PIM:requestSatelliteEnabled";
                 ResultReceiver resultReceiver = new ResultReceiver(mMainThreadHandler) {
                     @Override
                     protected void onReceiveResult(int resultCode, Bundle resultData) {
                         Log.d(LOG_TAG, "Satellite access restriction resultCode=" + resultCode
                                 + ", resultData=" + resultData);
+                        mSatelliteController.decrementResultReceiverCount(caller);
+
                         boolean isAllowed = false;
                         Consumer<Integer> result = FunctionalUtils.ignoreRemoteException(
                                 callback::accept);
@@ -13241,6 +13244,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 };
                 mSatelliteAccessController.requestIsCommunicationAllowedForCurrentLocation(
                         resultReceiver, true);
+                mSatelliteController.incrementResultReceiverCount(caller);
             } else {
                 // No need to check if satellite is allowed at current location when disabling
                 // satellite
