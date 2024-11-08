@@ -6641,6 +6641,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * Sets the ImsService Package Name that Telephony will bind to.
      *
      * @param slotIndex the slot ID that the ImsService should bind for.
+     * @param userId the user ID that the ImsService should bind for or {@link UserHandle#USER_NULL}
+     *               if there is no preference.
      * @param isCarrierService true if the ImsService is the carrier override, false if the
      *         ImsService is the device default ImsService.
      * @param featureTypes An integer array of feature types associated with a packageName.
@@ -6648,7 +6650,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *                    with.
      * @return true if setting the ImsService to bind to succeeded, false if it did not.
      */
-    public boolean setBoundImsServiceOverride(int slotIndex, boolean isCarrierService,
+    public boolean setBoundImsServiceOverride(int slotIndex, int userId, boolean isCarrierService,
             int[] featureTypes, String packageName) {
         TelephonyPermissions.enforceShellOnly(Binder.getCallingUid(), "setBoundImsServiceOverride");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
@@ -6660,12 +6662,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 // may happen if the device does not support IMS.
                 return false;
             }
-            Map<Integer, String> featureConfig = new HashMap<>();
-            for (int featureType : featureTypes) {
-                featureConfig.put(featureType, packageName);
-            }
-            return mImsResolver.overrideImsServiceConfiguration(slotIndex, isCarrierService,
-                    featureConfig);
+            return mImsResolver.overrideImsServiceConfiguration(packageName, slotIndex, userId,
+                    isCarrierService, featureTypes);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
