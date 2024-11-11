@@ -21,6 +21,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -28,6 +30,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
+import android.content.res.Resources;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,7 +48,10 @@ import android.test.mock.MockContext;
 import android.util.Log;
 import android.util.SparseArray;
 
+import androidx.test.InstrumentationRegistry;
+
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
@@ -87,6 +94,11 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public AssetManager getAssets() {
+        return Mockito.mock(AssetManager.class);
+    }
+
+    @Override
     public Executor getMainExecutor() {
         // Just run on current thread
         return Runnable::run;
@@ -94,6 +106,11 @@ public class TestContext extends MockContext {
 
     @Override
     public Context getApplicationContext() {
+        return this;
+    }
+
+    @Override
+    public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
         return this;
     }
 
@@ -224,6 +241,11 @@ public class TestContext extends MockContext {
     @Override
     public Handler getMainThreadHandler() {
         return new Handler(Looper.getMainLooper());
+    }
+
+    @Override
+    public Resources.Theme getTheme() {
+        return InstrumentationRegistry.getTargetContext().getTheme();
     }
 
     /**
