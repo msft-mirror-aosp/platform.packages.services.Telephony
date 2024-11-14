@@ -485,8 +485,9 @@ public class SatelliteAccessController extends Handler {
                 }
             }
         };
-        mSatelliteController.registerForSatelliteSupportedStateChanged(
+        int result = mSatelliteController.registerForSatelliteSupportedStateChanged(
                 mInternalSatelliteSupportedStateCallback);
+        plogd("registerForSatelliteSupportedStateChanged result: " + result);
 
         mInternalSatelliteProvisionStateCallback = new ISatelliteProvisionStateCallback.Stub() {
             @Override
@@ -526,8 +527,9 @@ public class SatelliteAccessController extends Handler {
                         + satelliteSubscriberProvisionStatus);
             }
         };
-        mSatelliteController.registerForSatelliteProvisionStateChanged(
+        result = mSatelliteController.registerForSatelliteProvisionStateChanged(
                 mInternalSatelliteProvisionStateCallback);
+        plogd("registerForSatelliteProvisionStateChanged result: " + result);
 
         // Init the SatelliteOnDeviceAccessController so that the S2 level can be cached
         initSatelliteOnDeviceAccessController();
