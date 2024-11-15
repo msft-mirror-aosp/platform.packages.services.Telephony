@@ -169,6 +169,7 @@ public class SatelliteAccessController extends Handler {
     protected static final int EVENT_COUNTRY_CODE_CHANGED = 5;
     protected static final int EVENT_LOCATION_SETTINGS_ENABLED = 6;
     protected static final int CMD_UPDATE_SYSTEM_SELECTION_CHANNELS = 7;
+    protected static final int EVENT_LOCATION_SETTINGS_DISABLED = 8;
 
     public static final int DEFAULT_REGIONAL_SATELLITE_CONFIG_ID = 0;
     public static final int UNKNOWN_REGIONAL_SATELLITE_CONFIG_ID = -1;
@@ -398,6 +399,9 @@ public class SatelliteAccessController extends Handler {
                 if (mLocationManager.isLocationEnabled()) {
                     plogd("Location settings is just enabled");
                     sendRequestAsync(EVENT_LOCATION_SETTINGS_ENABLED, null);
+                } else {
+                    plogd("Location settings is just enabled");
+                    sendRequestAsync(EVENT_LOCATION_SETTINGS_DISABLED, null);
                 }
             }
         }
@@ -632,6 +636,7 @@ public class SatelliteAccessController extends Handler {
                 updateSatelliteConfigData((Context) ar.userObj);
                 break;
             case EVENT_LOCATION_SETTINGS_ENABLED:
+            case EVENT_LOCATION_SETTINGS_DISABLED:
                 // Fall through
             case EVENT_COUNTRY_CODE_CHANGED:
                 handleSatelliteAllowedRegionPossiblyChanged(msg.what);
