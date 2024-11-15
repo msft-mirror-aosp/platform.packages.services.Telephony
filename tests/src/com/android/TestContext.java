@@ -27,6 +27,7 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.Handler;
@@ -272,6 +273,11 @@ public class TestContext extends MockContext {
                 return PackageManager.PERMISSION_DENIED;
             }
         }
+    }
+
+    @Override
+    public void unbindService(ServiceConnection conn) {
+        // Override the base implementation to ensure we don't crash.
     }
 
     public void grantPermission(String permission) {
