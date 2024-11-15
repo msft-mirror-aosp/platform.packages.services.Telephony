@@ -476,6 +476,8 @@ public class SatelliteAccessController extends Handler {
         mNotifySatelliteAvailabilityEnabled =
                 context.getResources().getBoolean(
                         R.bool.config_satellite_should_notify_availability);
+        initializeSatelliteSystemNotification(context);
+        registerDefaultSmsAppChangedBroadcastReceiver(context);
 
         mInternalSatelliteSupportedStateCallback = new ISatelliteSupportedStateCallback.Stub() {
             @Override
@@ -565,9 +567,7 @@ public class SatelliteAccessController extends Handler {
 
         // Init the SatelliteOnDeviceAccessController so that the S2 level can be cached
         initSatelliteOnDeviceAccessController();
-        initializeSatelliteSystemNotification(context);
         registerLocationModeChangedBroadcastReceiver(context);
-        registerDefaultSmsAppChangedBroadcastReceiver(context);
 
         mCarrierConfigManager = context.getSystemService(CarrierConfigManager.class);
         mCarrierConfigChangeListener =
@@ -1403,6 +1403,11 @@ public class SatelliteAccessController extends Handler {
     }
 
     private void showSatelliteSystemNotification() {
+        if (mNotificationManager == null) {
+            logd("showSatelliteSystemNotification: NotificationManager is null");
+            return;
+        }
+
         if (mSatelliteDisallowedReasons.isEmpty()) {
             if (!hasAlreadyNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, 0)) {
                 mNotificationManager.notifyAsUser(
