@@ -575,8 +575,9 @@ public class SatelliteAccessController extends Handler {
 
         mCarrierConfigManager = context.getSystemService(CarrierConfigManager.class);
         mCarrierConfigChangeListener =
-                (slotIndex, subId, carrierId, specificCarrierId) ->
-                        handleCarrierConfigChanged(slotIndex, subId, carrierId, specificCarrierId);
+                (slotIndex, subId, carrierId, specificCarrierId) -> handleCarrierConfigChanged(
+                    context, slotIndex, subId, carrierId, specificCarrierId);
+
         if (mCarrierConfigManager != null) {
             mCarrierConfigManager.registerCarrierConfigChangeListener(
                     new HandlerExecutor(new Handler(looper)), mCarrierConfigChangeListener);
@@ -1230,9 +1231,9 @@ public class SatelliteAccessController extends Handler {
     }
 
     private void registerDefaultSmsAppChangedBroadcastReceiver(Context context) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
+        if (!mFeatureFlags.carrierRoamingNbIotNtn()) {
             plogd("registerDefaultSmsAppChangedBroadcastReceiver: Flag "
-                    + "oemEnabledSatellite is disabled");
+                    + "carrierRoamingNbIotNtn is disabled");
             return;
         }
         IntentFilter intentFilter = new IntentFilter();
@@ -1597,41 +1598,51 @@ public class SatelliteAccessController extends Handler {
                 public void onReceive(Context context, Intent intent) {
                     if (intent.getAction()
                             .equals(Intent.ACTION_PACKAGE_CHANGED)) {
-                        boolean isDefaultMsgAppSupported = false;
-                        ComponentName componentName =
-                                SmsApplication.getDefaultSmsApplicationAsUser(
-                                        context, true, context.getUser());
-                        logd("Current default SMS app:" + componentName);
-                        if (componentName != null) {
-                            String packageName = componentName.getPackageName();
-                            List<String> supportedMsgApps =
-                                    mSatelliteController.getSatelliteSupportedMsgApps(
-                                            mSatelliteController.getSelectedSatelliteSubId());
-                            if (supportedMsgApps.contains(packageName)) {
-                                isDefaultMsgAppSupported = true;
-                            }
-                        } else {
-                            logd("No default SMS app");
-                        }
-
-                        if (isDefaultMsgAppSupported) {
-                            if (mSatelliteDisallowedReasons.contains(Integer.valueOf(
-                                    SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP))) {
-                                mSatelliteDisallowedReasons.remove(Integer.valueOf(
-                                        SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP));
-                                handleEventDisallowedReasonsChanged();
-                            }
-                        } else {
-                            if (!mSatelliteDisallowedReasons.contains(Integer.valueOf(
-                                    SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP))) {
-                                mSatelliteDisallowedReasons.add(Integer.valueOf(
-                                        SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP));
-                                handleEventDisallowedReasonsChanged();
-                            }
-                        }
+                        evaluatePossibleChangeInDefaultSmsApp(context);
                     }
                 }
             };
+
+    private void evaluatePossibleChangeInDefaultSmsApp(@NonNull Context context) {
+        if (!mFeatureFlags.carrierRoamingNbIotNtn()) {
+            plogd("evaluatePossibleChangeInDefaultSmsApp: Flag "
+                    + "carrierRoamingNbIotNtn is disabled");
+            return;
+        }
+
+        boolean isDefaultMsgAppSupported = false;
+        ComponentName componentName = SmsApplication.getDefaultSmsApplicationAsUser(
+                        context, true, context.getUser());
+        plogd("Current default SMS app:" + componentName);
+        if (componentName != null) {
+            String packageName = componentName.getPackageName();
+            List<String> supportedMsgApps =
+                    mSatelliteController.getSatelliteSupportedMsgApps(
+                            mSatelliteController.getSelectedSatelliteSubId());
+            plogd("supportedMsgApps:" + String.join(", ", supportedMsgApps));
+            if (supportedMsgApps.contains(packageName)) {
+                isDefaultMsgAppSupported = true;
+            }
+        } else {
+            plogd("No default SMS app");
+        }
+
+        if (isDefaultMsgAppSupported) {
+            if (mSatelliteDisallowedReasons.contains(Integer.valueOf(
+                    SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP))) {
+                mSatelliteDisallowedReasons.remove(Integer.valueOf(
+                        SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP));
+                handleEventDisallowedReasonsChanged();
+            }
+        } else {
+            if (!mSatelliteDisallowedReasons.contains(Integer.valueOf(
+                    SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP))) {
+                mSatelliteDisallowedReasons.add(Integer.valueOf(
+                        SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP));
+                handleEventDisallowedReasonsChanged();
+            }
+        }
+    }
 
     private void handleSatelliteAllowedRegionPossiblyChanged(int handleEvent) {
         if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
@@ -2519,6 +2530,8 @@ public class SatelliteAccessController extends Handler {
         }
 
         synchronized (mSatelliteDisallowedReasonsLock) {
+            logd("mSatelliteDisallowedReasons:"
+                    + String.join(", ", mSatelliteDisallowedReasons.toString()));
             return mSatelliteDisallowedReasons;
         }
     }
@@ -2820,13 +2833,16 @@ public class SatelliteAccessController extends Handler {
         }
     }
 
-    private void handleCarrierConfigChanged(int slotIndex, int subId,
-            int carrierId, int specificCarrierId) {
+    private void handleCarrierConfigChanged(@NonNull Context context, int slotIndex,
+            int subId, int carrierId, int specificCarrierId) {
         if (!mFeatureFlags.carrierRoamingNbIotNtn()) {
             plogd("handleCarrierConfigChanged: carrierRoamingNbIotNtn flag is disabled");
             return;
         }
+        plogd("handleCarrierConfigChanged: slotIndex=" + slotIndex + ", subId=" + subId
+                + ", carrierId=" + carrierId + ", specificCarrierId=" + specificCarrierId);
         updateSatelliteRegionalConfig(subId);
+        evaluatePossibleChangeInDefaultSmsApp(context);
     }
 
     private void plogv(@NonNull String log) {
