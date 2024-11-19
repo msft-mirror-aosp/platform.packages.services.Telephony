@@ -527,13 +527,13 @@ public class SatelliteAccessController extends Handler {
                         + satelliteSubscriberProvisionStatus);
             }
         };
+        initializeSatelliteSystemNotification(context);
         result = mSatelliteController.registerForSatelliteProvisionStateChanged(
                 mInternalSatelliteProvisionStateCallback);
         plogd("registerForSatelliteProvisionStateChanged result: " + result);
 
         // Init the SatelliteOnDeviceAccessController so that the S2 level can be cached
         initSatelliteOnDeviceAccessController();
-        initializeSatelliteSystemNotification(context);
         registerLocationModeChangedBroadcastReceiver(context);
         registerDefaultSmsAppChangedBroadcastReceiver(context);
     }
@@ -1442,6 +1442,10 @@ public class SatelliteAccessController extends Handler {
         );
         notificationChannel.setSound(null, null);
         mNotificationManager = context.getSystemService(NotificationManager.class);
+        if(mNotificationManager == null) {
+            ploge("initializeSatelliteSystemNotification: notificationManager is null");
+            return;
+        }
         mNotificationManager.createNotificationChannel(notificationChannel);
 
         createAvailableNotifications(context);
