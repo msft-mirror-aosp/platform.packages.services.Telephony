@@ -556,6 +556,7 @@ public class SatelliteAccessController extends Handler {
                         + satelliteSubscriberProvisionStatus);
             }
         };
+        initializeSatelliteSystemNotification(context);
         result = mSatelliteController.registerForSatelliteProvisionStateChanged(
                 mInternalSatelliteProvisionStateCallback);
         plogd("registerForSatelliteProvisionStateChanged result: " + result);
@@ -1402,7 +1403,7 @@ public class SatelliteAccessController extends Handler {
         logd("mSatelliteDisallowedReasons:"
                 + String.join(", ", mSatelliteDisallowedReasons.toString()));
         notifySatelliteDisallowedReasonsChanged();
-        if (mNotifySatelliteAvailabilityEnabled) {
+        if (mFeatureFlags.carrierRoamingNbIotNtn() && mNotifySatelliteAvailabilityEnabled) {
             showSatelliteSystemNotification();
         }
     }
@@ -1525,6 +1526,10 @@ public class SatelliteAccessController extends Handler {
         );
         notificationChannel.setSound(null, null);
         mNotificationManager = context.getSystemService(NotificationManager.class);
+        if(mNotificationManager == null) {
+            ploge("initializeSatelliteSystemNotification: notificationManager is null");
+            return;
+        }
         mNotificationManager.createNotificationChannel(notificationChannel);
 
         createAvailableNotifications(context);
