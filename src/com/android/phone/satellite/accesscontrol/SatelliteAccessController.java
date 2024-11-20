@@ -285,6 +285,8 @@ public class SatelliteAccessController extends Handler {
     private boolean mOverriddenIsSatelliteAllowAccessControl;
     @Nullable
     private File mOverriddenSatelliteS2CellFile;
+    @Nullable
+    private String mOverriddenSatelliteConfigurationFileName;
     private long mOverriddenLocationFreshDurationNanos;
 
     @GuardedBy("mLock")
@@ -331,7 +333,12 @@ public class SatelliteAccessController extends Handler {
 
     /** These are used for CTS test */
     private Path mCtsSatS2FilePath = null;
+    private Path mCtsSatelliteAccessConfigurationFilePath = null;
     protected static final String GOOGLE_US_SAN_SAT_S2_FILE_NAME = "google_us_san_sat_s2.dat";
+    protected static final String GOOGLE_US_SAN_SAT_MTV_S2_FILE_NAME =
+            "google_us_san_mtv_sat_s2.dat";
+    protected static final String SATELLITE_ACCESS_CONFIG_FILE_NAME =
+            "satellite_access_config.json";
 
     /** These are for config updater config data */
     private static final String SATELLITE_ACCESS_CONTROL_DATA_DIR = "satellite_access_control";
@@ -614,8 +621,8 @@ public class SatelliteAccessController extends Handler {
                         mNewRegionalConfigId = null;
                     }
                 }
-                updateRegionalConfigId();
             }
+            updateRegionalConfigId();
         }
     }
 
@@ -759,7 +766,8 @@ public class SatelliteAccessController extends Handler {
      */
     public boolean setSatelliteAccessControlOverlayConfigs(boolean reset, boolean isAllowed,
             @Nullable String s2CellFile, long locationFreshDurationNanos,
-            @Nullable List<String> satelliteCountryCodes) {
+            @Nullable List<String> satelliteCountryCodes,
+            @Nullable String satelliteConfigurationFile) {
         if (!isMockModemAllowed()) {
             plogd("setSatelliteAccessControllerOverlayConfigs: mock modem is not allowed");
             return false;
@@ -768,7 +776,8 @@ public class SatelliteAccessController extends Handler {
                 + ", isAllowed" + isAllowed + ", s2CellFile=" + s2CellFile
                 + ", locationFreshDurationNanos=" + locationFreshDurationNanos
                 + ", satelliteCountryCodes=" + ((satelliteCountryCodes != null)
-                ? String.join(", ", satelliteCountryCodes) : null));
+                ? String.join(", ", satelliteCountryCodes) : null)
+                + ", satelliteConfigurationFile=" + satelliteConfigurationFile);
         synchronized (mLock) {
             if (reset) {
                 mIsOverlayConfigOverridden = false;
@@ -784,8 +793,24 @@ public class SatelliteAccessController extends Handler {
                                 + " does not exist");
                         mOverriddenSatelliteS2CellFile = null;
                     }
+                    mCachedAccessRestrictionMap.clear();
                 } else {
                     mOverriddenSatelliteS2CellFile = null;
+                }
+                if (!TextUtils.isEmpty(satelliteConfigurationFile)) {
+                    File overriddenSatelliteConfigurationFile = getTestSatelliteConfiguration(
+                            satelliteConfigurationFile);
+                    if (overriddenSatelliteConfigurationFile.exists()) {
+                        mOverriddenSatelliteConfigurationFileName =
+                                overriddenSatelliteConfigurationFile.getAbsolutePath();
+                    } else {
+                        plogd("The overriding file "
+                                + overriddenSatelliteConfigurationFile.getAbsolutePath()
+                                + " does not exist");
+                        mOverriddenSatelliteConfigurationFileName = null;
+                    }
+                } else {
+                    mOverriddenSatelliteConfigurationFileName = null;
                 }
                 mOverriddenLocationFreshDurationNanos = locationFreshDurationNanos;
                 if (satelliteCountryCodes != null) {
@@ -824,8 +849,9 @@ public class SatelliteAccessController extends Handler {
 
     protected File getTestSatelliteS2File(String fileName) {
         plogd("getTestSatelliteS2File: fileName=" + fileName);
-        if (TextUtils.equals(fileName, GOOGLE_US_SAN_SAT_S2_FILE_NAME)) {
-            mCtsSatS2FilePath = copyTestSatS2FileToPhoneDirectory(GOOGLE_US_SAN_SAT_S2_FILE_NAME);
+        if (TextUtils.equals(fileName, GOOGLE_US_SAN_SAT_S2_FILE_NAME)
+                || TextUtils.equals(fileName, GOOGLE_US_SAN_SAT_MTV_S2_FILE_NAME)) {
+            mCtsSatS2FilePath = copyTestAssetFileToPhoneDirectory(fileName);
             if (mCtsSatS2FilePath != null) {
                 return mCtsSatS2FilePath.toFile();
             } else {
@@ -835,8 +861,21 @@ public class SatelliteAccessController extends Handler {
         return new File(fileName);
     }
 
+    protected File getTestSatelliteConfiguration(String fileName) {
+        plogd("getTestSatelliteConfiguration: fileName=" + fileName);
+        if (TextUtils.equals(fileName, SATELLITE_ACCESS_CONFIG_FILE_NAME)) {
+            mCtsSatelliteAccessConfigurationFilePath = copyTestAssetFileToPhoneDirectory(fileName);
+            if (mCtsSatelliteAccessConfigurationFilePath != null) {
+                return mCtsSatelliteAccessConfigurationFilePath.toFile();
+            } else {
+                ploge("getTestSatelliteConfiguration: mCtsSatelliteConfigurationFilePath is null");
+            }
+        }
+        return new File(fileName);
+    }
+
     @Nullable
-    private static Path copyTestSatS2FileToPhoneDirectory(String sourceFileName) {
+    private static Path copyTestAssetFileToPhoneDirectory(String sourceFileName) {
         PhoneGlobals phoneGlobals = PhoneGlobals.getInstance();
         File ctsFile = phoneGlobals.getDir("cts", Context.MODE_PRIVATE);
         if (!ctsFile.exists()) {
@@ -844,26 +883,26 @@ public class SatelliteAccessController extends Handler {
         }
 
         Path targetDir = ctsFile.toPath();
-        Path targetSatS2FilePath = targetDir.resolve(sourceFileName);
+        Path targetFilePath = targetDir.resolve(sourceFileName);
         try {
             var assetManager = phoneGlobals.getAssets();
             if (assetManager == null) {
-                loge("copyTestSatS2FileToPhoneDirectory: no assets");
+                loge("copyTestAssetFileToPhoneDirectory: no assets");
                 return null;
             }
             InputStream inputStream = assetManager.open(sourceFileName);
             if (inputStream == null) {
-                loge("copyTestSatS2FileToPhoneDirectory: Resource=" + sourceFileName
+                loge("copyTestAssetFileToPhoneDirectory: Resource=" + sourceFileName
                         + " not found");
                 return null;
             } else {
-                Files.copy(inputStream, targetSatS2FilePath, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(inputStream, targetFilePath, StandardCopyOption.REPLACE_EXISTING);
             }
         } catch (IOException ex) {
-            loge("copyTestSatS2FileToPhoneDirectory: ex=" + ex);
+            loge("copyTestAssetFileToPhoneDirectory: ex=" + ex);
             return null;
         }
-        return targetSatS2FilePath;
+        return targetFilePath;
     }
 
     @Nullable
@@ -1128,8 +1167,16 @@ public class SatelliteAccessController extends Handler {
     }
 
     protected void loadSatelliteAccessConfigurationFromDeviceConfig() {
-        String satelliteConfigurationFileName =
-                getSatelliteConfigurationFileNameFromOverlayConfig(mContext);
+        logd("loadSatelliteAccessConfigurationFromDeviceConfig:");
+        String satelliteConfigurationFileName;
+        synchronized (mLock) {
+            if (mIsOverlayConfigOverridden && mOverriddenSatelliteConfigurationFileName != null) {
+                satelliteConfigurationFileName = mOverriddenSatelliteConfigurationFileName;
+            } else {
+                satelliteConfigurationFileName = getSatelliteConfigurationFileNameFromOverlayConfig(
+                        mContext);
+            }
+        }
         loadSatelliteAccessConfigurationFromFile(satelliteConfigurationFileName);
     }
 

@@ -14363,12 +14363,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     public boolean setSatelliteAccessControlOverlayConfigs(boolean reset, boolean isAllowed,
             String s2CellFile, long locationFreshDurationNanos,
-            List<String> satelliteCountryCodes) {
+            List<String> satelliteCountryCodes, String satelliteAccessConfigurationFile) {
         Log.d(LOG_TAG, "setSatelliteAccessControlOverlayConfigs: reset=" + reset
                 + ", isAllowed" + isAllowed + ", s2CellFile=" + s2CellFile
                 + ", locationFreshDurationNanos=" + locationFreshDurationNanos
                 + ", satelliteCountryCodes=" + ((satelliteCountryCodes != null)
-                ? String.join(", ", satelliteCountryCodes) : null));
+                ? String.join(", ", satelliteCountryCodes) : null)
+                + ", satelliteAccessConfigurationFile=" + satelliteAccessConfigurationFile);
         TelephonyPermissions.enforceShellOnly(
                 Binder.getCallingUid(), "setSatelliteAccessControlOverlayConfigs");
         TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(mApp,
@@ -14377,7 +14378,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             return mSatelliteAccessController.setSatelliteAccessControlOverlayConfigs(reset,
-                    isAllowed, s2CellFile, locationFreshDurationNanos, satelliteCountryCodes);
+                    isAllowed, s2CellFile, locationFreshDurationNanos, satelliteCountryCodes,
+                    satelliteAccessConfigurationFile);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
