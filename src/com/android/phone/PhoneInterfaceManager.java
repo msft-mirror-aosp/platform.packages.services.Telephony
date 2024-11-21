@@ -14867,4 +14867,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             Binder.restoreCallingIdentity(identity);
         }
     }
+
+    /**
+     * Returns carrier id maps to the passing {@link CarrierIdentifier}.
+     *
+     * @param carrierIdentifier {@link CarrierIdentifier}.
+     *
+     * @return carrier id from passing {@link CarrierIdentifier} or UNKNOWN_CARRIER_ID
+     * if the carrier cannot be identified
+     */
+    public int getCarrierIdFromIdentifier(@NonNull CarrierIdentifier carrierIdentifier) {
+        enforceReadPrivilegedPermission("getCarrierIdFromIdentifier");
+        enforceTelephonyFeatureWithException(getCurrentPackageName(),
+                PackageManager.FEATURE_TELEPHONY_SUBSCRIPTION, "getCarrierIdFromIdentifier");
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            return CarrierResolver.getCarrierIdFromIdentifier(mApp, carrierIdentifier);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
 }
