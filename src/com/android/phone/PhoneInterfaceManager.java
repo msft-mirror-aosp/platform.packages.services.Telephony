@@ -13227,14 +13227,17 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                             return;
                         }
                         if (isAllowed) {
-                            if (mFeatureFlags.carrierRoamingNbIotNtn()
-                                    && !mSatelliteAccessController.getSatelliteDisallowedReasons()
-                                    .isEmpty()) {
-                                result.accept(SATELLITE_RESULT_ACCESS_BARRED);
-                            } else {
-                                mSatelliteController.requestSatelliteEnabled(
+                            ResultReceiver resultReceiver = new ResultReceiver(mMainThreadHandler) {
+                                @Override
+                                protected void onReceiveResult(int resultCode, Bundle resultData) {
+                                    Log.d(LOG_TAG, "updateSystemSelectionChannels resultCode="
+                                            + resultCode);
+                                    mSatelliteController.requestSatelliteEnabled(
                                         enableSatellite, enableDemoMode, isEmergency, callback);
-                            }
+                                }
+                            };
+                            mSatelliteAccessController.updateSystemSelectionChannels(
+                                    resultReceiver);
                         } else {
                             result.accept(SATELLITE_RESULT_ACCESS_BARRED);
                         }
@@ -13761,6 +13764,25 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             mSatelliteController.requestTimeForNextSatelliteVisibility(result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Request to get the currently selected satellite subscription id.
+     *
+     * @param result The result receiver that returns the currently selected satellite subscription
+     *               id if the request is successful or an error code if the request failed.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void requestSelectedNbIotSatelliteSubscriptionId(@NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("requestSelectedNbIotSatelliteSubscriptionId");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.requestSelectedNbIotSatelliteSubscriptionId(result);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
