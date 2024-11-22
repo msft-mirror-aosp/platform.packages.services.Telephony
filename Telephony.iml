@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<module type="JAVA_MODULE" version="4">
+    <component name="NewModuleRootManager" inherit-compiler-output="true">
+        <exclude-output />
+        <content url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony">
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/EmbmsServiceTestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/EmbmsTestDownloadApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/EmbmsTestStreamingApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/GbaTestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/ImsTestService/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/SmsManagerTestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TelephonyManagerTestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TelephonyRegistryTestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TestRcsApp/TestApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TestRcsApp/aosp_test_rcsclient/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TestSatelliteApp/src" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/testapps/TestSliceApp/app/src/main/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/tests/src" isTestSource="true" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/configdatagenerator/src/main/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/configdatagenerator/src/test/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/s2storage/src/readonly/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/s2storage/src/test/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/s2storage/src/testutils/java/com/android/telephony/sats2range/testutils" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/s2storage/src/write/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/tools/src/main/java" isTestSource="false" />
+            <sourceFolder url="file:///usr/local/google/home/donaldahn/source/2408_main/packages/services/Telephony/utils/satellite/tools/src/test/java" isTestSource="false" />
+        </content>
+        <orderEntry type="sourceFolder" forTests="false" />
+        <orderEntry type="module" module-name="framework_srcjars" />
+        <orderEntry type="module" module-name="core" />
+        <orderEntry type="module" module-name="ims" />
+        <orderEntry type="module" module-name="telecomm" />
+        <orderEntry type="module" module-name="telephony" />
+        <orderEntry type="module" module-name="frameworks_telephony" />
+        <orderEntry type="module" module-name="dependencies" />
+        <orderEntry type="inheritedJdk" />
+    </component>
+</module>
