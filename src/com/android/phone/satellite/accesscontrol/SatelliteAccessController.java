@@ -25,6 +25,7 @@ import static android.telephony.satellite.SatelliteManager.SATELLITE_DISALLOWED_
 import static android.telephony.satellite.SatelliteManager.SATELLITE_DISALLOWED_REASON_NOT_PROVISIONED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_DISALLOWED_REASON_NOT_SUPPORTED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_DISALLOWED_REASON_UNSUPPORTED_DEFAULT_MSG_APP;
+import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_ACCESS_BARRED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_INVALID_TELEPHONY_STATE;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_LOCATION_DISABLED;
 import static android.telephony.satellite.SatelliteManager.SATELLITE_RESULT_LOCATION_NOT_AVAILABLE;
@@ -80,11 +81,13 @@ import android.telephony.PersistentLogger;
 import android.telephony.Rlog;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.satellite.EarfcnRange;
 import android.telephony.satellite.ISatelliteCommunicationAllowedStateCallback;
 import android.telephony.satellite.ISatelliteDisallowedReasonsCallback;
 import android.telephony.satellite.ISatelliteProvisionStateCallback;
 import android.telephony.satellite.ISatelliteSupportedStateCallback;
 import android.telephony.satellite.SatelliteAccessConfiguration;
+import android.telephony.satellite.SatelliteInfo;
 import android.telephony.satellite.SatelliteManager;
 import android.telephony.satellite.SatelliteSubscriberProvisionStatus;
 import android.telephony.satellite.SystemSelectionSpecifier;
@@ -133,6 +136,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 /**
  * This module is responsible for making sure that satellite communication can be used by devices
@@ -322,7 +326,8 @@ public class SatelliteAccessController extends Handler {
     /** Key: Config ID; Value: SatelliteAccessConfiguration */
     @GuardedBy("mLock")
     @Nullable
-    private Map<Integer, SatelliteAccessConfiguration> mSatelliteAccessConfigMap;
+    @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
+    protected Map<Integer, SatelliteAccessConfiguration> mSatelliteAccessConfigMap;
 
     /** These are used for CTS test */
     private Path mCtsSatS2FilePath = null;
@@ -359,6 +364,7 @@ public class SatelliteAccessController extends Handler {
     protected static final int
             DEFAULT_MAX_RETRY_COUNT_FOR_VALIDATING_POSSIBLE_CHANGE_IN_ALLOWED_REGION = 3;
     protected static final int DEFAULT_THROTTLE_INTERVAL_FOR_LOCATION_QUERY_MINUTES = 10;
+    private static final int MAX_EARFCN_ARRAY_LENGTH = 32;
 
     private long mRetryIntervalToEvaluateUserInSatelliteAllowedRegion = 0;
     private int mMaxRetryCountForValidatingPossibleChangeInAllowedRegion = 0;
@@ -809,7 +815,7 @@ public class SatelliteAccessController extends Handler {
             if (mRegionalConfigId == null) {
                 plogd("updateSystemSelectionChannels: Invalid Regional config ID."
                         + " System Selection channels can not be passed down to modem");
-                result.send(SatelliteManager.SATELLITE_RESULT_ACCESS_BARRED, null);
+                result.send(SATELLITE_RESULT_ACCESS_BARRED, null);
                 return;
             }
         }
@@ -2222,41 +2228,66 @@ public class SatelliteAccessController extends Handler {
                 mccmnc = subInfo.getMccString() + subInfo.getMncString();
             }
 
-            synchronized (mRegionalSatelliteEarfcnsLock) {
-                /* Key: Regional satellite config ID, Value: SatelliteRegionalConfig
-                 * contains satellite config IDs and set of earfcns in the corresponding regions.
-                 */
-                Map<Integer, SatelliteRegionalConfig> satelliteRegionalConfigMap =
-                        mSatelliteRegionalConfigPerSubMap.get(subId);
-                if (satelliteRegionalConfigMap == null || satelliteRegionalConfigMap.isEmpty()) {
-                    plogd("handleCmdUpdateSystemSelectionChannels: config IDs and Earfcns are not"
-                            + " found for subId: "
-                            + subId);
-                    sendUpdateSystemSelectionChannelsResult(
-                            SATELLITE_RESULT_INVALID_TELEPHONY_STATE, null);
-                    return;
-                }
-
-                SatelliteRegionalConfig satelliteRegionalConfig = satelliteRegionalConfigMap.get(
-                        mRegionalConfigId);
-                if (satelliteRegionalConfig == null) {
-                    plogd("handleCmdUpdateSystemSelectionChannels: "
-                            + "Earfcns for satellite config Id: " + mRegionalConfigId
-                            + " not found");
-                    sendUpdateSystemSelectionChannelsResult(
-                            SATELLITE_RESULT_INVALID_TELEPHONY_STATE, null);
-                    return;
-                }
-                IntArray bands = new IntArray();
-                IntArray earfcns = new IntArray();
-                for (Integer value : satelliteRegionalConfig.getEarfcns()) {
-                    earfcns.add(value);
-                }
-
-                mSatelliteController.updateSystemSelectionChannels(
-                        new SystemSelectionSpecifier(mccmnc, bands, earfcns),
-                        mInternalUpdateSystemSelectionChannelsResultReceiver);
+            final Integer[] regionalConfigId = new Integer[1];
+            regionalConfigId[0] = getSelectedRegionalConfigId();
+            if (regionalConfigId[0] != null
+                    && regionalConfigId[0] == UNKNOWN_REGIONAL_SATELLITE_CONFIG_ID) {
+                // The geofence file with old format return UNKNOWN_REGIONAL_SATELLITE_CONFIG_ID
+                // for an S2 cell present in the file.
+                // For backward compatibility, we will use DEFAULT_REGIONAL_SATELLITE_CONFIG_ID
+                // for such cases.
+                regionalConfigId[0] = DEFAULT_REGIONAL_SATELLITE_CONFIG_ID;
             }
+            if (!SatelliteAccessConfigurationParser.isRegionalConfigIdValid(regionalConfigId[0])) {
+                plogd("handleCmdUpdateSystemSelectionChannels: mRegionalConfigId is not valid, "
+                        + "mRegionalConfig=" + getSelectedRegionalConfigId());
+                sendUpdateSystemSelectionChannelsResult(
+                        SATELLITE_RESULT_ACCESS_BARRED, null);
+                return;
+            }
+
+            SatelliteAccessConfiguration satelliteAccessConfiguration;
+            synchronized (mLock) {
+                satelliteAccessConfiguration = Optional.ofNullable(mSatelliteAccessConfigMap)
+                        .map(map -> map.get(regionalConfigId[0]))
+                        .orElse(null);
+            }
+            if (satelliteAccessConfiguration == null) {
+                plogd("handleCmdUpdateSystemSelectionChannels: satelliteAccessConfiguration "
+                        + "is not valid");
+                sendUpdateSystemSelectionChannelsResult(
+                        SATELLITE_RESULT_ACCESS_BARRED, null);
+                return;
+            }
+
+            List<SatelliteInfo> satelliteInfos =
+                    satelliteAccessConfiguration.getSatelliteInfos();
+            List<Integer> bandList = new ArrayList<>();
+            List<Integer> earfcnList = new ArrayList<>();
+            for (SatelliteInfo satelliteInfo : satelliteInfos) {
+                bandList.addAll(satelliteInfo.getBands());
+                List<EarfcnRange> earfcnRangeList = satelliteInfo.getEarfcnRanges();
+                earfcnRangeList.stream().flatMapToInt(
+                        earfcnRange -> IntStream.of(earfcnRange.getStartEarfcn(),
+                                earfcnRange.getEndEarfcn())).boxed().forEach(earfcnList::add);
+            }
+
+            IntArray bands = new IntArray(bandList.size());
+            bands.addAll(bandList.stream().mapToInt(Integer::intValue).toArray());
+            IntArray earfcns = new IntArray(
+                    Math.min(earfcnList.size(), MAX_EARFCN_ARRAY_LENGTH));
+            for (int i = 0; i < Math.min(earfcnList.size(), MAX_EARFCN_ARRAY_LENGTH); i++) {
+                earfcns.add(earfcnList.get(i));
+            }
+            IntArray tagIds = new IntArray(satelliteAccessConfiguration.getTagIds().size());
+            tagIds.addAll(satelliteAccessConfiguration.getTagIds().stream().mapToInt(
+                    Integer::intValue).toArray());
+
+            List<SystemSelectionSpecifier> selectionSpecifiers = new ArrayList<>();
+            selectionSpecifiers.add(new SystemSelectionSpecifier(mccmnc, bands, earfcns,
+                    satelliteInfos.toArray(new SatelliteInfo[0]), tagIds));
+            mSatelliteController.updateSystemSelectionChannels(selectionSpecifiers,
+                    mInternalUpdateSystemSelectionChannelsResultReceiver);
         }
     }
 
@@ -2905,6 +2936,13 @@ public class SatelliteAccessController extends Handler {
                 + ", carrierId=" + carrierId + ", specificCarrierId=" + specificCarrierId);
         updateSatelliteRegionalConfig(subId);
         evaluatePossibleChangeInDefaultSmsApp(context);
+    }
+
+    @Nullable
+    private Integer getSelectedRegionalConfigId() {
+        synchronized (mLock) {
+            return mRegionalConfigId;
+        }
     }
 
     private void plogv(@NonNull String log) {
