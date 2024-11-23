@@ -14837,7 +14837,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     public void setNtnSmsSupported(boolean ntnSmsSupported) {
         enforceSatelliteCommunicationPermission("setNtnSmsSupported");
         enforceSendSmsPermission();
-        mSatelliteController.setNtnSmsSupportedByMessagesApp(ntnSmsSupported);
+
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.setNtnSmsSupportedByMessagesApp(ntnSmsSupported);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
     }
 
     /**
