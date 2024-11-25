@@ -180,8 +180,7 @@ public class SatelliteAccessController extends Handler {
     private static final String KEY_AVAILABLE_NOTIFICATION_SHOWN = "available_notification_shown";
     private static final String KEY_UNAVAILABLE_NOTIFICATION_SHOWN =
             "unavailable_notification_shown";
-    private static final String AVAILABLE_NOTIFICATION_TAG = "available_notification_tag";
-    private static final String UNAVAILABLE_NOTIFICATION_TAG = "unavailable_notification_tag";
+    private static final String NOTIFICATION_TAG = "SatelliteAccessController";
     private static final int NOTIFICATION_ID = 1;
     private static final String NOTIFICATION_CHANNEL = "satelliteChannel";
     private static final String NOTIFICATION_CHANNEL_ID = "satellite";
@@ -1448,41 +1447,44 @@ public class SatelliteAccessController extends Handler {
         }
 
         if (mSatelliteDisallowedReasons.isEmpty()) {
-            mNotificationManager.cancel(UNAVAILABLE_NOTIFICATION_TAG, NOTIFICATION_ID);
-            if (!hasAlreadyNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN)) {
+            if (!hasAlreadyNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, 0)) {
                 mNotificationManager.notifyAsUser(
-                        AVAILABLE_NOTIFICATION_TAG,
+                        NOTIFICATION_TAG,
                         NOTIFICATION_ID,
                         mSatelliteAvailableNotification,
                         UserHandle.ALL
                 );
-                markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, true);
-                markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, false);
+                markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, 0);
             }
         } else {
-            mNotificationManager.cancel(AVAILABLE_NOTIFICATION_TAG, NOTIFICATION_ID);
             for (Integer reason : mSatelliteDisallowedReasons) {
-                if (!hasAlreadyNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN)) {
+                if (!hasAlreadyNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, reason)) {
                     mNotificationManager.notifyAsUser(
-                            UNAVAILABLE_NOTIFICATION_TAG,
+                            NOTIFICATION_TAG,
                             NOTIFICATION_ID,
                             mSatelliteUnAvailableNotifications.get(reason),
                             UserHandle.ALL
                     );
-                    markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, true);
-                    markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, false);
+                    markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, reason);
                     break;
                 }
             }
         }
     }
 
-    private boolean hasAlreadyNotified(String key) {
-        return mSharedPreferences.getBoolean(key, false);
+    private boolean hasAlreadyNotified(String key, int reason) {
+        Set<String> reasons = mSharedPreferences.getStringSet(key, new HashSet<>());
+        return reasons.contains(String.valueOf(reason));
     }
 
-    private void markAsNotified(String key, boolean notified) {
-        mSharedPreferences.edit().putBoolean(key, notified).apply();
+    private void markAsNotified(String key, int reason) {
+        Set<String> reasons = mSharedPreferences.getStringSet(key, new HashSet<>());
+        if (!reasons.contains(String.valueOf(reason))) {
+            reasons.add(String.valueOf(reason));
+            SharedPreferences.Editor editor = mSharedPreferences.edit();
+            editor.putStringSet(key, reasons);
+            editor.apply();
+        }
     }
 
     /**
