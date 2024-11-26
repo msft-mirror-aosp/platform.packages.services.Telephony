@@ -65,6 +65,7 @@ import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
@@ -1476,7 +1477,7 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
 
         // These APIs are executed during loadRemoteConfigs
         verify(mMockSharedPreferences, times(1)).getStringSet(anyString(), any());
-        verify(mMockSharedPreferences, times(1)).getBoolean(anyString(), anyBoolean());
+        verify(mMockSharedPreferences, times(5)).getBoolean(anyString(), anyBoolean());
 
         // satelliteConfig is null
         SatelliteConfigParser spyConfigParser =
@@ -2038,6 +2039,20 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         assertEquals(tagIdList, actualTagIdList);
 
         mSatelliteAccessControllerUT.resetSatelliteAccessConfigMap();
+    }
+
+    @Test
+    public void testCheckSharedPreferenceException() {
+        doReturn(mMockSharedPreferencesEditor).when(mMockSharedPreferencesEditor)
+                .remove(anyString());
+        doThrow(new ClassCastException()).when(mMockSharedPreferences)
+                .getBoolean(anyString(), eq(false));
+
+        mSatelliteAccessControllerUT = new TestSatelliteAccessController(mMockContext,
+                mMockFeatureFlags, mTestableLooper.getLooper(), mMockLocationManager,
+                mMockTelecomManager, mMockSatelliteOnDeviceAccessController, mMockSatS2File);
+
+        verify(mMockSharedPreferencesEditor, times(4)).remove(anyString());
     }
 
     private void sendSatelliteCommunicationAllowedEvent() {
