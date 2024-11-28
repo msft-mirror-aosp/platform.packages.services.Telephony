@@ -234,6 +234,7 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
     @Mock
     private ConcurrentHashMap<IBinder, ISatelliteCommunicationAllowedStateCallback>
             mSatelliteCommunicationAllowedStateCallbackMap;
+    private SatelliteInfo mSatelliteInfo;
 
     private TestableLooper mTestableLooper;
     private Phone[] mPhones;
@@ -422,6 +423,13 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         mMockApplicationInfo.targetSdkVersion = Build.VERSION_CODES.UPSIDE_DOWN_CAKE;
         when(mMockPackageManager.getApplicationInfo(anyString(), anyInt()))
                 .thenReturn(mMockApplicationInfo);
+
+        mSatelliteInfo = new SatelliteInfo(
+                UUID.randomUUID(),
+                new SatellitePosition(10, 15),
+                new ArrayList<>(Arrays.asList(5, 30)),
+                new ArrayList<>(Arrays.asList(new EarfcnRange(0, 250))));
+
         mSatelliteAccessControllerUT = new TestSatelliteAccessController(mMockContext,
                 mMockFeatureFlags, mTestableLooper.getLooper(), mMockLocationManager,
                 mMockTelecomManager, mMockSatelliteOnDeviceAccessController, mMockSatS2File);
@@ -658,7 +666,7 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         Parcel satelliteAccessconfigParcel = Parcel.obtain();
 
         List<SatelliteInfo> satelliteInfoList = new ArrayList<>();
-        satelliteInfoList.add(mock(SatelliteInfo.class));
+        satelliteInfoList.add(mSatelliteInfo);
         satelliteAccessconfigParcel.writeTypedList(satelliteInfoList);
 
         List<Integer> tagIds = new ArrayList<>(List.of(1, 2));
@@ -1847,22 +1855,18 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         int[] expectedBandsArray = IntStream.concat(
                 IntStream.concat(Arrays.stream(bands1), Arrays.stream(bands2)),
                 Arrays.stream(bands3)).toArray();
-        int[] actualBandsArray = IntStream.range(0, systemSelectionSpecifier.getBands().size()).map(
-                systemSelectionSpecifier.getBands()::get).toArray();
+        int[] actualBandsArray = systemSelectionSpecifier.getBands();
         assertArrayEquals(expectedBandsArray, actualBandsArray);
 
         int[] expectedEarfcnsArray = {300, 301, 310, 311, 320, 321, 330, 331, 340, 341, 350, 351};
-        int[] actualEarfcnsArray = IntStream.range(0,
-                systemSelectionSpecifier.getEarfcns().size()).map(
-                systemSelectionSpecifier.getEarfcns()::get).toArray();
+        int[] actualEarfcnsArray = systemSelectionSpecifier.getEarfcns();
         assertArrayEquals(expectedEarfcnsArray, actualEarfcnsArray);
 
         SatelliteInfo[] expectedSatelliteInfos = {satelliteInfo1, satelliteInfo2, satelliteInfo3};
-        assertArrayEquals(expectedSatelliteInfos, systemSelectionSpecifier.getSatelliteInfos());
+        assertArrayEquals(expectedSatelliteInfos,
+                systemSelectionSpecifier.getSatelliteInfos().toArray(new SatelliteInfo[0]));
 
-        int[] actualTagIdArray = IntStream.range(0,
-                systemSelectionSpecifier.getTagIds().size()).map(
-                systemSelectionSpecifier.getTagIds()::get).toArray();
+        int[] actualTagIdArray = systemSelectionSpecifier.getTagIds();
         assertArrayEquals(tagIds, actualTagIdArray);
 
         // Verify backward compatibility when there is valid data for default regional config ID
@@ -1884,20 +1888,16 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         // Data will be same with default regional config ID
 
         // Verify the fields value of given systemSelectionSpecifier matched with expected.
-        actualBandsArray = IntStream.range(0, systemSelectionSpecifier.getBands().size()).map(
-                systemSelectionSpecifier.getBands()::get).toArray();
+        actualBandsArray = systemSelectionSpecifier.getBands();
         assertArrayEquals(expectedBandsArray, actualBandsArray);
 
-        actualEarfcnsArray = IntStream.range(0,
-                systemSelectionSpecifier.getEarfcns().size()).map(
-                systemSelectionSpecifier.getEarfcns()::get).toArray();
+        actualEarfcnsArray = systemSelectionSpecifier.getEarfcns();
         assertArrayEquals(expectedEarfcnsArray, actualEarfcnsArray);
 
-        assertArrayEquals(expectedSatelliteInfos, systemSelectionSpecifier.getSatelliteInfos());
+        assertArrayEquals(expectedSatelliteInfos,
+                systemSelectionSpecifier.getSatelliteInfos().toArray(new SatelliteInfo[0]));
 
-        actualTagIdArray = IntStream.range(0,
-                systemSelectionSpecifier.getTagIds().size()).map(
-                systemSelectionSpecifier.getTagIds()::get).toArray();
+        actualTagIdArray = systemSelectionSpecifier.getTagIds();
         assertArrayEquals(tagIds, actualTagIdArray);
 
         mSatelliteAccessControllerUT.resetSatelliteAccessConfigMap();
@@ -1984,25 +1984,22 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         expectedBandList.addAll(bandList2);
         expectedBandList.addAll(bandList3);
 
-        List<Integer> actualBandList = IntStream.range(0,
-                systemSelectionSpecifier.getBands().size()).map(
-                systemSelectionSpecifier.getBands()::get).boxed().toList();
+        List<Integer> actualBandList = Arrays.stream(systemSelectionSpecifier.getBands()).boxed()
+                .collect(Collectors.toList());
         assertEquals(expectedBandList, actualBandList);
 
         List<Integer> expectedEarfcnList = new ArrayList<>(
                 List.of(300, 301, 310, 311, 320, 321, 330, 331, 340, 341, 350, 351));
-        List<Integer> actualEarfcnList = IntStream.range(0,
-                systemSelectionSpecifier.getEarfcns().size()).map(
-                systemSelectionSpecifier.getEarfcns()::get).boxed().toList();
+        List<Integer> actualEarfcnList = Arrays.stream(systemSelectionSpecifier.getEarfcns())
+                .boxed().collect(Collectors.toList());
         assertEquals(expectedEarfcnList, actualEarfcnList);
 
-        assertEquals(satelliteInfo1, systemSelectionSpecifier.getSatelliteInfos()[0]);
-        assertEquals(satelliteInfo2, systemSelectionSpecifier.getSatelliteInfos()[1]);
-        assertEquals(satelliteInfo3, systemSelectionSpecifier.getSatelliteInfos()[2]);
+        assertEquals(satelliteInfo1, systemSelectionSpecifier.getSatelliteInfos().get(0));
+        assertEquals(satelliteInfo2, systemSelectionSpecifier.getSatelliteInfos().get(1));
+        assertEquals(satelliteInfo3, systemSelectionSpecifier.getSatelliteInfos().get(2));
 
-        List<Integer> actualTagIdList = IntStream.range(0,
-                systemSelectionSpecifier.getTagIds().size()).map(
-                systemSelectionSpecifier.getTagIds()::get).boxed().toList();
+        List<Integer> actualTagIdList = Arrays.stream(systemSelectionSpecifier.getTagIds()).boxed()
+                .collect(Collectors.toList());
         assertEquals(tagIdList, actualTagIdList);
 
         // Create satelliteAccessConfiguration with empty list of SatelliteInfo.
@@ -2026,15 +2023,15 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
         systemSelectionSpecifier = capturedList.getFirst();
 
         // Verify the fields value of given systemSelectionSpecifier matched with expected.
-        assertEquals(0, systemSelectionSpecifier.getBands().size());
-        assertEquals(0, systemSelectionSpecifier.getEarfcns().size());
+        assertEquals(0, systemSelectionSpecifier.getBands().length);
+        assertEquals(0, systemSelectionSpecifier.getEarfcns().length);
 
         SatelliteInfo[] expectedSatelliteInfoArray = new SatelliteInfo[0];
-        assertArrayEquals(expectedSatelliteInfoArray, systemSelectionSpecifier.getSatelliteInfos());
+        assertArrayEquals(expectedSatelliteInfoArray,
+                systemSelectionSpecifier.getSatelliteInfos().toArray(new SatelliteInfo[0]));
 
-        actualTagIdList = IntStream.range(0,
-                systemSelectionSpecifier.getTagIds().size()).map(
-                systemSelectionSpecifier.getTagIds()::get).boxed().toList();
+        actualTagIdList = Arrays.stream(systemSelectionSpecifier.getTagIds()).boxed().collect(
+                Collectors.toList());
         assertEquals(tagIdList, actualTagIdList);
 
         mSatelliteAccessControllerUT.resetSatelliteAccessConfigMap();
