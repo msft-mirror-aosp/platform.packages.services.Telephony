@@ -1488,7 +1488,11 @@ public class SatelliteAccessController extends Handler {
         logd("mSatelliteDisallowedReasons:"
                 + String.join(", ", mSatelliteDisallowedReasons.toString()));
         notifySatelliteDisallowedReasonsChanged();
-        if (mFeatureFlags.carrierRoamingNbIotNtn() && mNotifySatelliteAvailabilityEnabled) {
+        int subId = mSatelliteController.getSelectedSatelliteSubId();
+        int carrierRoamingNtnConnectType =
+            mSatelliteController.getCarrierRoamingNtnConnectType(subId);
+        if (mSatelliteController.isSatelliteSystemNotificationsEnabled(
+                carrierRoamingNtnConnectType)) {
             showSatelliteSystemNotification();
         }
     }
