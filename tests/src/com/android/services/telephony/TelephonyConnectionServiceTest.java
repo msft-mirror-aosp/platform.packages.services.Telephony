@@ -61,7 +61,6 @@ import android.net.Uri;
 import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.telecom.Conference;
 import android.telecom.Conferenceable;
@@ -283,7 +282,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        doReturn(Looper.getMainLooper()).when(mContext).getMainLooper();
+
         mTestConnectionService = new TestTelephonyConnectionService(mContext);
         mTestConnectionService.setFeatureFlags(mFeatureFlags);
         mTestConnectionService.setPhoneFactoryProxy(mPhoneFactoryProxy);
@@ -1309,7 +1308,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0), eq(false));
+                eq(testPhone), eq(false), eq(0));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1337,7 +1336,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0), eq(false));
+                eq(testPhone), eq(false), eq(0));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1449,7 +1448,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0), eq(false));
+                eq(testPhone), eq(false), eq(0));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1600,7 +1599,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper).triggerRadioOnAndListen(any(), eq(false),
-                eq(testPhone0), eq(false), eq(0), eq(false));
+                eq(testPhone0), eq(false), eq(0));
     }
 
     /**
@@ -1634,7 +1633,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper).triggerRadioOnAndListen(any(), eq(false),
-                eq(testPhone0), eq(false), eq(0), eq(false));
+                eq(testPhone0), eq(false), eq(0));
     }
 
     /**
@@ -1667,7 +1666,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper, times(0)).triggerRadioOnAndListen(any(),
-                eq(true), eq(testPhone0), eq(false), eq(0), eq(false));
+                eq(true), eq(testPhone0), eq(false), eq(0));
     }
 
     /**
@@ -2820,7 +2819,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_OUT_OF_SERVICE);
@@ -2859,7 +2858,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_OUT_OF_SERVICE);
@@ -2884,7 +2883,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2920,7 +2919,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2957,7 +2956,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2994,7 +2993,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
 
         mConnection.setDisconnected(null);
 

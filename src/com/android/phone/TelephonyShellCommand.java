@@ -232,6 +232,7 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             "set-allowed-network-types-for-users";
     private static final String GET_IMEI = "get-imei";
     private static final String GET_SIM_SLOTS_MAPPING = "get-sim-slots-mapping";
+    private static final String COMMAND_DELETE_IMSI_KEY = "delete_imsi_key";
     // Take advantage of existing methods that already contain permissions checks when possible.
     private final ITelephony mInterface;
 
@@ -431,6 +432,8 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSetSatelliteSubscriberIdListChangedIntentComponent();
             case SET_SATELLITE_ACCESS_RESTRICTION_CHECKING_RESULT:
                 return handleOverrideCarrierRoamingNtnEligibilityChanged();
+            case COMMAND_DELETE_IMSI_KEY:
+                return handleDeleteTestImsiKey();
             default: {
                 return handleDefaultCommands(cmd);
             }
@@ -526,11 +529,14 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private void onHelpIms() {
         PrintWriter pw = getOutPrintWriter();
         pw.println("IMS Commands:");
-        pw.println("  ims set-ims-service [-s SLOT_ID] (-c | -d | -f) PACKAGE_NAME");
+        pw.println("  ims set-ims-service [-s SLOT_ID] [-u USER_ID] (-c | -d | -f) PACKAGE_NAME");
         pw.println("    Sets the ImsService defined in PACKAGE_NAME to to be the bound");
         pw.println("    ImsService. Options are:");
         pw.println("      -s: the slot ID that the ImsService should be bound for. If no option");
         pw.println("          is specified, it will choose the default voice SIM slot.");
+        pw.println("      -u: the user ID that the ImsService should be bound on. If no option");
+        pw.println("          is specified, the SYSTEM user ID will be preferred followed by the");
+        pw.println("          current user ID if they are different");
         pw.println("      -c: Override the ImsService defined in the carrier configuration.");
         pw.println("      -d: Override the ImsService defined in the device overlay.");
         pw.println("      -f: Set the feature that this override if for, if no option is");
@@ -1353,12 +1359,22 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
     private int handleImsSetServiceCommand() {
         PrintWriter errPw = getErrPrintWriter();
         int slotId = getDefaultSlot();
+        int userId = UserHandle.USER_NULL; // By default, set no userId constraint
         Boolean isCarrierService = null;
         List<Integer> featuresList = new ArrayList<>();
 
         String opt;
         while ((opt = getNextOption()) != null) {
             switch (opt) {
+                case "-u": {
+                    try {
+                        userId = Integer.parseInt(getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println("ims set-ims-service requires an integer as a USER_ID");
+                        return -1;
+                    }
+                    break;
+                }
                 case "-s": {
                     try {
                         slotId = Integer.parseInt(getNextArgRequired());
@@ -1414,17 +1430,17 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
             for (int i = 0; i < featuresList.size(); i++) {
                 featureArray[i] = featuresList.get(i);
             }
-            boolean result = mInterface.setBoundImsServiceOverride(slotId, isCarrierService,
+            boolean result = mInterface.setBoundImsServiceOverride(slotId, userId, isCarrierService,
                     featureArray, packageName);
             if (VDBG) {
-                Log.v(LOG_TAG, "ims set-ims-service -s " + slotId + " "
+                Log.v(LOG_TAG, "ims set-ims-service -s " + slotId + " -u " + userId + " "
                         + (isCarrierService ? "-c " : "-d ")
                         + "-f " + featuresList + " "
                         + packageName + ", result=" + result);
             }
             getOutPrintWriter().println(result);
         } catch (RemoteException e) {
-            Log.w(LOG_TAG, "ims set-ims-service -s " + slotId + " "
+            Log.w(LOG_TAG, "ims set-ims-service -s " + slotId + " -u " + userId + " "
                     + (isCarrierService ? "-c " : "-d ")
                     + "-f " + featuresList + " "
                     + packageName + ", error" + e.getMessage());
@@ -3577,9 +3593,11 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         String s2CellFile = null;
         long locationFreshDurationNanos = 0;
         List<String> satelliteCountryCodes = null;
+        String satelliteAccessConfigurationFile = null;
 
         String opt;
         while ((opt = getNextOption()) != null) {
+            Log.d(LOG_TAG, "handleSetSatelliteAccessControlOverlayConfigs: opt=" + opt);
             switch (opt) {
                 case "-r": {
                     reset = true;
@@ -3602,16 +3620,22 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                     satelliteCountryCodes = Arrays.asList(countryCodeStr.split(","));
                     break;
                 }
+                case "-g": {
+                    satelliteAccessConfigurationFile = getNextArgRequired();
+                    break;
+                }
             }
         }
         Log.d(LOG_TAG, "handleSetSatelliteAccessControlOverlayConfigs: reset=" + reset
                 + ", isAllowed=" + isAllowed + ", s2CellFile=" + s2CellFile
                 + ", locationFreshDurationNanos=" + locationFreshDurationNanos
-                + ", satelliteCountryCodes=" + satelliteCountryCodes);
+                + ", satelliteCountryCodes=" + satelliteCountryCodes
+                + ", satelliteAccessConfigurationFile=" + satelliteAccessConfigurationFile);
 
         try {
             boolean result = mInterface.setSatelliteAccessControlOverlayConfigs(reset, isAllowed,
-                    s2CellFile, locationFreshDurationNanos, satelliteCountryCodes);
+                    s2CellFile, locationFreshDurationNanos, satelliteCountryCodes,
+                    satelliteAccessConfigurationFile);
             if (VDBG) {
                 Log.v(LOG_TAG, "setSatelliteAccessControlOverlayConfigs result =" + result);
             }
@@ -4118,5 +4142,23 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         }
         Log.d(LOG_TAG, "handleSetSatelliteAccessRestrictionCheckingResult(" + state + ")");
         return 0;
+    }
+
+    private int handleDeleteTestImsiKey() {
+        if (!(checkShellUid())) {
+                Log.v(LOG_TAG,
+                    "handleCarrierRestrictionStatusCommand, MockModem service check fails or "
+                            + " checkShellUid fails");
+            return -1;
+        }
+
+        Phone phone = PhoneFactory.getDefaultPhone();
+        if (phone == null) {
+            Log.e(LOG_TAG,
+                    "handleCarrierRestrictionStatusCommand" + "No default Phone available");
+            return SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+        }
+        phone.resetCarrierKeysForImsiEncryption(true);
+        return 1;
     }
 }
