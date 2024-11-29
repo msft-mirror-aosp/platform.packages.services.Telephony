@@ -184,7 +184,8 @@ public class SatelliteAccessController extends Handler {
     private static final String KEY_AVAILABLE_NOTIFICATION_SHOWN = "available_notification_shown";
     private static final String KEY_UNAVAILABLE_NOTIFICATION_SHOWN =
             "unavailable_notification_shown";
-    private static final String NOTIFICATION_TAG = "SatelliteAccessController";
+    private static final String AVAILABLE_NOTIFICATION_TAG = "available_notification_tag";
+    private static final String UNAVAILABLE_NOTIFICATION_TAG = "unavailable_notification_tag";
     private static final int NOTIFICATION_ID = 1;
     private static final String NOTIFICATION_CHANNEL = "satelliteChannel";
     private static final String NOTIFICATION_CHANNEL_ID = "satellite";
@@ -471,6 +472,7 @@ public class SatelliteAccessController extends Handler {
         mControllerMetricsStats = ControllerMetricsStats.getInstance();
         mAccessControllerMetricsStats = AccessControllerMetricsStats.getInstance();
         initSharedPreferences(context);
+        checkSharedPreference();
         loadOverlayConfigs(context);
         // loadConfigUpdaterConfigs has to be called after loadOverlayConfigs
         // since config updater config has higher priority and thus can override overlay config
@@ -1504,44 +1506,59 @@ public class SatelliteAccessController extends Handler {
         }
 
         if (mSatelliteDisallowedReasons.isEmpty()) {
-            if (!hasAlreadyNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, 0)) {
+            mNotificationManager.cancel(UNAVAILABLE_NOTIFICATION_TAG, NOTIFICATION_ID);
+            if (!hasAlreadyNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN)) {
                 mNotificationManager.notifyAsUser(
-                        NOTIFICATION_TAG,
+                        AVAILABLE_NOTIFICATION_TAG,
                         NOTIFICATION_ID,
                         mSatelliteAvailableNotification,
                         UserHandle.ALL
                 );
-                markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, 0);
+                markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, true);
+                markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, false);
             }
         } else {
+            mNotificationManager.cancel(AVAILABLE_NOTIFICATION_TAG, NOTIFICATION_ID);
             for (Integer reason : mSatelliteDisallowedReasons) {
-                if (!hasAlreadyNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, reason)) {
+                if (!hasAlreadyNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN)) {
                     mNotificationManager.notifyAsUser(
-                            NOTIFICATION_TAG,
+                            UNAVAILABLE_NOTIFICATION_TAG,
                             NOTIFICATION_ID,
                             mSatelliteUnAvailableNotifications.get(reason),
                             UserHandle.ALL
                     );
-                    markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, reason);
+                    markAsNotified(KEY_UNAVAILABLE_NOTIFICATION_SHOWN, true);
+                    markAsNotified(KEY_AVAILABLE_NOTIFICATION_SHOWN, false);
                     break;
                 }
             }
         }
     }
 
-    private boolean hasAlreadyNotified(String key, int reason) {
-        Set<String> reasons = mSharedPreferences.getStringSet(key, new HashSet<>());
-        return reasons.contains(String.valueOf(reason));
+    private boolean hasAlreadyNotified(String key) {
+        return mSharedPreferences.getBoolean(key, false);
     }
 
-    private void markAsNotified(String key, int reason) {
-        Set<String> reasons = mSharedPreferences.getStringSet(key, new HashSet<>());
-        if (!reasons.contains(String.valueOf(reason))) {
-            reasons.add(String.valueOf(reason));
-            SharedPreferences.Editor editor = mSharedPreferences.edit();
-            editor.putStringSet(key, reasons);
-            editor.apply();
-        }
+    private void markAsNotified(String key, boolean notified) {
+        mSharedPreferences.edit().putBoolean(key, notified).apply();
+    }
+
+    private void checkSharedPreference() {
+        String[] keys = {
+                CONFIG_UPDATER_SATELLITE_IS_ALLOW_ACCESS_CONTROL_KEY,
+                LATEST_SATELLITE_COMMUNICATION_ALLOWED_KEY,
+                KEY_AVAILABLE_NOTIFICATION_SHOWN,
+                KEY_UNAVAILABLE_NOTIFICATION_SHOWN
+        };
+        // An Exception may occur if the initial value is set to HashSet while attempting to obtain
+        // a boolean value. If an exception occurs, the SharedPreferences will be removed with Keys.
+        Arrays.stream(keys).forEach(key -> {
+            try {
+                mSharedPreferences.getBoolean(key, false);
+            } catch (ClassCastException e) {
+                mSharedPreferences.edit().remove(key).apply();
+            }
+        });
     }
 
     /**
