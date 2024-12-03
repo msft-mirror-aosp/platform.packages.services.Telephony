@@ -13333,12 +13333,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *
      * @param result The result receiver that returns whether the satellite service is supported on
      *               the device if the request is successful or an error code if the request failed.
-     *
-     * @throws SecurityException if the caller doesn't have the required permission.
      */
     @Override
     public void requestIsSatelliteSupported(@NonNull ResultReceiver result) {
-        enforceSatelliteCommunicationPermission("requestIsSatelliteSupported");
         final long identity = Binder.clearCallingIdentity();
         try {
             mSatelliteController.requestIsSatelliteSupported(result);
