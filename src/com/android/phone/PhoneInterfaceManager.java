@@ -13333,12 +13333,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      *
      * @param result The result receiver that returns whether the satellite service is supported on
      *               the device if the request is successful or an error code if the request failed.
-     *
-     * @throws SecurityException if the caller doesn't have the required permission.
      */
     @Override
     public void requestIsSatelliteSupported(@NonNull ResultReceiver result) {
-        enforceSatelliteCommunicationPermission("requestIsSatelliteSupported");
         final long identity = Binder.clearCallingIdentity();
         try {
             mSatelliteController.requestIsSatelliteSupported(result);
@@ -13778,6 +13775,26 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         final long identity = Binder.clearCallingIdentity();
         try {
             mSatelliteController.requestTimeForNextSatelliteVisibility(result);
+        } finally {
+            Binder.restoreCallingIdentity(identity);
+        }
+    }
+
+    /**
+     * Request to get the name to display for Satellite subscription.
+     *
+     * @param result The result receiver that returns the display name to use for satellite feature
+     *               in the UI for current satellite subscription if the request is successful,
+     *               or an error code if the request failed.
+     *
+     * @throws SecurityException if the caller doesn't have the required permission.
+     */
+    @Override
+    public void requestSatelliteDisplayName(@NonNull ResultReceiver result) {
+        enforceSatelliteCommunicationPermission("requestSatelliteDisplayName");
+        final long identity = Binder.clearCallingIdentity();
+        try {
+            mSatelliteController.requestSatelliteDisplayName(result);
         } finally {
             Binder.restoreCallingIdentity(identity);
         }
