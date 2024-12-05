@@ -41,7 +41,6 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.PermissionEnforcer;
 import android.os.PersistableBundle;
 import android.os.UserHandle;
@@ -51,16 +50,13 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.TelephonyRegistryManager;
+import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 
 import androidx.test.InstrumentationRegistry;
-import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.android.TelephonyTestBase;
-import com.android.internal.telephony.GsmCdmaPhone;
 import com.android.internal.telephony.IccCardConstants;
-import com.android.internal.telephony.Phone;
-import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.flags.FeatureFlags;
 import com.android.internal.telephony.subscription.SubscriptionManagerService;
 
@@ -75,7 +71,6 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -84,7 +79,8 @@ import java.io.StringWriter;
 /**
  * Unit Test for CarrierConfigLoader.
  */
-@RunWith(AndroidJUnit4.class)
+@RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class CarrierConfigLoaderTest extends TelephonyTestBase {
     @Rule
     public TestRule compatChangeRule = new PlatformCompatChangeRule();
@@ -107,12 +103,10 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
     @Mock SharedPreferences mSharedPreferences;
     @Mock TelephonyRegistryManager mTelephonyRegistryManager;
     @Mock FeatureFlags mFeatureFlags;
-    @Mock GsmCdmaPhone mMockPhone;
 
     private TelephonyManager mTelephonyManager;
     private CarrierConfigLoader mCarrierConfigLoader;
     private Handler mHandler;
-    private HandlerThread mHandlerThread;
     private TestableLooper mTestableLooper;
 
     // The AIDL stub will use PermissionEnforcer to check permission from the caller.
@@ -121,10 +115,6 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        MockitoAnnotations.initMocks(this);
-        Phone[] mPhones = new Phone[]{mMockPhone};
-        replaceInstance(PhoneFactory.class, "sPhones", null, mPhones);
-        replaceInstance(PhoneFactory.class, "sMadeDefaults", null, true);
         doReturn(Context.PERMISSION_ENFORCER_SERVICE).when(mContext).getSystemServiceName(
                 eq(PermissionEnforcer.class));
         doReturn(mFakePermissionEnforcer).when(mContext).getSystemService(
@@ -158,10 +148,7 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         when(mContext.getSystemService(TelephonyRegistryManager.class)).thenReturn(
                 mTelephonyRegistryManager);
 
-        mHandlerThread = new HandlerThread("CarrierConfigLoaderTest");
-        mHandlerThread.start();
-
-        mTestableLooper = new TestableLooper(mHandlerThread.getLooper());
+        mTestableLooper = TestableLooper.get(this);
         mCarrierConfigLoader = new CarrierConfigLoader(mContext, mTestableLooper.getLooper(),
                 mFeatureFlags);
         mHandler = mCarrierConfigLoader.getHandler();
@@ -176,8 +163,6 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         mFakePermissionEnforcer.revoke(android.Manifest.permission.DUMP);
         mFakePermissionEnforcer.revoke(android.Manifest.permission.MODIFY_PHONE_STATE);
         mFakePermissionEnforcer.revoke(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
-        mTestableLooper.destroy();
-        mHandlerThread.quit();
         super.tearDown();
     }
 
