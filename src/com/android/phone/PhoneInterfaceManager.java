@@ -1828,7 +1828,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                 }
                 case CMD_MODEM_REBOOT:
                     request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_RESET_MODEM_CONFIG_DONE, request);
+                    onCompleted = obtainMessage(EVENT_CMD_MODEM_REBOOT_DONE, request);
                     defaultPhone.rebootModem(onCompleted);
                     break;
                 case EVENT_CMD_MODEM_REBOOT_DONE:
@@ -2569,6 +2569,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     private void sendEraseModemConfig(@NonNull Phone phone) {
+        if (mFeatureFlags.cleanupCdma()) return;
         Boolean success = (Boolean) sendRequest(CMD_ERASE_MODEM_CONFIG, null);
         if (DBG) log("eraseModemConfig:" + ' ' + (success ? "ok" : "fail"));
     }
@@ -6445,6 +6446,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean resetModemConfig(int slotIndex) {
+        if (mFeatureFlags.cleanupCdma()) return false;
         Phone phone = PhoneFactory.getPhone(slotIndex);
         if (phone != null) {
             TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
