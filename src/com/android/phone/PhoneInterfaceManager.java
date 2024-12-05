@@ -949,13 +949,9 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     break;
 
                 case CMD_NV_WRITE_CDMA_PRL:
-                    request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_NV_WRITE_CDMA_PRL_DONE, request);
-                    defaultPhone.nvWriteCdmaPrl((byte[]) request.argument, onCompleted);
                     break;
 
                 case EVENT_NV_WRITE_CDMA_PRL_DONE:
-                    handleNullReturnEvent(msg, "nvWriteCdmaPrl");
                     break;
 
                 case CMD_RESET_MODEM_CONFIG:
@@ -1707,59 +1703,20 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
                     notifyRequester(request);
                     break;
                 case CMD_GET_CDMA_ROAMING_MODE:
-                    request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_GET_CDMA_ROAMING_MODE_DONE, request);
-                    getPhoneFromRequest(request).queryCdmaRoamingPreference(onCompleted);
                     break;
                 case EVENT_GET_CDMA_ROAMING_MODE_DONE:
-                    ar = (AsyncResult) msg.obj;
-                    request = (MainThreadRequest) ar.userObj;
-                    if (ar.exception != null) {
-                        request.result = TelephonyManager.CDMA_ROAMING_MODE_RADIO_DEFAULT;
-                    } else {
-                        request.result = ((int[]) ar.result)[0];
-                    }
-                    notifyRequester(request);
                     break;
                 case CMD_SET_CDMA_ROAMING_MODE:
-                    request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_SET_CDMA_ROAMING_MODE_DONE, request);
-                    int mode = (int) request.argument;
-                    getPhoneFromRequest(request).setCdmaRoamingPreference(mode, onCompleted);
                     break;
                 case EVENT_SET_CDMA_ROAMING_MODE_DONE:
-                    ar = (AsyncResult) msg.obj;
-                    request = (MainThreadRequest) ar.userObj;
-                    request.result = ar.exception == null;
-                    notifyRequester(request);
                     break;
                 case CMD_GET_CDMA_SUBSCRIPTION_MODE:
-                    request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_GET_CDMA_SUBSCRIPTION_MODE_DONE, request);
-                    getPhoneFromRequest(request).queryCdmaSubscriptionMode(onCompleted);
                     break;
                 case EVENT_GET_CDMA_SUBSCRIPTION_MODE_DONE:
-                    ar = (AsyncResult) msg.obj;
-                    request = (MainThreadRequest) ar.userObj;
-                    if (ar.exception != null) {
-                        request.result = TelephonyManager.CDMA_SUBSCRIPTION_RUIM_SIM;
-                    } else {
-                        request.result = ((int[]) ar.result)[0];
-                    }
-                    notifyRequester(request);
                     break;
                 case CMD_SET_CDMA_SUBSCRIPTION_MODE:
-                    request = (MainThreadRequest) msg.obj;
-                    onCompleted = obtainMessage(EVENT_SET_CDMA_SUBSCRIPTION_MODE_DONE, request);
-                    int subscriptionMode = (int) request.argument;
-                    getPhoneFromRequest(request).setCdmaSubscriptionMode(
-                            subscriptionMode, onCompleted);
                     break;
                 case EVENT_SET_CDMA_SUBSCRIPTION_MODE_DONE:
-                    ar = (AsyncResult) msg.obj;
-                    request = (MainThreadRequest) ar.userObj;
-                    request.result = ar.exception == null;
-                    notifyRequester(request);
                     break;
                 case CMD_GET_ALL_CELL_INFO:
                     request = (MainThreadRequest) msg.obj;
@@ -3724,53 +3681,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public String getMeidForSlot(int slotIndex, String callingPackage, String callingFeatureId) {
-        try {
-            mAppOps.checkPackage(Binder.getCallingUid(), callingPackage);
-        } catch (SecurityException se) {
-            EventLog.writeEvent(0x534e4554, "186530496", Binder.getCallingUid());
-            throw new SecurityException("Package " + callingPackage + " does not belong to "
-                    + Binder.getCallingUid());
-        }
-        Phone phone = PhoneFactory.getPhone(slotIndex);
-        if (phone == null) {
-            return null;
-        }
-
-        int subId = phone.getSubId();
-        if (!TelephonyPermissions.checkCallingOrSelfReadDeviceIdentifiers(mApp, subId,
-                callingPackage, callingFeatureId, "getMeidForSlot")) {
-            return null;
-        }
-
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getMeidForSlot");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return phone.getMeid();
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     @Override
     public String getManufacturerCodeForSlot(int slotIndex) {
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getManufacturerCodeForSlot");
-
-        Phone phone = PhoneFactory.getPhone(slotIndex);
-        String manufacturerCode = null;
-        if (phone != null) {
-            String meid = phone.getMeid();
-            try {
-                manufacturerCode =
-                        meid == null ? null : meid.substring(0, MANUFACTURER_CODE_LENGTH);
-            } catch (IndexOutOfBoundsException e) {
-                Log.e(LOG_TAG, "MEID length shorter than upper index.");
-                return null;
-            }
-        }
-        return manufacturerCode;
+        return null;
     }
 
     @Override
@@ -4025,34 +3941,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public int getCdmaEriIconIndex(String callingPackage, String callingFeatureId) {
-        return getCdmaEriIconIndexForSubscriber(getDefaultSubscription(), callingPackage,
-                callingFeatureId);
+        return -1;
     }
 
     @Override
     public int getCdmaEriIconIndexForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getCdmaEriIconIndexForSubscriber")) {
-            return -1;
-        }
-
-        enforceTelephonyFeatureWithException(callingPackage,
-                PackageManager.FEATURE_TELEPHONY_CDMA,
-                "getCdmaEriIconIndexForSubscriber");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null) {
-                return phone.getCdmaEriIconIndex();
-            } else {
-                return -1;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return -1;
     }
 
     /**
@@ -4062,30 +3957,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public int getCdmaEriIconMode(String callingPackage, String callingFeatureId) {
-        return getCdmaEriIconModeForSubscriber(getDefaultSubscription(), callingPackage,
-                callingFeatureId);
+        return -1;
     }
 
     @Override
     public int getCdmaEriIconModeForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getCdmaEriIconModeForSubscriber")) {
-            return -1;
-        }
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null) {
-                return phone.getCdmaEriIconMode();
-            } else {
-                return -1;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return -1;
     }
 
     /**
@@ -4093,30 +3971,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String getCdmaEriText(String callingPackage, String callingFeatureId) {
-        return getCdmaEriTextForSubscriber(getDefaultSubscription(), callingPackage,
-                callingFeatureId);
+        return null;
     }
 
     @Override
     public String getCdmaEriTextForSubscriber(int subId, String callingPackage,
             String callingFeatureId) {
-        if (!TelephonyPermissions.checkCallingOrSelfReadPhoneState(
-                mApp, subId, callingPackage, callingFeatureId,
-                "getCdmaEriIconTextForSubscriber")) {
-            return null;
-        }
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null) {
-                return phone.getCdmaEriText();
-            } else {
-                return null;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     /**
@@ -4124,24 +3985,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String getCdmaMdn(int subId) {
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, subId, "getCdmaMdn");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getCdmaMdn");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null && phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA) {
-                return phone.getLine1Number();
-            } else {
-                loge("getCdmaMdn: no phone found. Invalid subId: " + subId);
-                return null;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     /**
@@ -4149,23 +3993,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String getCdmaMin(int subId) {
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, subId, "getCdmaMin");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getCdmaMin");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            final Phone phone = getPhone(subId);
-            if (phone != null && phone.getPhoneType() == PhoneConstants.PHONE_TYPE_CDMA) {
-                return phone.getCdmaMin();
-            } else {
-                return null;
-            }
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     @Override
@@ -6372,19 +6200,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String nvReadItem(int itemID) {
-        WorkSource workSource = getWorkSource(Binder.getCallingUid());
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, getDefaultSubscription(), "nvReadItem");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            if (DBG) log("nvReadItem: item " + itemID);
-            String value = (String) sendRequest(CMD_NV_READ_ITEM, itemID, workSource);
-            if (DBG) log("nvReadItem: item " + itemID + " is \"" + value + '"');
-            return value;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     /**
@@ -6397,20 +6213,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean nvWriteItem(int itemID, String itemValue) {
-        WorkSource workSource = getWorkSource(Binder.getCallingUid());
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, getDefaultSubscription(), "nvWriteItem");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            if (DBG) log("nvWriteItem: item " + itemID + " value \"" + itemValue + '"');
-            Boolean success = (Boolean) sendRequest(CMD_NV_WRITE_ITEM,
-                    new Pair<Integer, String>(itemID, itemValue), workSource);
-            if (DBG) log("nvWriteItem: item " + itemID + ' ' + (success ? "ok" : "fail"));
-            return success;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return false;
     }
 
     /**
@@ -6422,18 +6225,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public boolean nvWriteCdmaPrl(byte[] preferredRoamingList) {
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, getDefaultSubscription(), "nvWriteCdmaPrl");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            if (DBG) log("nvWriteCdmaPrl: value: " + HexDump.toHexString(preferredRoamingList));
-            Boolean success = (Boolean) sendRequest(CMD_NV_WRITE_CDMA_PRL, preferredRoamingList);
-            if (DBG) log("nvWriteCdmaPrl: " + (success ? "ok" : "fail"));
-            return success;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return false;
     }
 
     /**
@@ -9199,28 +8991,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     public String getCdmaPrlVersion(int subId) {
-        enforceReadPrivilegedPermission("getCdmaPrlVersion");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getCdmaPrlVersion");
-
-        Phone phone = getPhone(subId);
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            if (phone == null) {
-                return null;
-            }
-            String cdmaPrlVersion = null;
-            try {
-                cdmaPrlVersion = phone.getCdmaPrlVersion();
-            } catch (Exception e) {
-                Log.e(LOG_TAG, "Not getting PRLVersion", e);
-            }
-            return cdmaPrlVersion;
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return null;
     }
 
     /**
@@ -10310,68 +10081,22 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
     @Override
     public int getCdmaRoamingMode(int subId) {
-        TelephonyPermissions
-                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                        mApp, subId, "getCdmaRoamingMode");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getCdmaRoamingMode");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return (int) sendRequest(CMD_GET_CDMA_ROAMING_MODE, null /* argument */, subId);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return TelephonyManager.CDMA_ROAMING_MODE_RADIO_DEFAULT;
     }
 
     @Override
     public boolean setCdmaRoamingMode(int subId, int mode) {
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, subId, "setCdmaRoamingMode");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "setCdmaRoamingMode");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return (boolean) sendRequest(CMD_SET_CDMA_ROAMING_MODE, mode, subId);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return false;
     }
 
     @Override
     public int getCdmaSubscriptionMode(int subId) {
-        TelephonyPermissions
-                .enforceCallingOrSelfReadPrivilegedPhoneStatePermissionOrCarrierPrivilege(
-                        mApp, subId, "getCdmaSubscriptionMode");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "getCdmaSubscriptionMode");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return (int) sendRequest(CMD_GET_CDMA_SUBSCRIPTION_MODE, null /* argument */, subId);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return TelephonyManager.CDMA_SUBSCRIPTION_UNKNOWN;
     }
 
     @Override
     public boolean setCdmaSubscriptionMode(int subId, int mode) {
-        TelephonyPermissions.enforceCallingOrSelfModifyPermissionOrCarrierPrivilege(
-                mApp, subId, "setCdmaSubscriptionMode");
-
-        enforceTelephonyFeatureWithException(getCurrentPackageName(),
-                PackageManager.FEATURE_TELEPHONY_CDMA, "setCdmaSubscriptionMode");
-
-        final long identity = Binder.clearCallingIdentity();
-        try {
-            return (boolean) sendRequest(CMD_SET_CDMA_SUBSCRIPTION_MODE, mode, subId);
-        } finally {
-            Binder.restoreCallingIdentity(identity);
-        }
+        return false;
     }
 
     @Override
