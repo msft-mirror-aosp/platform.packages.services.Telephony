@@ -93,6 +93,7 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
         List<SuffixTableRange> samePrefixRanges = new ArrayList<>();
         while (pushBackIterator.hasNext()) {
             SuffixTableRange currentRange = pushBackIterator.next();
+            int entryValue = currentRange.getEntryValue();
 
             long startCellId = currentRange.getStartCellId();
             if (mFileFormat.getS2Level() != S2Support.getS2Level(startCellId)) {
@@ -123,7 +124,8 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
                 // Create a range for the current prefix.
                 {
                     long newEndCellId = mFileFormat.createCellId(startCellPrefix + 1, 0);
-                    SuffixTableRange satS2Range = new SuffixTableRange(startCellId, newEndCellId);
+                    SuffixTableRange satS2Range = new SuffixTableRange(startCellId, newEndCellId,
+                            entryValue);
                     samePrefixRanges.add(satS2Range);
                 }
 
@@ -134,7 +136,7 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
                     long newStartCellId = mFileFormat.createCellId(startCellPrefix, 0);
                     long newEndCellId = mFileFormat.createCellId(startCellPrefix + 1, 0);
                     SuffixTableRange satS2Range = new SuffixTableRange(newStartCellId,
-                            newEndCellId);
+                            newEndCellId, entryValue);
                     otherRanges.add(satS2Range);
                     startCellPrefix++;
                 }
@@ -144,7 +146,7 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
                     long newStartCellId = mFileFormat.createCellId(endCellPrefixValue, 0);
                     if (newStartCellId != endCellId) {
                         SuffixTableRange satS2Range = new SuffixTableRange(newStartCellId,
-                                endCellId);
+                                endCellId, entryValue);
                         otherRanges.add(satS2Range);
                     }
                 }
@@ -168,36 +170,16 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
             // Add an empty block.
             blockWriter = SuffixTableWriter.createEmptyBlockWriter();
         } else {
+            List<SuffixTableRange> suffixTableRanges = convertSamePrefixRangesToSuffixTableRanges(
+                    samePrefixRanges);
+            List<Integer> entryValues = getEntryValues(suffixTableRanges);
             // Create a suffix table block.
-            SuffixTableSharedData sharedData = new SuffixTableSharedData(currentPrefix);
+            SuffixTableSharedData sharedData = new SuffixTableSharedData(currentPrefix, entryValues,
+                    mFileFormat);
             SuffixTableWriter suffixTableWriter =
                     SuffixTableWriter.createPopulated(mFileFormat, sharedData);
-            SuffixTableRange lastRange = null;
-            for (SuffixTableRange currentRange : samePrefixRanges) {
-                // Validate ranges don't overlap.
-                if (lastRange != null) {
-                    if (lastRange.overlaps(currentRange)) {
-                        throw new IllegalStateException("lastRange=" + lastRange + " overlaps"
-                                + " currentRange=" + currentRange);
-                    }
-                }
-                lastRange = currentRange;
-
-                // Split the range so it fits.
-                final int maxRangeLength = mFileFormat.getTableEntryMaxRangeLengthValue();
-                long startCellId = currentRange.getStartCellId();
-                long endCellId = currentRange.getEndCellId();
-                int rangeLength = mFileFormat.calculateRangeLength(startCellId, endCellId);
-                while (rangeLength > maxRangeLength) {
-                    long newEndCellId = S2Support.offsetCellId(startCellId, maxRangeLength);
-                    SuffixTableRange suffixTableRange = new SuffixTableRange(startCellId,
-                            newEndCellId);
-                    suffixTableWriter.addRange(suffixTableRange);
-                    startCellId = newEndCellId;
-                    rangeLength = mFileFormat.calculateRangeLength(startCellId, endCellId);
-                }
-                SuffixTableRange suffixTableRange = new SuffixTableRange(startCellId, endCellId);
-                suffixTableWriter.addRange(suffixTableRange);
+            for (SuffixTableRange range : suffixTableRanges) {
+                suffixTableWriter.addRange(range);
             }
             blockWriter = suffixTableWriter;
         }
@@ -237,4 +219,48 @@ public final class SatS2RangeFileWriter implements AutoCloseable {
     public SatS2RangeFileFormat getFileFormat() {
         return mFileFormat;
     }
+
+    private List<SuffixTableRange> convertSamePrefixRangesToSuffixTableRanges(
+            List<SuffixTableRange> samePrefixRanges) {
+        List<SuffixTableRange> suffixTableRanges = new ArrayList<>();
+        SuffixTableRange lastRange = null;
+        for (SuffixTableRange currentRange : samePrefixRanges) {
+            // Validate ranges don't overlap.
+            if (lastRange != null) {
+                if (lastRange.overlaps(currentRange)) {
+                    throw new IllegalStateException("lastRange=" + lastRange + " overlaps"
+                            + " currentRange=" + currentRange);
+                }
+            }
+            lastRange = currentRange;
+            int entryValue = currentRange.getEntryValue();
+
+            // Split the range so it fits.
+            final int maxRangeLength = mFileFormat.getTableEntryMaxRangeLengthValue();
+            long startCellId = currentRange.getStartCellId();
+            long endCellId = currentRange.getEndCellId();
+            int rangeLength = mFileFormat.calculateRangeLength(startCellId, endCellId);
+            while (rangeLength > maxRangeLength) {
+                long newEndCellId = S2Support.offsetCellId(startCellId, maxRangeLength);
+                SuffixTableRange suffixTableRange =
+                        new SuffixTableRange(startCellId, newEndCellId, entryValue);
+                suffixTableRanges.add(suffixTableRange);
+                startCellId = newEndCellId;
+                rangeLength = mFileFormat.calculateRangeLength(startCellId, endCellId);
+            }
+            SuffixTableRange suffixTableRange =
+                    new SuffixTableRange(startCellId, endCellId, entryValue);
+            suffixTableRanges.add(suffixTableRange);
+        }
+        return suffixTableRanges;
+    }
+
+    private List<Integer> getEntryValues(List<SuffixTableRange> suffixTableRanges) {
+        List<Integer> entryValues = new ArrayList<>();
+        for (SuffixTableRange suffixTableRange : suffixTableRanges) {
+            entryValues.add(suffixTableRange.getEntryValue());
+        }
+        return entryValues;
+    }
+
 }
