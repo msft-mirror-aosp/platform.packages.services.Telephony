@@ -472,6 +472,7 @@ public class SatelliteAccessController extends Handler {
         mControllerMetricsStats = ControllerMetricsStats.getInstance();
         mAccessControllerMetricsStats = AccessControllerMetricsStats.getInstance();
         initSharedPreferences(context);
+        checkSharedPreference();
         loadOverlayConfigs(context);
         // loadConfigUpdaterConfigs has to be called after loadOverlayConfigs
         // since config updater config has higher priority and thus can override overlay config
@@ -1489,7 +1490,9 @@ public class SatelliteAccessController extends Handler {
         logd("mSatelliteDisallowedReasons:"
                 + String.join(", ", mSatelliteDisallowedReasons.toString()));
         notifySatelliteDisallowedReasonsChanged();
-        if (mFeatureFlags.carrierRoamingNbIotNtn() && mNotifySatelliteAvailabilityEnabled) {
+        int subId = mSatelliteController.getSelectedSatelliteSubId();
+        if (mSatelliteController.isSatelliteSystemNotificationsEnabled(
+                CarrierConfigManager.CARRIER_ROAMING_NTN_CONNECT_MANUAL)) {
             showSatelliteSystemNotification();
         }
     }
@@ -1536,6 +1539,24 @@ public class SatelliteAccessController extends Handler {
 
     private void markAsNotified(String key, boolean notified) {
         mSharedPreferences.edit().putBoolean(key, notified).apply();
+    }
+
+    private void checkSharedPreference() {
+        String[] keys = {
+                CONFIG_UPDATER_SATELLITE_IS_ALLOW_ACCESS_CONTROL_KEY,
+                LATEST_SATELLITE_COMMUNICATION_ALLOWED_KEY,
+                KEY_AVAILABLE_NOTIFICATION_SHOWN,
+                KEY_UNAVAILABLE_NOTIFICATION_SHOWN
+        };
+        // An Exception may occur if the initial value is set to HashSet while attempting to obtain
+        // a boolean value. If an exception occurs, the SharedPreferences will be removed with Keys.
+        Arrays.stream(keys).forEach(key -> {
+            try {
+                mSharedPreferences.getBoolean(key, false);
+            } catch (ClassCastException e) {
+                mSharedPreferences.edit().remove(key).apply();
+            }
+        });
     }
 
     /**
