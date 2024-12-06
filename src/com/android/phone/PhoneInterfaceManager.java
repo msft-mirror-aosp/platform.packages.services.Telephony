@@ -9166,10 +9166,12 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             }
             String aid = null;
             try {
-                aid = UiccController.getInstance().getUiccPort(phone.getPhoneId())
-                        .getApplicationByType(appType).getAid();
+                UiccCardApplication app = UiccController.getInstance()
+                        .getUiccPort(phone.getPhoneId()).getApplicationByType(appType);
+                if (app == null) return null;
+                aid = app.getAid();
             } catch (Exception e) {
-                Log.e(LOG_TAG, "Not getting aid. Exception ex=" + e);
+                Log.e(LOG_TAG, "Not getting aid", e);
             }
             return aid;
         } finally {
@@ -9197,7 +9199,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             try {
                 esn = phone.getEsn();
             } catch (Exception e) {
-                Log.e(LOG_TAG, "Not getting ESN. Exception ex=" + e);
+                Log.e(LOG_TAG, "Not getting ESN", e);
             }
             return esn;
         } finally {
