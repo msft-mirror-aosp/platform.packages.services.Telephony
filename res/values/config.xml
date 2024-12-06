@@ -157,6 +157,8 @@
     <string name="mobile_network_settings_package" translatable="false">com.android.settings</string>
     <!-- Class name for the mobile network settings activity [DO NOT TRANSLATE] -->
     <string name="mobile_network_settings_class" translatable="false">com.android.settings.Settings$MobileNetworkActivity</string>
+    <!-- Class name for the SIMs settings activity [DO NOT TRANSLATE] -->
+    <string name="sims_settings_class" translatable="false">com.android.settings.Settings$MobileNetworkListActivity</string>
 
     <!-- CDMA activation goes through HFA -->
     <!-- DEPRECATED: Use CarrierConfigManager#KEY_USE_HFA_FOR_PROVISIONING_BOOL -->
@@ -392,4 +394,10 @@
 
     <!-- Whether to turn off OEM-enabled satellite during emergency call -->
     <bool name="config_turn_off_oem_enabled_satellite_during_emergency_call">false</bool>
+
+    <!-- The timeout duration in milliseconds used to determine how long does it wait for modem to
+         get in-service state when dialing emergency routing emergency calls in airplane mode before
+         starting the call. If the value is 0, it doesn't wait and starts the call right after
+         turning radio power on. -->
+    <integer name="config_in_service_wait_timer_when_dialing_emergency_routing_ecc_in_apm">3000</integer>
 </resources>
