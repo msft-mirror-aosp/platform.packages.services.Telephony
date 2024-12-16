@@ -164,7 +164,6 @@ import android.telephony.satellite.ISatelliteDatagramCallback;
 import android.telephony.satellite.ISatelliteDisallowedReasonsCallback;
 import android.telephony.satellite.ISatelliteModemStateCallback;
 import android.telephony.satellite.ISatelliteProvisionStateCallback;
-import android.telephony.satellite.ISatelliteSupportedStateCallback;
 import android.telephony.satellite.ISatelliteTransmissionUpdateCallback;
 import android.telephony.satellite.ISelectedNbIotSatelliteSubscriptionCallback;
 import android.telephony.satellite.NtnSignalStrength;
@@ -14123,7 +14122,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      */
     @Override
     @SatelliteManager.SatelliteResult public int registerForSatelliteSupportedStateChanged(
-            @NonNull ISatelliteSupportedStateCallback callback) {
+            @NonNull IBooleanConsumer callback) {
         enforceSatelliteCommunicationPermission("registerForSatelliteSupportedStateChanged");
         final long identity = Binder.clearCallingIdentity();
         try {
@@ -14138,13 +14137,13 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * If callback was not registered before, the request will be ignored.
      *
      * @param callback The callback that was passed to
-     * {@link #registerForSatelliteSupportedStateChanged(ISatelliteSupportedStateCallback)}.
+     *                 {@link #registerForSatelliteSupportedStateChanged(IBooleanConsumer)}
      *
      * @throws SecurityException if the caller doesn't have the required permission.
      */
     @Override
     public void unregisterForSatelliteSupportedStateChanged(
-            @NonNull ISatelliteSupportedStateCallback callback) {
+            @NonNull IBooleanConsumer callback) {
         enforceSatelliteCommunicationPermission("unregisterForSatelliteSupportedStateChanged");
         final long identity = Binder.clearCallingIdentity();
         try {
