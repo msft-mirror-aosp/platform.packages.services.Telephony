@@ -21,8 +21,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -32,12 +35,14 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.app.AppOpsManager;
 import android.compat.testing.PlatformCompatChangeRule;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.Build;
+import android.os.UserHandle;
 import android.permission.flags.Flags;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.telephony.RadioAccessFamily;
@@ -64,6 +69,7 @@ import org.mockito.Mock;
 
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
+import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -91,6 +97,9 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
     @Mock
     private SubscriptionManagerService mSubscriptionManagerService;
 
+    @Mock
+    private AppOpsManager mAppOps;
+
     @Rule public final SetFlagsRule mSetFlagsRule = new SetFlagsRule();
 
     @Before
@@ -104,6 +113,9 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
         // alive on a test devices. You must use the spy to mock behavior. Mocks stemming from the
         // passed context will remain unused.
         mPhoneInterfaceManager = spy(PhoneInterfaceManager.init(mPhoneGlobals, mFeatureFlags));
+        doReturn(mPhoneGlobals).when(mPhoneGlobals).getBaseContext();
+        doReturn(mPhoneGlobals).when(mPhoneGlobals).createContextAsUser(
+                any(UserHandle.class), anyInt());
         doReturn(mSubscriptionManagerService).when(mPhoneInterfaceManager)
                 .getSubscriptionManagerService();
         TelephonyManager.setupISubForTest(mSubscriptionManagerService);
@@ -116,8 +128,11 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
         // and disabled enforce_telephony_feature_mapping_for_public_apis feature flag
         mPhoneInterfaceManager.setFeatureFlags(mFeatureFlags);
         doReturn(false).when(mFeatureFlags).enforceTelephonyFeatureMappingForPublicApis();
+        doReturn(true).when(mFeatureFlags).hsumPackageManager();
         mPhoneInterfaceManager.setPackageManager(mPackageManager);
         doReturn(true).when(mPackageManager).hasSystemFeature(anyString());
+
+        mPhoneInterfaceManager.setAppOpsManager(mAppOps);
     }
 
     @Test
@@ -414,7 +429,8 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
      */
     @Test
     public void getCarrierRestrictionStatus() {
-        when(mPhoneInterfaceManager.validateCallerAndGetCarrierId(anyString())).thenReturn(1);
+        when(mPhoneInterfaceManager.validateCallerAndGetCarrierIds(anyString())).thenReturn(
+                Collections.singleton(1));
         mPhoneInterfaceManager.getCarrierRestrictionStatus(mIIntegerConsumer,
                 "com.test.package");
     }
@@ -423,37 +439,18 @@ public class PhoneInterfaceManagerTest extends TelephonyTestBase {
     public void notifyEnableDataWithAppOps_enableByUser_doNoteOp() {
         mSetFlagsRule.enableFlags(Flags.FLAG_OP_ENABLE_MOBILE_DATA_BY_USER);
         String packageName = "INVALID_PACKAGE";
-        String error = "";
-        try {
-            mPhoneInterfaceManager.setDataEnabledForReason(1,
-                    TelephonyManager.DATA_ENABLED_REASON_USER, true, packageName);
-        } catch (SecurityException expected) {
-            // The test doesn't have access to note the op, but we're just interested that it makes
-            // the attempt.
-            error = expected.getMessage();
-        }
-
-        String appop = "ENABLE_MOBILE_DATA_BY_USER";
-        assertTrue("expected error to contain " + packageName + " but it didn't: " + error,
-                error.contains(packageName));
-        assertTrue("expected error to contain " + appop + " but it didn't: " + error,
-                error.contains(appop));
+        mPhoneInterfaceManager.setDataEnabledForReason(1,
+                TelephonyManager.DATA_ENABLED_REASON_USER, true, packageName);
+        verify(mAppOps).noteOpNoThrow(eq(AppOpsManager.OPSTR_ENABLE_MOBILE_DATA_BY_USER), anyInt(),
+                eq(packageName), isNull(), isNull());
     }
 
     @Test
     public void notifyEnableDataWithAppOps_enableByCarrier_doNotNoteOp() {
         mSetFlagsRule.enableFlags(Flags.FLAG_OP_ENABLE_MOBILE_DATA_BY_USER);
         String packageName = "INVALID_PACKAGE";
-        String error = "";
-        try {
-            mPhoneInterfaceManager.setDataEnabledForReason(1,
-                    TelephonyManager.DATA_ENABLED_REASON_CARRIER, true, packageName);
-        } catch (SecurityException expected) {
-            // The test doesn't have access to note the op, but we're just interested that it makes
-            // the attempt.
-            error = expected.getMessage();
-        }
-        assertEquals("Expected error to be empty, was " + error, error, "");
+        verify(mAppOps, never()).noteOpNoThrow(eq(AppOpsManager.OPSTR_ENABLE_MOBILE_DATA_BY_USER),
+                anyInt(), eq(packageName), isNull(), isNull());
     }
 
     @Test

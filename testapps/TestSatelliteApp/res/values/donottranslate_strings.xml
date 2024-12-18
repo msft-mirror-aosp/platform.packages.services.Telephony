@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ~ Copyright (C) 2023 The Android Open Source Project
+  ~ Copyright (C) 2024 The Android Open Source Project
   ~
   ~ Licensed under the Apache License, Version 2.0 (the "License");
   ~ you may not use this file except in compliance with the License.
@@ -21,6 +21,7 @@
     <string name="Provisioning">Provisioning APIs</string>
     <string name="MultipleSendReceive">Test multiple poll and send</string>
     <string name="SendReceive">Send and Receive datagrams</string>
+    <string name="NbIotSatellite">NB IoT Satellite modem interface test</string>
 
     <string name="enableSatellite">enableSatellite</string>
     <string name="disableSatellite">disableSatellite</string>
@@ -30,6 +31,7 @@
     <string name="requestSatelliteCapabilities">requestSatelliteCapabilities</string>
     <string name="requestIsSatelliteCommunicationAllowedForCurrentLocation">requestIsSatelliteCommunicationAllowedForCurrentLocation</string>
     <string name="requestTimeForNextSatelliteVisibility">requestTimeForNextSatelliteVisibility</string>
+    <string name="getIsEmergency">getIsEmergency</string>
 
     <string name="pollPendingSatelliteDatagrams">pollPendingSatelliteDatagrams</string>
     <string name="sendSatelliteDatagram">sendSatelliteDatagram</string>
@@ -42,6 +44,8 @@
     <string name="stopSatelliteTransmissionUpdates">stopSatelliteTransmissionUpdates</string>
     <string name="showDatagramSendStateTransition">showDatagramSendStateTransition</string>
     <string name="showDatagramReceiveStateTransition">showDatagramReceiveStateTransition</string>
+    <string name="registerForCommunicationAllowedStateChanged">registerForCommunicationAllowedStateChanged</string>
+    <string name="unregisterForCommunicationAllowedStateChanged">unregisterForCommunicationAllowedStateChanged</string>
 
     <string name="provisionSatelliteService">provisionSatelliteService</string>
     <string name="deprovisionSatelliteService">deprovisionSatelliteService</string>
@@ -82,6 +86,22 @@
     <string name="isSatelliteEnabledForCarrier">isSatelliteEnabledForCarrier</string>
     <string name="isRequestIsSatelliteEnabledForCarrier">isRequestIsSatelliteEnabledForCarrier</string>
 
+    <string name="testRegisterForSupportedStateChanged">testRegisterForSupportedStateChanged</string>
+    <string name="testUnregisterForSupportedStateChanged">testUnregisterForSupportedStateChanged</string>
+    <string name="testRequestIsSupported">testRequestIsSupported</string>
+    <string name="reportSatelliteSupportedFromModem">reportSatelliteSupportedFromModem</string>
+    <string name="reportSatelliteNotSupportedFromModem">reportSatelliteNotSupportedFromModem</string>
+    <string name="showCurrentSatelliteSupportedStated">showCurrentSatelliteSupportedStated</string>
+
+    <string name="requestSatelliteSubscriberProvisionStatus">requestSatelliteSubscriberProvisionStatus</string>
+    <string name="provisionSatellite">provisionSatellite</string>
+
     <string name="Back">Back</string>
     <string name="ClearLog">Clear Log</string>
+
+    <string name="registerForCarrierRoamingNtnModeChanged">registerForCarrierRoamingNtnModeChanged</string>
+    <string name="unregisterForCarrierRoamingNtnModeChanged">unregisterForCarrierRoamingNtnModeChanged</string>
+
+    <string name="registerForModemStateChanged">registerForModemStateChanged</string>
+    <string name="unregisterForModemStateChanged">unregisterForModemStateChanged</string>
 </resources>

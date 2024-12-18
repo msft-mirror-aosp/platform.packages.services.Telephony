@@ -44,8 +44,8 @@
     <string name="pause_prompt_yes" msgid="8184132073048369575">"Sim"</string>
     <string name="pause_prompt_no" msgid="2145264674774138579">"Não"</string>
     <string name="wild_prompt_str" msgid="5858910969703305375">"Substituir caractere curinga por"</string>
-    <string name="no_vm_number" msgid="6623853880546176930">"Número correio de voz ausente"</string>
-    <string name="no_vm_number_msg" msgid="5165161462411372504">"Não há um número correio de voz armazenado no chip."</string>
+    <string name="no_vm_number" msgid="6623853880546176930">"Não há um número do correio de voz"</string>
+    <string name="no_vm_number_msg" msgid="5165161462411372504">"Não há um número do correio de voz armazenado no chip."</string>
     <string name="add_vm_number_str" msgid="7368168964435881637">"Adicionar número"</string>
     <string name="voice_number_setting_primary_user_only" msgid="3394706575741912843">"As configurações do correio de voz só podem ser modificadas pelo usuário principal."</string>
     <string name="puk_unlocked" msgid="4627340655215746511">"O seu chip foi desbloqueado. O seu telefone está desbloqueando…"</string>
@@ -134,6 +134,7 @@
     <string name="updating_title" msgid="6130548922615719689">"Configurações de chamadas"</string>
     <string name="call_settings_admin_user_only" msgid="7238947387649986286">"As configurações de chamada só podem ser alteradas pelo usuário administrador."</string>
     <string name="phone_account_settings_user_restriction" msgid="9142685151087208396">"As configurações da conta do smartphone só podem ser alteradas pelo administrador ou usuário no trabalho."</string>
+    <string name="phone_account_no_config_mobile_networks" msgid="7351062247756521227">"O proprietário do dispositivo restringiu a opção de fazer mudanças nas configurações de rede móvel."</string>
     <string name="call_settings_with_label" msgid="8460230435361579511">"Configurações (<xliff:g id="SUBSCRIPTIONLABEL">%s</xliff:g>)"</string>
     <string name="error_updating_title" msgid="2024290892676808965">"Erro de configuração da chamada"</string>
     <string name="reading_settings" msgid="1605904432450871183">"Lendo as configurações…"</string>
@@ -156,7 +157,7 @@
     <item msgid="6813323051965618926">"Ocultar número"</item>
     <item msgid="9150034130629852635">"Mostrar número"</item>
   </string-array>
-    <string name="vm_changed" msgid="4739599044379692505">"Número correio de voz alterado."</string>
+    <string name="vm_changed" msgid="4739599044379692505">"Número do correio de voz alterado."</string>
     <string name="vm_change_failed" msgid="7877733929455763566">"Não foi possível alterar o número do correio de voz.\nEntre em contato com sua operadora se o problema persistir."</string>
     <string name="fw_change_failed" msgid="9179241823460192148">"Não foi possível alterar o número de encaminhamento.\nEntre em contato com sua operadora se o problema persistir."</string>
     <string name="fw_get_in_vm_failed" msgid="2432678237218183844">"Não foi possível recuperar e salvar as configurações de número atual de encaminhamento.\nMudar para o novo provedor?"</string>
@@ -520,7 +521,7 @@
     <string name="pin2_unblocked" msgid="4481107908727789303">"PIN2 não mais bloqueado"</string>
     <string name="pin2_error_exception" msgid="8116103864600823641">"Erro de rede ou do chip"</string>
     <string name="doneButton" msgid="7371209609238460207">"Concluído"</string>
-    <string name="voicemail_settings_number_label" msgid="1265118640154688162">"Número correio de voz"</string>
+    <string name="voicemail_settings_number_label" msgid="1265118640154688162">"Número do correio de voz"</string>
     <string name="card_title_dialing" msgid="8742182654254431781">"Chamando..."</string>
     <string name="card_title_redialing" msgid="18130232613559964">"Rediscando"</string>
     <string name="card_title_conf_call" msgid="901197309274457427">"Teleconferência"</string>
@@ -532,7 +533,7 @@
     <string name="notification_voicemail_title" msgid="3932876181831601351">"Novo correio de voz"</string>
     <string name="notification_voicemail_title_count" msgid="2806950319222327082">"Novo correio de voz (<xliff:g id="COUNT">%d</xliff:g>)"</string>
     <string name="notification_voicemail_text_format" msgid="5720947141702312537">"Discar <xliff:g id="VOICEMAIL_NUMBER">%s</xliff:g>"</string>
-    <string name="notification_voicemail_no_vm_number" msgid="3423686009815186750">"Número correio de voz desconhecido"</string>
+    <string name="notification_voicemail_no_vm_number" msgid="3423686009815186750">"Número do correio de voz desconhecido"</string>
     <string name="notification_network_selection_title" msgid="255595526707809121">"Sem serviço"</string>
     <string name="notification_network_selection_text" msgid="553288408722427659">"A rede selecionada (<xliff:g id="OPERATOR_NAME">%s</xliff:g>) não está disponível"</string>
     <string name="incall_error_power_off" product="watch" msgid="7191184639454113633">"Ative a rede móvel e desative o modo avião ou o modo de economia de bateria para ligar."</string>
@@ -542,7 +543,9 @@
     <string name="incall_error_ecm_emergency_only" msgid="5622379058883722080">"Saia do modo de retorno de chamada de emergência para fazer uma chamada que não seja de emergência."</string>
     <string name="incall_error_emergency_only" msgid="8786127461027964653">"Não registrado na rede."</string>
     <string name="incall_error_out_of_service" msgid="1927265196942672791">"Rede móvel não disponível."</string>
+    <string name="incall_error_out_of_service_2g" msgid="904434080740846116">"Rede móvel indisponível.\n\nConecte-se a uma rede sem fio para fazer uma ligação.\n\nO 2G está desativado neste dispositivo e isso pode afetar sua conectividade. Acesse \"Configurações\" e ative a opção \"Permitir 2G\" para continuar."</string>
     <string name="incall_error_out_of_service_wfc" msgid="4497663185857190885">"A rede móvel não está disponível. Conecte-se a uma rede sem fio para fazer uma chamada."</string>
+    <string name="incall_error_out_of_service_wfc_2g_user" msgid="8218768986365299663">"A rede móvel está indisponível.\n\nConecte-se a uma rede sem fio para fazer uma ligação.\n\nO 2G está desativado neste dispositivo e pode estar afetando sua conectividade. Acesse \"Configurações\" e ative a opção \"Permitir 2G\" para continuar."</string>
     <string name="incall_error_no_phone_number_supplied" msgid="8680831089508851894">"Para realizar uma chamada, digite um número válido."</string>
     <string name="incall_error_call_failed" msgid="393508653582682539">"Falha na chamada."</string>
     <string name="incall_error_cannot_add_call" msgid="5425764862628655443">"Não é possível ligar no momento. Entre em contato enviando uma mensagem."</string>
@@ -557,7 +560,8 @@
     <string name="incall_error_supp_service_hold" msgid="8535056414643540997">"Não é possível colocar chamadas em espera."</string>
     <string name="incall_error_wfc_only_no_wireless_network" msgid="5860742792811400109">"Conecte-se a uma rede sem fio para fazer uma chamada."</string>
     <string name="incall_error_promote_wfc" msgid="9164896813931363415">"Ative as chamadas por Wi-Fi para fazer uma chamada."</string>
-    <string name="incall_error_satellite_enabled" msgid="1936541518147323016">"Desative o modo satélite para fazer uma ligação."</string>
+    <string name="incall_error_satellite_enabled" msgid="5247740814607087814">"Para fazer uma ligação, encerre a conexão por satélite."</string>
+    <string name="incall_error_carrier_roaming_satellite_mode" msgid="678603203562886361">"Você pode enviar e receber mensagens sem um dispositivo móvel ou uma rede Wi-Fi."</string>
     <string name="emergency_information_hint" msgid="9208897544917793012">"Informações de emergência"</string>
     <string name="emergency_information_owner_hint" msgid="6256909888049185316">"Proprietário"</string>
     <string name="emergency_information_confirm_hint" msgid="5109017615894918914">"Toque novamente para ver as informações"</string>
@@ -841,6 +845,11 @@
     <string name="removable_esim_string" msgid="7931369811671787649">"Definir eSIM removível como padrão"</string>
     <string name="radio_info_radio_power" msgid="8805595022160471587">"Potência do rádio celular"</string>
     <string name="simulate_out_of_service_string" msgid="7787925611727597193">"Simular o modo fora de serviço (somente build de depuração)"</string>
+    <string name="enforce_satellite_channel_string" msgid="295306734591329892">"Forçar o canal LTE de satélite do grupo (somente build de depuração)"</string>
+    <string name="mock_carrier_roaming_satellite_string" msgid="4796300252858292593">"Simulação de modo satélite da operadora (somente build de depuração)"</string>
+    <string name="esos_satellite_string" msgid="7274794226125968657">"Testar o modo eSOS por satélite (somente build de depuração)"</string>
+    <string name="satellite_enable_non_emergency_mode_string" msgid="9005332650950637932">"Testar o modo sem emergência de satélite real (somente build de depuração)"</string>
+    <string name="demo_esos_satellite_string" msgid="2941811482168709730">"Testar a demonstração do modo eSOS por satélite (somente build de depuração)"</string>
     <string name="radioInfo_menu_viewADN" msgid="4533179730908559846">"Ver o catálogo de endereços do chip"</string>
     <string name="radioInfo_menu_viewFDN" msgid="1847236480527032061">"Ver números de discagem fixa"</string>
     <string name="radioInfo_menu_viewSDN" msgid="2613431584522392842">"Ver números de discagem do serviço"</string>
@@ -907,7 +916,6 @@
     <string name="radio_info_smsc_label" msgid="3749927072726033763">"SMSC:"</string>
     <string name="radio_info_smsc_update_label" msgid="5141996256097115753">"Atualizar"</string>
     <string name="radio_info_smsc_refresh_label" msgid="8409923721451604560">"Atualizar"</string>
-    <string name="radio_info_toggle_dns_check_label" msgid="1394078554927787350">"Ativar/desativar verificação do DNS"</string>
     <string name="oem_radio_info_label" msgid="2914167475119997456">"Informações/configurações específicas de OEM"</string>
     <string name="radio_info_endc_available" msgid="2983767110681230019">"EN-DC disponível (NSA):"</string>
     <string name="radio_info_dcnr_restricted" msgid="7147511536420148173">"DCNR restrito (NSA):"</string>

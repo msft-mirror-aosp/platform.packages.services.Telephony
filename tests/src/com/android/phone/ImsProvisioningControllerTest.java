@@ -77,6 +77,7 @@ import com.android.ims.FeatureConnector;
 import com.android.ims.ImsConfig;
 import com.android.ims.ImsManager;
 import com.android.ims.RcsFeatureManager;
+import com.android.internal.telephony.flags.FeatureFlags;
 
 import org.junit.After;
 import org.junit.Before;
@@ -111,6 +112,7 @@ public class ImsProvisioningControllerTest {
             REGISTRATION_TECH_NR
     };
     private static final int RADIO_TECH_INVALID = ImsRegistrationImplBase.REGISTRATION_TECH_NONE;
+    private static final String TEST_ATTR = "TEST";
 
     @Mock
     Context mContext;
@@ -169,6 +171,9 @@ public class ImsProvisioningControllerTest {
     @Mock
     IBinder mIbinder1;
 
+    @Mock
+    FeatureFlags mFeatureFlags;
+
     private SubscriptionManager.OnSubscriptionsChangedListener mSubChangedListener;
 
     private Handler mHandler;
@@ -192,7 +197,7 @@ public class ImsProvisioningControllerTest {
         TestImsProvisioningController() {
             super(mPhone, 2, mHandlerThread.getLooper(),
                     mMmTelFeatureConnector, mRcsFeatureConnector,
-                    mImsProvisioningLoader);
+                    mImsProvisioningLoader, mFeatureFlags);
         }
 
         protected int getSubId(int slotId) {
@@ -369,8 +374,6 @@ public class ImsProvisioningControllerTest {
         }
 
         // verify other interactions
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback1);
         verifyNoMoreInteractions(mImsConfig);
     }
 
@@ -408,8 +411,6 @@ public class ImsProvisioningControllerTest {
         verify(mImsConfig, times(1)).setConfig(eq(key), anyInt());
 
         // verify other interactions
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback1);
         verifyNoMoreInteractions(mImsConfig);
     }
 
@@ -636,7 +637,8 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < RADIO_TECHS.length; i++) {
             // get provisioning status
             provisioned = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value
             assertEquals(expectedVoiceProvisioningStatus[i], provisioned);
@@ -651,7 +653,8 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < RADIO_TECHS.length; i++) {
             // get provisioning status
             provisioned = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value
             assertEquals(expectedVideoProvisioningStatus[i], provisioned);
@@ -666,7 +669,8 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < RADIO_TECHS.length; i++) {
             // get provisioning status
             provisioned = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value
             assertEquals(expectedUtProvisioningStatus[i], provisioned);
@@ -718,7 +722,7 @@ public class ImsProvisioningControllerTest {
         int capability = CAPABILITY_TYPE_VOICE;
         int tech = REGISTRATION_TECH_LTE;
         provisioned = mTestImsProvisioningController
-                .getImsProvisioningStatusForCapability(mSubId0, capability, tech);
+                .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability, tech);
 
         // verify return value default false - not provisioned
         assertEquals(true, provisioned);
@@ -741,7 +745,7 @@ public class ImsProvisioningControllerTest {
         capability = CAPABILITY_TYPE_VIDEO;
         tech = REGISTRATION_TECH_LTE;
         provisioned = mTestImsProvisioningController
-                .getImsProvisioningStatusForCapability(mSubId0, capability, tech);
+                .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability, tech);
 
         // verify return value default false - not provisioned
         assertEquals(false, provisioned);
@@ -891,17 +895,19 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < RADIO_TECHS.length; i++) {
             // get provisioning status
             provisionedFirst = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value default false - not provisioned
             assertEquals(false, provisionedFirst);
 
             mTestImsProvisioningController.setImsProvisioningStatusForCapability(
-                    mSubId0, capability, RADIO_TECHS[i], !provisionedFirst);
+                    TEST_ATTR, mSubId0, capability, RADIO_TECHS[i], !provisionedFirst);
             processAllMessages();
 
             provisionedSecond = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value default false - provisioned
             assertEquals(!provisionedFirst, provisionedSecond);
@@ -926,8 +932,6 @@ public class ImsProvisioningControllerTest {
         verify(mImsConfig, times(1)).setConfig(
                 eq(KEY_VOICE_OVER_WIFI_ENABLED_OVERRIDE), eq(PROVISIONING_VALUE_ENABLED));
 
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
-        verifyNoMoreInteractions(mIFeatureProvisioningCallback1);
         verifyNoMoreInteractions(mImsConfig);
         verifyNoMoreInteractions(mImsProvisioningLoader);
     }
@@ -970,17 +974,19 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < RADIO_TECHS.length; i++) {
             // get provisioning status
             provisionedFirst = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value default false - not provisioned
             assertEquals(false, provisionedFirst);
 
             mTestImsProvisioningController.setImsProvisioningStatusForCapability(
-                    mSubId0, capability, RADIO_TECHS[i], !provisionedFirst);
+                    TEST_ATTR, mSubId0, capability, RADIO_TECHS[i], !provisionedFirst);
             processAllMessages();
 
             provisionedSecond = mTestImsProvisioningController
-                    .getImsProvisioningStatusForCapability(mSubId0, capability, RADIO_TECHS[i]);
+                    .getImsProvisioningStatusForCapability(TEST_ATTR, mSubId0, capability,
+                            RADIO_TECHS[i]);
 
             // verify return value default false - provisioned
             assertEquals(!provisionedFirst, provisionedSecond);
@@ -1163,7 +1169,7 @@ public class ImsProvisioningControllerTest {
         for (int i = 0; i < keys.length; i++) {
             clearInvocations(mIFeatureProvisioningCallback0);
             result = mTestImsProvisioningController.setProvisioningValue(
-                    mSubId0, keys[i], PROVISIONING_VALUE_ENABLED);
+                    TEST_ATTR, mSubId0, keys[i], PROVISIONING_VALUE_ENABLED);
             processAllMessages();
 
             // check return value
@@ -1222,7 +1228,7 @@ public class ImsProvisioningControllerTest {
         int capa = CAPABILITY_TYPE_PRESENCE_UCE;
 
         int result = mTestImsProvisioningController.setProvisioningValue(
-                    mSubId0, key, PROVISIONING_VALUE_ENABLED);
+                TEST_ATTR, mSubId0, key, PROVISIONING_VALUE_ENABLED);
         processAllMessages();
 
         // check return value
@@ -1273,7 +1279,7 @@ public class ImsProvisioningControllerTest {
         };
         for (int key : keys) {
             int result = mTestImsProvisioningController.setProvisioningValue(
-                    mSubId0, key, PROVISIONING_VALUE_ENABLED);
+                    TEST_ATTR, mSubId0, key, PROVISIONING_VALUE_ENABLED);
             processAllMessages();
 
             // check return value
@@ -1351,7 +1357,8 @@ public class ImsProvisioningControllerTest {
                 REGISTRATION_TECH_IWLAN
         };
         for (int i = 0; i < keys.length; i++) {
-            int result = mTestImsProvisioningController.getProvisioningValue(mSubId0, keys[i]);
+            int result = mTestImsProvisioningController.getProvisioningValue(TEST_ATTR, mSubId0,
+                    keys[i]);
             processAllMessages();
 
             // check return value
@@ -1367,7 +1374,7 @@ public class ImsProvisioningControllerTest {
         int key = KEY_EAB_PROVISIONING_STATUS;
         int capa = CAPABILITY_TYPE_PRESENCE_UCE;
 
-        int result = mTestImsProvisioningController.getProvisioningValue(mSubId0, key);
+        int result = mTestImsProvisioningController.getProvisioningValue(TEST_ATTR, mSubId0, key);
         processAllMessages();
 
         // check return value
@@ -1455,7 +1462,8 @@ public class ImsProvisioningControllerTest {
                 REGISTRATION_TECH_IWLAN
         };
         for (int i = 0; i < keys.length; i++) {
-            int result = mTestImsProvisioningController.getProvisioningValue(mSubId0, keys[i]);
+            int result = mTestImsProvisioningController.getProvisioningValue(TEST_ATTR, mSubId0,
+                    keys[i]);
             processAllMessages();
 
             // check return value
@@ -1483,7 +1491,7 @@ public class ImsProvisioningControllerTest {
         int key = KEY_EAB_PROVISIONING_STATUS;
         int capa = CAPABILITY_TYPE_PRESENCE_UCE;
 
-        int result = mTestImsProvisioningController.getProvisioningValue(mSubId0, key);
+        int result = mTestImsProvisioningController.getProvisioningValue(TEST_ATTR, mSubId0, key);
         processAllMessages();
 
         // check return value
@@ -1592,8 +1600,8 @@ public class ImsProvisioningControllerTest {
         int tech = REGISTRATION_TECH_LTE;
         boolean provisioned;
         provisioned = mTestImsProvisioningController.getImsProvisioningStatusForCapability(
-                mSubId1, capability, tech);
-        mTestImsProvisioningController.setImsProvisioningStatusForCapability(mSubId1,
+                TEST_ATTR, mSubId1, capability, tech);
+        mTestImsProvisioningController.setImsProvisioningStatusForCapability(TEST_ATTR, mSubId1,
                 capability, tech, !provisioned);
         processAllMessages();
 
@@ -1645,7 +1653,7 @@ public class ImsProvisioningControllerTest {
         int capa = CAPABILITY_TYPE_PRESENCE_UCE;
         int tech = REGISTRATION_TECH_LTE;
 
-        int result = mTestImsProvisioningController.getProvisioningValue(mSubId0, key);
+        int result = mTestImsProvisioningController.getProvisioningValue(TEST_ATTR, mSubId0, key);
         processAllMessages();
 
         // check return value
@@ -1670,7 +1678,7 @@ public class ImsProvisioningControllerTest {
         clearInvocations(mImsConfig);
         clearInvocations(mImsProvisioningLoader);
 
-        mTestImsProvisioningController.setProvisioningValue(mSubId0, key,
+        mTestImsProvisioningController.setProvisioningValue(TEST_ATTR, mSubId0, key,
                 PROVISIONING_VALUE_DISABLED);
         processAllMessages();
 
@@ -1847,6 +1855,184 @@ public class ImsProvisioningControllerTest {
         verifyNoMoreInteractions(mImsProvisioningLoader);
         verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
         verifyNoMoreInteractions(mImsConfig);
+    }
+
+    @Test
+    @SmallTest
+    public void initialNotifyMmTelProvisioningStatusWhenCallbackRegistered() throws Exception {
+        when(mFeatureFlags.notifyInitialImsProvisioningStatus()).thenReturn(true);
+
+        createImsProvisioningController();
+
+        // Provisioning required for capability on all network type
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_VOICE_INT_ARRAY,
+                RADIO_TECHS);
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_VIDEO_INT_ARRAY,
+                RADIO_TECHS);
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_UT_INT_ARRAY,
+                RADIO_TECHS);
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_SMS_INT_ARRAY,
+                RADIO_TECHS);
+        setCarrierConfig(mSubId0,
+                CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_CALL_COMPOSER_INT_ARRAY, RADIO_TECHS);
+
+        // Stored provisioning Status
+        mMmTelProvisioningStorage = new int[][] {
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_LTE, 0},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_IWLAN, 1},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_CROSS_SIM, 1},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_NR, 1},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_LTE, 0},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_IWLAN, 0},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_CROSS_SIM, 1},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_NR, 1},
+                {CAPABILITY_TYPE_UT, REGISTRATION_TECH_LTE, 0},
+                {CAPABILITY_TYPE_UT, REGISTRATION_TECH_IWLAN, 0},
+                {CAPABILITY_TYPE_UT, REGISTRATION_TECH_CROSS_SIM, 0},
+                {CAPABILITY_TYPE_UT, REGISTRATION_TECH_NR, 0},
+                {CAPABILITY_TYPE_SMS, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_SMS, REGISTRATION_TECH_IWLAN, 1},
+                {CAPABILITY_TYPE_SMS, REGISTRATION_TECH_CROSS_SIM, 1},
+                {CAPABILITY_TYPE_SMS, REGISTRATION_TECH_NR, 1},
+                {CAPABILITY_TYPE_CALL_COMPOSER, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_CALL_COMPOSER, REGISTRATION_TECH_IWLAN, 1},
+                {CAPABILITY_TYPE_CALL_COMPOSER, REGISTRATION_TECH_CROSS_SIM, 0},
+                {CAPABILITY_TYPE_CALL_COMPOSER, REGISTRATION_TECH_NR, 1}
+        };
+
+        try {
+            mTestImsProvisioningController.addFeatureProvisioningChangedCallback(
+                    mSubId0, mIFeatureProvisioningCallback0);
+        } catch (Exception e) {
+            throw new AssertionError("not expected exception", e);
+        }
+        processAllMessages();
+
+        for (int[] capa: mMmTelProvisioningStorage) {
+            verify(mIFeatureProvisioningCallback0, times(1))
+                    .onFeatureProvisioningChanged(eq(capa[0]), eq(capa[1]), eq(capa[2] == 1));
+        }
+    }
+
+    @Test
+    @SmallTest
+    public void initialNotifyRcsProvisioningStatusWhenCallbackRegistered() throws Exception {
+        when(mFeatureFlags.notifyInitialImsProvisioningStatus()).thenReturn(true);
+
+        createImsProvisioningController();
+
+        // Provisioning required capability : PRESENCE, tech : all
+        setCarrierConfig(mSubId0,
+                CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_PRESENCE_UCE_INT_ARRAY, RADIO_TECHS);
+
+        // Stored provisioning Status
+        mRcsProvisioningStorage = new int[][]{
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_IWLAN, 1},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_CROSS_SIM, 0},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_NR, 1}
+        };
+
+        try {
+            mTestImsProvisioningController.addFeatureProvisioningChangedCallback(
+                    mSubId0, mIFeatureProvisioningCallback0);
+        } catch (Exception e) {
+            throw new AssertionError("not expected exception", e);
+        }
+        processAllMessages();
+
+        for (int[] capa: mRcsProvisioningStorage) {
+            verify(mIFeatureProvisioningCallback0, times(1))
+                    .onRcsFeatureProvisioningChanged(eq(capa[0]), eq(capa[1]), eq(capa[2] == 1));
+        }
+    }
+
+    @Test
+    @SmallTest
+    public void initialNotifyMmTelProvisioningStatusWhenImsServiceConnected() throws Exception {
+        when(mFeatureFlags.notifyInitialImsProvisioningStatus()).thenReturn(true);
+
+        createImsProvisioningController();
+
+        // Provisioning required for capability on all network type
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_VOICE_INT_ARRAY,
+                RADIO_TECHS);
+        setCarrierConfig(mSubId0, CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_VIDEO_INT_ARRAY,
+                RADIO_TECHS);
+
+        // Stored provisioning Status
+        mMmTelProvisioningStorage = new int[][] {
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_IWLAN, 1},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_CROSS_SIM, 1},
+                {CAPABILITY_TYPE_VOICE, REGISTRATION_TECH_NR, 1},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_IWLAN, 0},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_CROSS_SIM, 0},
+                {CAPABILITY_TYPE_VIDEO, REGISTRATION_TECH_NR, 1},
+        };
+
+        try {
+            mTestImsProvisioningController.addFeatureProvisioningChangedCallback(
+                    mSubId0, mIFeatureProvisioningCallback0);
+        } catch (Exception e) {
+            throw new AssertionError("not expected exception", e);
+        }
+        processAllMessages();
+
+        // clear interactions
+        clearInvocations(mIFeatureProvisioningCallback0);
+
+        // ImsService connected
+        mMmTelConnectorListener0.getValue().connectionReady(mImsManager, mSubId0);
+
+        for (int[] capa: mMmTelProvisioningStorage) {
+            verify(mIFeatureProvisioningCallback0, times(1))
+                    .onFeatureProvisioningChanged(eq(capa[0]), eq(capa[1]), eq(capa[2] == 1));
+        }
+
+        verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
+    }
+
+    @Test
+    @SmallTest
+    public void initialNotifyRcsProvisioningStatusWhenRcsServiceConnected() throws Exception {
+        when(mFeatureFlags.notifyInitialImsProvisioningStatus()).thenReturn(true);
+
+        createImsProvisioningController();
+
+        // Provisioning required capability : PRESENCE, tech : all
+        setCarrierConfig(mSubId0,
+                CarrierConfigManager.Ims.KEY_CAPABILITY_TYPE_PRESENCE_UCE_INT_ARRAY, RADIO_TECHS);
+
+        // Stored provisioning Status
+        mRcsProvisioningStorage = new int[][]{
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_LTE, 1},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_IWLAN, 0},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_CROSS_SIM, 0},
+                {CAPABILITY_TYPE_PRESENCE_UCE, REGISTRATION_TECH_NR, 1}
+        };
+
+        try {
+            mTestImsProvisioningController.addFeatureProvisioningChangedCallback(
+                    mSubId0, mIFeatureProvisioningCallback0);
+        } catch (Exception e) {
+            throw new AssertionError("not expected exception", e);
+        }
+        processAllMessages();
+
+        // clear interactions
+        clearInvocations(mIFeatureProvisioningCallback0);
+
+        // ImsService connected
+        mRcsConnectorListener0.getValue().connectionReady(mRcsFeatureManager, mSubId0);
+
+        for (int[] capa: mRcsProvisioningStorage) {
+            verify(mIFeatureProvisioningCallback0, times(1))
+                    .onRcsFeatureProvisioningChanged(eq(capa[0]), eq(capa[1]), eq(capa[2] == 1));
+        }
+
+        verifyNoMoreInteractions(mIFeatureProvisioningCallback0);
     }
 
     private void createImsProvisioningController() throws Exception {

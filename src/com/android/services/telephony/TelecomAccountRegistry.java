@@ -32,12 +32,14 @@ import android.graphics.PorterDuff;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.PersistableBundle;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.provider.Telephony;
@@ -78,6 +80,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.function.Predicate;
@@ -98,6 +101,8 @@ public class TelecomAccountRegistry {
 
     private static final int REGISTER_START_DELAY_MS = 1 * 1000; // 1 second
     private static final int REGISTER_MAXIMUM_DELAY_MS = 60 * 1000; // 1 minute
+    private static final int TELECOM_CONNECT_START_DELAY_MS = 250; // 250 milliseconds
+    private static final int TELECOM_CONNECT_MAX_DELAY_MS = 4 * 1000; // 4 second
 
     /**
      * Indicates the {@link SubscriptionManager.OnSubscriptionsChangedListener} has not yet been
@@ -474,11 +479,13 @@ public class TelecomAccountRegistry {
                         isHandoverFromSupported);
             }
 
-            final boolean isTelephonyAudioDeviceSupported = mContext.getResources().getBoolean(
-                    R.bool.config_support_telephony_audio_device);
-            if (isTelephonyAudioDeviceSupported && !isEmergency
-                    && isCarrierUseCallRecordingTone()) {
-                extras.putBoolean(PhoneAccount.EXTRA_PLAY_CALL_RECORDING_TONE, true);
+            if (!com.android.server.telecom.flags.Flags.telecomResolveHiddenDependencies()) {
+                final boolean isTelephonyAudioDeviceSupported = mContext.getResources().getBoolean(
+                        R.bool.config_support_telephony_audio_device);
+                if (isTelephonyAudioDeviceSupported && !isEmergency
+                        && isCarrierUseCallRecordingTone()) {
+                    extras.putBoolean(PhoneAccount.EXTRA_PLAY_CALL_RECORDING_TONE, true);
+                }
             }
 
             extras.putBoolean(EXTRA_SUPPORTS_VIDEO_CALLING_FALLBACK,
@@ -501,14 +508,9 @@ public class TelecomAccountRegistry {
             // Set CAPABILITY_EMERGENCY_CALLS_ONLY flag if either
             // - Carrier config overrides subscription is not voice capable, or
             // - Resource config overrides it be emergency_calls_only
-            // TODO(b/316183370:): merge the two cases when clearing up flag
-            if (Flags.dataOnlyServiceAllowEmergencyCallOnly()) {
-                if (!isSubscriptionVoiceCapableByCarrierConfig()) {
-                    capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
-                }
-            }
-            if (isEmergency && mContext.getResources().getBoolean(
-                    R.bool.config_emergency_account_emergency_calls_only)) {
+            if (!isSubscriptionVoiceCapableByCarrierConfig()
+                    || (isEmergency && mContext.getResources().getBoolean(
+                    R.bool.config_emergency_account_emergency_calls_only))) {
                 capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
             }
 
@@ -1219,7 +1221,8 @@ public class TelecomAccountRegistry {
                 setupAccounts();
             } else if (CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED.equals(
                     intent.getAction())) {
-                Log.i(this, "Carrier-config changed, checking for phone account updates.");
+                Log.i(this, "TelecomAccountRegistry: Carrier-config changed, "
+                        + "checking for phone account updates.");
                 int subId = intent.getIntExtra(SubscriptionManager.EXTRA_SUBSCRIPTION_INDEX,
                         SubscriptionManager.INVALID_SUBSCRIPTION_ID);
                 handleCarrierConfigChange(subId);
@@ -1230,7 +1233,8 @@ public class TelecomAccountRegistry {
     private BroadcastReceiver mLocaleChangeReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
-            Log.i(this, "Locale change; re-registering phone accounts.");
+            Log.i(this, "TelecomAccountRegistry: Locale change; re-registering "
+                    + "phone accounts.");
             tearDownAccounts();
             setupAccounts();
         }
@@ -1244,10 +1248,11 @@ public class TelecomAccountRegistry {
         @Override
         public void onServiceStateChanged(ServiceState serviceState) {
             int newState = serviceState.getState();
-            Log.i(this, "onServiceStateChanged: newState=%d, mServiceState=%d",
-                    newState, mServiceState);
+            Log.i(this, "TelecomAccountRegistry: onServiceStateChanged: "
+                            + "newState=%d, mServiceState=%d", newState, mServiceState);
             if (newState == ServiceState.STATE_IN_SERVICE && mServiceState != newState) {
-                Log.i(this, "onServiceStateChanged: Tearing down and re-setting up accounts.");
+                Log.i(this, "TelecomAccountRegistry: onServiceStateChanged: "
+                        + "Tearing down and re-setting up accounts.");
                 tearDownAccounts();
                 setupAccounts();
             } else {
@@ -1284,6 +1289,7 @@ public class TelecomAccountRegistry {
     private int mActiveDataSubscriptionId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
     private boolean mIsPrimaryUser = UserHandle.of(ActivityManager.getCurrentUser()).isSystem();
     private ExponentialBackoff mRegisterSubscriptionListenerBackoff;
+    private ExponentialBackoff mTelecomReadyBackoff;
     private final HandlerThread mHandlerThread = new HandlerThread("TelecomAccountRegistry");
 
     // TODO: Remove back-pointer from app singleton to Service, since this is not a preferred
@@ -1302,6 +1308,53 @@ public class TelecomAccountRegistry {
         }
     };
 
+    /**
+     * When {@link #setupOnBoot()} is called, there is a chance that Telecom is not up yet. This
+     * runnable checks whether or not Telecom is up and if it isn't we wait until ready.
+     */
+    private final Runnable mCheckTelecomReadyRunnable = new Runnable() {
+        @Override
+        public void run() {
+            if (isTelecomReady()) {
+                setupOnBootInternal();
+            } else {
+                mTelecomReadyBackoff.notifyFailed();
+                Log.i(this, "TelecomAccountRegistry: telecom not ready, retrying in "
+                        + mTelecomReadyBackoff.getCurrentDelay() + " ms");
+            }
+        }
+    };
+
+    /**
+     * Test TelecomManager to determine if telecom is up yet.
+     * @return true if telecom is ready, false if it is not
+     */
+    private boolean isTelecomReady() {
+        if (mTelecomManager == null) {
+            Log.i(this, "TelecomAccountRegistry: isTelecomReady: "
+                    + "telecom null");
+            return true;
+        }
+        try {
+            // Assumption: this method should not return null unless Telecom is not ready yet
+            String result = mTelecomManager.getSystemDialerPackage();
+            if (result == null) {
+                Log.i(this, "TelecomAccountRegistry: isTelecomReady: "
+                        + "telecom not ready");
+                return false;
+            } else {
+                Log.i(this, "TelecomAccountRegistry: isTelecomReady: "
+                        + "telecom ready");
+                return true;
+            }
+        } catch (Exception e) {
+            Log.i(this, "TelecomAccountRegistry: isTelecomReady: "
+                    + "telecom exception");
+            // Any exception means that the service is at least up!
+            return true;
+        }
+    }
+
     TelecomAccountRegistry(Context context) {
         mContext = context;
         mTelecomManager = context.getSystemService(TelecomManager.class);
@@ -1316,6 +1369,12 @@ public class TelecomAccountRegistry {
                 2, /* multiplier */
                 mHandlerThread.getLooper(),
                 mRegisterOnSubscriptionsChangedListenerRunnable);
+        mTelecomReadyBackoff = new ExponentialBackoff(
+                TELECOM_CONNECT_START_DELAY_MS,
+                TELECOM_CONNECT_MAX_DELAY_MS,
+                2, /* multiplier */
+                mContext.getMainLooper(),
+                mCheckTelecomReadyRunnable);
     }
 
     /**
@@ -1323,8 +1382,12 @@ public class TelecomAccountRegistry {
      */
     public static synchronized TelecomAccountRegistry getInstance(Context context) {
         if (sInstance == null && context != null) {
-            if (Flags.enforceTelephonyFeatureMappingForPublicApis()) {
-                PackageManager pm = context.getPackageManager();
+            int vendorApiLevel = SystemProperties.getInt("ro.vendor.api_level",
+                    Build.VERSION.DEVICE_INITIAL_SDK_INT);
+            PackageManager pm = context.getPackageManager();
+
+            if (Flags.enforceTelephonyFeatureMappingForPublicApis()
+                    && vendorApiLevel >= Build.VERSION_CODES.VANILLA_ICE_CREAM) {
                 if (pm != null && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
                         && pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING)) {
                     sInstance = new TelecomAccountRegistry(context);
@@ -1333,7 +1396,14 @@ public class TelecomAccountRegistry {
                             + "missing telephony/calling feature(s)");
                 }
             } else {
-                sInstance = new TelecomAccountRegistry(context);
+                // One of features is defined, create instance
+                if (pm != null && (pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)
+                        || pm.hasSystemFeature(PackageManager.FEATURE_TELEPHONY_CALLING))) {
+                    sInstance = new TelecomAccountRegistry(context);
+                } else {
+                    Log.d(LOG_TAG, "Not initializing TelecomAccountRegistry: "
+                            + "missing telephony or calling feature(s)");
+                }
             }
         }
         return sInstance;
@@ -1532,9 +1602,21 @@ public class TelecomAccountRegistry {
     }
 
     /**
-     * Sets up all the phone accounts for SIMs on first boot.
+     * Waits for Telecom to come up first and then sets up.
      */
     public void setupOnBoot() {
+        if (Flags.delayPhoneAccountRegistration() && !isTelecomReady()) {
+            Log.i(this, "setupOnBoot: delaying start for Telecom...");
+            mTelecomReadyBackoff.start();
+        } else {
+            setupOnBootInternal();
+        }
+    }
+
+    /**
+     * Sets up all the phone accounts for SIMs on first boot.
+     */
+    private void setupOnBootInternal() {
         // TODO: When this object "finishes" we should unregister by invoking
         // SubscriptionManager.getInstance(mContext).unregister(mOnSubscriptionsChangedListener);
         // This is not strictly necessary because it will be unregistered if the
@@ -1542,7 +1624,8 @@ public class TelecomAccountRegistry {
 
         // Register for SubscriptionInfo list changes which is guaranteed
         // to invoke onSubscriptionsChanged the first time.
-        Log.i(this, "TelecomAccountRegistry: setupOnBoot - register subscription listener");
+        Log.i(this, "TelecomAccountRegistry: setupOnBootInternal - register "
+                + "subscription listener");
         SubscriptionManager.from(mContext).addOnSubscriptionsChangedListener(
                 mOnSubscriptionsChangedListener);
 
@@ -1686,6 +1769,21 @@ public class TelecomAccountRegistry {
                             continue;
                         }
 
+                        // Skip the sim for bootstrap
+                        if (info.getProfileClass() == SubscriptionManager
+                                .PROFILE_CLASS_PROVISIONING) {
+                            Log.d(this, "setupAccounts: skipping bootstrap sub id "
+                                    + subscriptionId);
+                            continue;
+                        }
+
+                        // Skip the sim for satellite as it does not support call for now
+                        if (Flags.oemEnabledSatelliteFlag() && info.isOnlyNonTerrestrialNetwork()) {
+                            Log.d(this, "setupAccounts: skipping satellite sub id "
+                                    + subscriptionId);
+                            continue;
+                        }
+
                         mAccounts.add(new AccountEntry(phone, false /* emergency */,
                                 false /* isTest */));
                     }
@@ -1699,6 +1797,35 @@ public class TelecomAccountRegistry {
                     mAccounts.add(
                             new AccountEntry(PhoneFactory.getDefaultPhone(), true /* emergency */,
                                     false /* isTest */));
+                }
+
+                // In some very rare cases, when setting the default voice sub in
+                // SubscriptionManagerService, the phone accounts here have not yet been built.
+                // So calling setUserSelectedOutgoingPhoneAccount in SubscriptionManagerService
+                // becomes a no-op. The workaround here is to reconcile and make sure the
+                // outgoing phone account is properly set in telecom.
+                int defaultVoiceSubId = SubscriptionManager.getDefaultVoiceSubscriptionId();
+                if (SubscriptionManager.isValidSubscriptionId(defaultVoiceSubId)) {
+                    PhoneAccountHandle defaultVoiceAccountHandle =
+                            getPhoneAccountHandleForSubId(defaultVoiceSubId);
+                    if (defaultVoiceAccountHandle != null) {
+                        PhoneAccountHandle currentAccount = mTelecomManager
+                                .getUserSelectedOutgoingPhoneAccount();
+                        // In some rare cases, the current phone account could be non-telephony
+                        // phone account. We do not override in this case.
+                        boolean wasPreviousAccountSameComponentOrUnset = currentAccount == null
+                                || Objects.equals(defaultVoiceAccountHandle.getComponentName(),
+                                currentAccount.getComponentName());
+
+                        // Set the phone account again if it's out-of-sync.
+                        if (!defaultVoiceAccountHandle.equals(currentAccount)
+                                && wasPreviousAccountSameComponentOrUnset) {
+                            Log.d(this, "setupAccounts: Re-setup phone account "
+                                    + "again for default voice sub " + defaultVoiceSubId);
+                            mTelecomManager.setUserSelectedOutgoingPhoneAccount(
+                                    defaultVoiceAccountHandle);
+                        }
+                    }
                 }
             }
 
