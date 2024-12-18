@@ -70,6 +70,7 @@ import com.android.internal.telephony.SimultaneousCallingTracker;
 import com.android.internal.telephony.flags.Flags;
 import com.android.internal.telephony.subscription.SubscriptionManagerService;
 import com.android.phone.PhoneGlobals;
+import com.android.phone.PhoneInterfaceManager;
 import com.android.phone.PhoneUtils;
 import com.android.phone.R;
 import com.android.telephony.Rlog;
@@ -434,7 +435,7 @@ public class TelecomAccountRegistry {
             boolean isVideoEnabledByPlatform = ImsManager.getInstance(mPhone.getContext(),
                     mPhone.getPhoneId()).isVtEnabledByPlatform();
 
-            if (!mIsPrimaryUser) {
+            if (!mDoesUserSupportVideoCalling) {
                 Log.i(this, "Disabling video calling for secondary user.");
                 mIsVideoCapable = false;
                 isVideoEnabledByPlatform = false;
@@ -508,14 +509,9 @@ public class TelecomAccountRegistry {
             // Set CAPABILITY_EMERGENCY_CALLS_ONLY flag if either
             // - Carrier config overrides subscription is not voice capable, or
             // - Resource config overrides it be emergency_calls_only
-            // TODO(b/316183370:): merge the two cases when clearing up flag
-            if (Flags.dataOnlyServiceAllowEmergencyCallOnly()) {
-                if (!isSubscriptionVoiceCapableByCarrierConfig()) {
-                    capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
-                }
-            }
-            if (isEmergency && mContext.getResources().getBoolean(
-                    R.bool.config_emergency_account_emergency_calls_only)) {
+            if (!isSubscriptionVoiceCapableByCarrierConfig()
+                    || (isEmergency && mContext.getResources().getBoolean(
+                    R.bool.config_emergency_account_emergency_calls_only))) {
                 capabilities |= PhoneAccount.CAPABILITY_EMERGENCY_CALLS_ONLY;
             }
 
@@ -656,8 +652,8 @@ public class TelecomAccountRegistry {
             // Check if IMS video pause is supported.
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_SUPPORT_PAUSE_IMS_VIDEO_CALLS_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_PAUSE_IMS_VIDEO_CALLS_BOOL);
         }
 
         /**
@@ -702,8 +698,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierInstantLetteringSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_CARRIER_INSTANT_LETTERING_AVAILABLE_BOOL);
         }
 
         /**
@@ -714,8 +710,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierAdhocConferenceCallSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_SUPPORT_ADHOC_CONFERENCE_CALLS_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_ADHOC_CONFERENCE_CALLS_BOOL);
         }
 
 
@@ -727,8 +723,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierMergeCallSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_SUPPORT_CONFERENCE_CALL_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_CONFERENCE_CALL_BOOL);
         }
 
         /**
@@ -739,6 +735,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierMergeImsCallSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_IMS_CONFERENCE_CALL_BOOL);
         }
 
@@ -750,8 +747,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierEmergencyVideoCallsAllowed() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_ALLOW_EMERGENCY_VIDEO_CALLS_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_ALLOW_EMERGENCY_VIDEO_CALLS_BOOL);
         }
 
         /**
@@ -762,8 +759,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierVideoConferencingSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null &&
-                    b.getBoolean(CarrierConfigManager.KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL);
+            if (b == null) return false;
+            return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_VIDEO_CONFERENCE_CALL_BOOL);
         }
 
         /**
@@ -776,7 +773,8 @@ public class TelecomAccountRegistry {
         private boolean isCarrierMergeOfWifiCallsAllowedWhenVoWifiOff() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
-            return b != null && b.getBoolean(
+            if (b == null) return false;
+            return b.getBoolean(
                     CarrierConfigManager.KEY_ALLOW_MERGE_WIFI_CALLS_WHEN_VOWIFI_OFF_BOOL);
         }
 
@@ -789,6 +787,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierManageImsConferenceCallSupported() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return b.getBoolean(CarrierConfigManager.KEY_SUPPORT_MANAGE_IMS_CONFERENCE_CALL_BOOL);
         }
 
@@ -801,6 +800,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierUsingSimCallManager() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return !TextUtils.isEmpty(
                     b.getString(CarrierConfigManager.KEY_DEFAULT_SIM_CALL_MANAGER_STRING));
         }
@@ -815,6 +815,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierShowPreciseFailedCause() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return b.getBoolean(CarrierConfigManager.KEY_SHOW_PRECISE_FAILED_CAUSE_BOOL);
         }
 
@@ -827,6 +828,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierUseCallRecordingTone() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return b.getBoolean(CarrierConfigManager.KEY_PLAY_CALL_RECORDING_TONE_BOOL);
         }
 
@@ -836,6 +838,7 @@ public class TelecomAccountRegistry {
         private boolean isCarrierAllowRttWhenRoaming() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return false;
             return b.getBoolean(CarrierConfigManager.KEY_RTT_SUPPORTED_WHILE_ROAMING_BOOL);
         }
 
@@ -848,6 +851,7 @@ public class TelecomAccountRegistry {
         private Bundle getPhoneAccountExtras() {
             PersistableBundle b =
                     PhoneGlobals.getInstance().getCarrierConfigForSubId(mPhone.getSubId());
+            if (b == null) return new Bundle();
 
             int instantLetteringMaxLength = b.getInt(
                     CarrierConfigManager.KEY_CARRIER_INSTANT_LETTERING_LENGTH_LIMIT_INT);
@@ -1059,8 +1063,10 @@ public class TelecomAccountRegistry {
 
             boolean hasVoiceAvailability = isImsVoiceAvailable();
 
-            boolean isRttSupported = PhoneGlobals.getInstance().phoneMgr
-                    .isRttEnabled(mPhone.getSubId());
+            PhoneInterfaceManager phoneMgr = PhoneGlobals.getInstance()
+                .phoneMgr;
+            boolean isRttSupported = (phoneMgr != null) ?
+                phoneMgr.isRttEnabled(mPhone.getSubId()) : false;
 
             boolean isRoaming = mTelephonyManager.isNetworkRoaming(mPhone.getSubId());
             boolean isOnWfc = mPhone.getImsRegistrationTech()
@@ -1219,7 +1225,7 @@ public class TelecomAccountRegistry {
                 Log.i(this, "TelecomAccountRegistry: User changed, re-registering phone accounts.");
 
                 UserHandle currentUser = intent.getParcelableExtra(Intent.EXTRA_USER);
-                mIsPrimaryUser = currentUser == null ? true : currentUser.isSystem();
+                mDoesUserSupportVideoCalling = currentUser == null ? true : currentUser.isSystem();
 
                 // Any time the user changes, re-register the accounts.
                 tearDownAccounts();
@@ -1292,7 +1298,8 @@ public class TelecomAccountRegistry {
     private int mSubscriptionListenerState = LISTENER_STATE_UNREGISTERED;
     private int mServiceState = ServiceState.STATE_POWER_OFF;
     private int mActiveDataSubscriptionId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
-    private boolean mIsPrimaryUser = UserHandle.of(ActivityManager.getCurrentUser()).isSystem();
+    private boolean mDoesUserSupportVideoCalling =
+            UserHandle.of(ActivityManager.getCurrentUser()).isSystem();
     private ExponentialBackoff mRegisterSubscriptionListenerBackoff;
     private ExponentialBackoff mTelecomReadyBackoff;
     private final HandlerThread mHandlerThread = new HandlerThread("TelecomAccountRegistry");

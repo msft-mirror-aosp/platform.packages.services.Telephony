@@ -21,18 +21,24 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.ServiceConnection;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
+import android.content.res.Resources;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.os.Process;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
@@ -43,7 +49,10 @@ import android.test.mock.MockContext;
 import android.util.Log;
 import android.util.SparseArray;
 
+import androidx.test.InstrumentationRegistry;
+
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
@@ -86,6 +95,11 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public AssetManager getAssets() {
+        return Mockito.mock(AssetManager.class);
+    }
+
+    @Override
     public Executor getMainExecutor() {
         // Just run on current thread
         return Runnable::run;
@@ -97,8 +111,18 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
+        return this;
+    }
+
+    @Override
     public String getPackageName() {
         return "com.android.phone.tests";
+    }
+
+    @Override
+    public String getOpPackageName() {
+        return getPackageName();
     }
 
     @Override
@@ -109,6 +133,11 @@ public class TestContext extends MockContext {
     @Override
     public AttributionSource getAttributionSource() {
         return new AttributionSource(Process.myUid(), getPackageName(), "");
+    }
+
+    @Override
+    public void startActivityAsUser(Intent intent, UserHandle user) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -206,8 +235,18 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public Looper getMainLooper() {
+        return Looper.getMainLooper();
+    }
+
+    @Override
     public Handler getMainThreadHandler() {
         return new Handler(Looper.getMainLooper());
+    }
+
+    @Override
+    public Resources.Theme getTheme() {
+        return InstrumentationRegistry.getTargetContext().getTheme();
     }
 
     /**
@@ -256,6 +295,11 @@ public class TestContext extends MockContext {
                 return PackageManager.PERMISSION_DENIED;
             }
         }
+    }
+
+    @Override
+    public void unbindService(ServiceConnection conn) {
+        // Override the base implementation to ensure we don't crash.
     }
 
     public void grantPermission(String permission) {

@@ -17,6 +17,13 @@
 package com.android.phone.settings;
 
 import static android.net.ConnectivityManager.NetworkCallback;
+import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VIDEO;
+import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NR;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_3G;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -44,6 +51,7 @@ import android.os.HandlerThread;
 import android.os.Message;
 import android.os.PersistableBundle;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.CarrierConfigManager;
@@ -84,7 +92,6 @@ import android.telephony.ims.ImsRcsManager;
 import android.telephony.ims.ProvisioningManager;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.stub.ImsRegistrationImplBase;
-import android.telephony.satellite.EnableRequestAttributes;
 import android.telephony.satellite.SatelliteManager;
 import android.text.TextUtils;
 import android.util.Log;
@@ -361,12 +368,13 @@ public class RadioInfo extends AppCompatActivity {
     private int mPreferredNetworkTypeResult;
     private int mCellInfoRefreshRateIndex;
     private int mPhoneId = SubscriptionManager.INVALID_PHONE_INDEX;
+    private static final int DEFAULT_PHONE_ID = 0;
 
     private int mSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     private String mActionEsos;
     private String mActionEsosDemo;
-
+    private Intent mNonEsosIntent;
     private TelephonyDisplayInfo mDisplayInfo;
 
     private List<PhysicalChannelConfig> mPhysicalChannelConfigs = new ArrayList<>();
@@ -570,7 +578,7 @@ public class RadioInfo extends AppCompatActivity {
         mActionEsos =
             r.getString(
                     com.android.internal.R.string
-                            .config_satellite_emergency_handover_intent_action);
+                            .config_satellite_test_with_esp_replies_intent_action);
 
         mActionEsosDemo =
             r.getString(
@@ -583,7 +591,15 @@ public class RadioInfo extends AppCompatActivity {
             mPhone = getPhone(SubscriptionManager.getDefaultSubscriptionId());
         }
         mSubId = SubscriptionManager.getDefaultSubscriptionId();
-        mPhoneId = SubscriptionManager.getPhoneId(mSubId);
+        if (mPhone != null) {
+            mPhoneId = mPhone.getPhoneId();
+        } else {
+            mPhoneId = SubscriptionManager.getPhoneId(mSubId);
+        }
+        if (!SubscriptionManager.isValidPhoneId(mPhoneId)) {
+            mPhoneId = DEFAULT_PHONE_ID;
+        }
+
         mTelephonyManager = getSystemService(TelephonyManager.class)
                 .createForSubscriptionId(mSubId);
         mEuiccManager = getSystemService(EuiccManager.class);
@@ -776,31 +792,33 @@ public class RadioInfo extends AppCompatActivity {
         mEsosDemoButton  = (Button) findViewById(R.id.demo_esos_questionnaire);
         mSatelliteEnableNonEmergencyModeButton = (Button) findViewById(
                 R.id.satellite_enable_non_emergency_mode);
-        CarrierConfigManager cm = getSystemService(CarrierConfigManager.class);
-        if (!cm.getConfigForSubId(mSubId,
-                        CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)
-                .getBoolean(CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)) {
-            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
+
+        if (shouldHideButton(mActionEsos)) {
+            mEsosButton.setVisibility(View.GONE);
+        } else {
+            mEsosButton.setOnClickListener(v -> startActivityAsUser(
+                    new Intent(mActionEsos).addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                    UserHandle.CURRENT)
+            );
         }
-        if (!Build.isDebuggable()) {
-            if (!TextUtils.isEmpty(mActionEsos)) {
-                mEsosButton.setVisibility(View.GONE);
-            }
-            if (!TextUtils.isEmpty(mActionEsosDemo)) {
-                mEsosDemoButton.setVisibility(View.GONE);
-            }
+        if (shouldHideButton(mActionEsosDemo)) {
+            mEsosDemoButton.setVisibility(View.GONE);
+        } else {
+            mEsosDemoButton.setOnClickListener(v -> startActivityAsUser(
+                    new Intent(mActionEsosDemo).addFlags(
+                            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
+                    UserHandle.CURRENT)
+            );
+        }
+        if (shouldHideNonEmergencyMode()) {
             mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
         } else {
-            mEsosButton.setOnClickListener(v -> startActivity(
-                    new Intent(mActionEsos).addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK))
-            );
-            mEsosDemoButton.setOnClickListener(v -> startActivity(
-                    new Intent(mActionEsosDemo).addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK))
-            );
-            mSatelliteEnableNonEmergencyModeButton.setOnClickListener(v ->
-                    enableSatelliteNonEmergencyMode());
+            mSatelliteEnableNonEmergencyModeButton.setOnClickListener(v -> {
+                if (mNonEsosIntent != null) {
+                    sendBroadcast(mNonEsosIntent);
+                }
+            });
         }
 
         mOemInfoButton = (Button) findViewById(R.id.oem_info);
@@ -822,6 +840,21 @@ public class RadioInfo extends AppCompatActivity {
         }).start();
 
         restoreFromBundle(icicle);
+    }
+
+    boolean shouldHideButton(String action) {
+        if (!Build.isDebuggable()) {
+            return true;
+        }
+        if (TextUtils.isEmpty(action)) {
+            return true;
+        }
+        PackageManager pm = getPackageManager();
+        Intent intent = new Intent(action);
+        if (pm.resolveActivity(intent, 0) == null) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -1022,10 +1055,6 @@ public class RadioInfo extends AppCompatActivity {
             }
             if (mSimulateOos[mPhoneId])  {
                 mSimulateOosOnChangeListener.onCheckedChanged(mSimulateOutOfServiceSwitch, false);
-            }
-            if (mOriginalSystemChannels[mPhoneId] != null) {
-                mForceSatelliteChannelOnChangeListener
-                        .onCheckedChanged(mEnforceSatelliteChannel, false);
             }
             if (mCarrierSatelliteOriginalBundle[mPhoneId] != null) {
                 mMockSatelliteListener.onCheckedChanged(mMockSatellite, false);
@@ -1403,7 +1432,9 @@ public class RadioInfo extends AppCompatActivity {
     }
 
     private void updateNetworkType() {
-        if (SubscriptionManager.isValidPhoneId(mPhoneId)) {
+        SubscriptionManager mSm = getSystemService(SubscriptionManager.class);
+        if (SubscriptionManager.isValidPhoneId(mPhoneId)
+                && mSm.isActiveSubscriptionId(mSubId)) {
             mDataNetwork.setText(ServiceState.rilRadioTechnologyToString(
                     mTelephonyManager.getServiceStateForSlot(mPhoneId)
                             .getRilDataRadioTechnology()));
@@ -1676,63 +1707,66 @@ public class RadioInfo extends AppCompatActivity {
 
     private MenuItem.OnMenuItemClickListener mViewADNCallback =
             new MenuItem.OnMenuItemClickListener() {
-        public boolean onMenuItemClick(MenuItem item) {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            // XXX We need to specify the component here because if we don't
-            // the activity manager will try to resolve the type by calling
-            // the content provider, which causes it to be loaded in a process
-            // other than the Dialer process, which causes a lot of stuff to
-            // break.
-            intent.setClassName("com.android.phone", "com.android.phone.SimContacts");
-            startActivity(intent);
-            return true;
-        }
-    };
+                public boolean onMenuItemClick(MenuItem item) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    // XXX We need to specify the component here because if we don't
+                    // the activity manager will try to resolve the type by calling
+                    // the content provider, which causes it to be loaded in a process
+                    // other than the Dialer process, which causes a lot of stuff to
+                    // break.
+                    intent.setClassName("com.android.phone", "com.android.phone.SimContacts");
+                    startActivityAsUser(intent, UserHandle.CURRENT);
+                    return true;
+                }
+            };
 
     private MenuItem.OnMenuItemClickListener mViewFDNCallback =
             new MenuItem.OnMenuItemClickListener() {
-        public boolean onMenuItemClick(MenuItem item) {
-            Intent intent = new Intent(Intent.ACTION_VIEW);
-            // XXX We need to specify the component here because if we don't
-            // the activity manager will try to resolve the type by calling
-            // the content provider, which causes it to be loaded in a process
-            // other than the Dialer process, which causes a lot of stuff to
-            // break.
-            intent.setClassName("com.android.phone", "com.android.phone.settings.fdn.FdnList");
-            startActivity(intent);
-            return true;
-        }
-    };
+                public boolean onMenuItemClick(MenuItem item) {
+                    Intent intent = new Intent(Intent.ACTION_VIEW);
+                    // XXX We need to specify the component here because if we don't
+                    // the activity manager will try to resolve the type by calling
+                    // the content provider, which causes it to be loaded in a process
+                    // other than the Dialer process, which causes a lot of stuff to
+                    // break.
+                    intent.setClassName("com.android.phone",
+                            "com.android.phone.settings.fdn.FdnList");
+                    startActivityAsUser(intent, UserHandle.CURRENT);
+                    return true;
+                }
+            };
 
     private MenuItem.OnMenuItemClickListener mViewSDNCallback =
             new MenuItem.OnMenuItemClickListener() {
-        public boolean onMenuItemClick(MenuItem item) {
-            Intent intent = new Intent(
-                    Intent.ACTION_VIEW, Uri.parse("content://icc/sdn"));
-            // XXX We need to specify the component here because if we don't
-            // the activity manager will try to resolve the type by calling
-            // the content provider, which causes it to be loaded in a process
-            // other than the Dialer process, which causes a lot of stuff to
-            // break.
-            intent.setClassName("com.android.phone", "com.android.phone.ADNList");
-            startActivity(intent);
-            return true;
-        }
-    };
+                public boolean onMenuItemClick(MenuItem item) {
+                    Intent intent = new Intent(
+                            Intent.ACTION_VIEW, Uri.parse("content://icc/sdn"));
+                    // XXX We need to specify the component here because if we don't
+                    // the activity manager will try to resolve the type by calling
+                    // the content provider, which causes it to be loaded in a process
+                    // other than the Dialer process, which causes a lot of stuff to
+                    // break.
+                    intent.setClassName("com.android.phone", "com.android.phone.ADNList");
+                    startActivityAsUser(intent, UserHandle.CURRENT);
+                    return true;
+                }
+            };
 
     private MenuItem.OnMenuItemClickListener mGetImsStatus =
             new MenuItem.OnMenuItemClickListener() {
                 public boolean onMenuItemClick(MenuItem item) {
                     boolean isSimValid = SubscriptionManager.isValidSubscriptionId(mSubId);
                     boolean isImsRegistered = isSimValid && mTelephonyManager.isImsRegistered();
-                    boolean availableVolte = isSimValid && mTelephonyManager.isVolteAvailable();
-                    boolean availableWfc = isSimValid && mTelephonyManager.isWifiCallingAvailable();
-                    boolean availableVt =
-                            isSimValid && mTelephonyManager.isVideoTelephonyAvailable();
+                    boolean availableVolte = false;
+                    boolean availableWfc = false;
+                    boolean availableVt = false;
                     AtomicBoolean availableUt = new AtomicBoolean(false);
 
                     if (isSimValid) {
                         ImsMmTelManager imsMmTelManager = mImsManager.getImsMmTelManager(mSubId);
+                        availableVolte = isVoiceServiceAvailable(imsMmTelManager);
+                        availableVt = isVideoServiceAvailable(imsMmTelManager);
+                        availableWfc = isWfcServiceAvailable(imsMmTelManager);
                         CountDownLatch latch = new CountDownLatch(1);
                         try {
                             HandlerThread handlerThread = new HandlerThread("RadioInfo");
@@ -1811,7 +1845,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private void setImsVolteProvisionedState(boolean state) {
         Log.d(TAG, "setImsVolteProvisioned state: " + ((state) ? "on" : "off"));
-        setImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        setImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE, state);
     }
 
@@ -1823,7 +1857,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private void setImsWfcProvisionedState(boolean state) {
         Log.d(TAG, "setImsWfcProvisioned() state: " + ((state) ? "on" : "off"));
-        setImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        setImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN, state);
     }
 
@@ -1865,7 +1899,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private boolean isImsVolteProvisioningRequired() {
         return isImsConfigProvisioningRequired(
-                MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+                CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
     }
 
@@ -1877,7 +1911,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private boolean isImsWfcProvisioningRequired() {
         return isImsConfigProvisioningRequired(
-                MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+                CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN);
     }
 
@@ -1942,12 +1976,13 @@ public class RadioInfo extends AppCompatActivity {
             intent.putExtra("action", "reset");
             mSimulateOos[mPhoneId] = false;
         }
+        mPhone.getTelephonyTester().setServiceStateTestIntent(intent);
     };
 
     private static final int SATELLITE_CHANNEL = 8665;
     private final OnCheckedChangeListener mForceSatelliteChannelOnChangeListener =
             (buttonView, isChecked) -> {
-                if (SubscriptionManager.isValidSubscriptionId(mSubId)) {
+                if (!SubscriptionManager.isValidSubscriptionId(mSubId)) {
                     loge("Force satellite channel invalid subId " + mSubId);
                     return;
                 }
@@ -2128,31 +2163,72 @@ public class RadioInfo extends AppCompatActivity {
                 }
             };
 
-    /**
-     * Enable modem satellite for non-emergency mode.
-     */
-    private void enableSatelliteNonEmergencyMode() {
-        SatelliteManager sm = getSystemService(SatelliteManager.class);
+    private boolean shouldHideNonEmergencyMode() {
+        if (!Build.isDebuggable()) {
+            return true;
+        }
+        String action  = SatelliteManager.ACTION_SATELLITE_START_NON_EMERGENCY_SESSION;
+        if (TextUtils.isEmpty(action)) {
+            return true;
+        }
+        if (mNonEsosIntent != null) {
+            mNonEsosIntent = null;
+        }
         CarrierConfigManager cm = getSystemService(CarrierConfigManager.class);
-        if (sm == null || cm == null) {
-            loge("enableSatelliteNonEmergencyMode: sm or cm is null");
-            return;
+        if (cm == null) {
+            loge("shouldHideNonEmergencyMode: cm is null");
+            return true;
         }
-        if (!cm.getConfigForSubId(mSubId,
-                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)
-                .getBoolean(CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)) {
-            loge("enableSatelliteNonEmergencyMode: KEY_SATELLITE_ATTACH_SUPPORTED_BOOL is false");
-            return;
+        PersistableBundle bundle = cm.getConfigForSubId(mSubId,
+                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL,
+                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL);
+        if (!bundle.getBoolean(
+                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL, false)) {
+            log("shouldHideNonEmergencyMode: esos_supported false");
+            return true;
         }
-        log("enableSatelliteNonEmergencyMode: requestEnabled");
-        sm.requestEnabled(new EnableRequestAttributes.Builder(true)
-                        .setDemoMode(false).setEmergencyMode(false).build(),
-                Runnable::run, res -> log("enableSatelliteNonEmergencyMode: " + res)
-        );
+        if (!bundle.getBoolean(
+                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL, false)) {
+            log("shouldHideNonEmergencyMode: attach_supported false");
+            return true;
+        }
+
+        String packageName = getStringFromOverlayConfig(
+                com.android.internal.R.string.config_satellite_gateway_service_package);
+
+        String className = getStringFromOverlayConfig(com.android.internal.R.string
+                .config_satellite_carrier_roaming_non_emergency_session_class);
+        if (packageName == null || className == null
+                || packageName.isEmpty() || className.isEmpty()) {
+            Log.d(TAG, "shouldHideNonEmergencyMode:"
+                    + " packageName or className is null or empty.");
+            return true;
+        }
+        PackageManager pm = getPackageManager();
+        Intent intent = new Intent(action);
+        intent.setComponent(new ComponentName(packageName, className));
+        if (pm.queryBroadcastReceivers(intent, 0).isEmpty()) {
+            Log.d(TAG, "shouldHideNonEmergencyMode: Broadcast receiver not found for intent: "
+                    + intent);
+            return true;
+        }
+        mNonEsosIntent = intent;
+        return false;
+    }
+
+    private String getStringFromOverlayConfig(int resourceId) {
+        String name;
+        try {
+            name = getResources().getString(resourceId);
+        } catch (Resources.NotFoundException ex) {
+            loge("getStringFromOverlayConfig: ex=" + ex);
+            name = null;
+        }
+        return name;
     }
 
     private boolean isImsVolteProvisioned() {
-        return getImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        return getImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
     }
 
@@ -2176,7 +2252,7 @@ public class RadioInfo extends AppCompatActivity {
     };
 
     private boolean isImsWfcProvisioned() {
-        return getImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        return getImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN);
     }
 
@@ -2296,7 +2372,7 @@ public class RadioInfo extends AppCompatActivity {
         public void onClick(View v) {
             Intent intent = new Intent(OEM_RADIO_INFO_INTENT);
             try {
-                startActivity(intent);
+                startActivityAsUser(intent, UserHandle.CURRENT);
             } catch (android.content.ActivityNotFoundException ex) {
                 log("OEM-specific Info/Settings Activity Not Found : " + ex);
                 // If the activity does not exist, there are no OEM
@@ -2563,7 +2639,7 @@ public class RadioInfo extends AppCompatActivity {
 
         ImsMmTelManager imsMmTelManager = mImsManager.getImsMmTelManager(mSubId);
         try {
-            imsMmTelManager.isSupported(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+            imsMmTelManager.isSupported(CAPABILITY_TYPE_VOICE,
                     AccessNetworkConstants.TRANSPORT_TYPE_WWAN, getMainExecutor(), (result) -> {
                         updateVolteProvisionedSwitch(result);
                     });
@@ -2571,7 +2647,7 @@ public class RadioInfo extends AppCompatActivity {
                     AccessNetworkConstants.TRANSPORT_TYPE_WWAN, getMainExecutor(), (result) -> {
                         updateVtProvisionedSwitch(result);
                     });
-            imsMmTelManager.isSupported(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+            imsMmTelManager.isSupported(CAPABILITY_TYPE_VOICE,
                     AccessNetworkConstants.TRANSPORT_TYPE_WLAN, getMainExecutor(), (result) -> {
                         updateWfcProvisionedSwitch(result);
                     });
@@ -2589,5 +2665,82 @@ public class RadioInfo extends AppCompatActivity {
         }
 
         return phone;
+    }
+
+    private boolean isVoiceServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isVoiceServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        final int[] radioTechs = {
+            REGISTRATION_TECH_LTE,
+            REGISTRATION_TECH_CROSS_SIM,
+            REGISTRATION_TECH_NR,
+            REGISTRATION_TECH_3G
+        };
+
+        boolean isAvailable = false;
+        for (int tech : radioTechs) {
+            try {
+                isAvailable |= imsMmTelManager.isAvailable(CAPABILITY_TYPE_VOICE, tech);
+                if (isAvailable) {
+                    break;
+                }
+            } catch (Exception e) {
+                log("isVoiceServiceAvailable: exception " + e.getMessage());
+            }
+        }
+
+        log("isVoiceServiceAvailable: " + isAvailable);
+        return isAvailable;
+    }
+
+    private boolean isVideoServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isVideoServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        final int[] radioTechs = {
+            REGISTRATION_TECH_LTE,
+            REGISTRATION_TECH_IWLAN,
+            REGISTRATION_TECH_CROSS_SIM,
+            REGISTRATION_TECH_NR,
+            REGISTRATION_TECH_3G
+        };
+
+        boolean isAvailable = false;
+        for (int tech : radioTechs) {
+            try {
+                isAvailable |= imsMmTelManager.isAvailable(CAPABILITY_TYPE_VIDEO, tech);
+                if (isAvailable) {
+                    break;
+                }
+            } catch (Exception e) {
+                log("isVideoServiceAvailable: exception " + e.getMessage());
+            }
+        }
+
+        log("isVideoServiceAvailable: " + isAvailable);
+        return isAvailable;
+    }
+
+    private boolean isWfcServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isWfcServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        boolean isAvailable = false;
+        try {
+            isAvailable = imsMmTelManager.isAvailable(CAPABILITY_TYPE_VOICE,
+                    REGISTRATION_TECH_IWLAN);
+        } catch (Exception e) {
+            log("isWfcServiceAvailable: exception " + e.getMessage());
+        }
+
+        log("isWfcServiceAvailable: " + isAvailable);
+        return isAvailable;
     }
 }
