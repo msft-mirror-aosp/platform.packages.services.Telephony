@@ -37,7 +37,7 @@ import static junit.framework.Assert.assertNull;
 import static junit.framework.Assert.assertTrue;
 import static junit.framework.Assert.fail;
 
-import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -56,6 +56,7 @@ import static org.mockito.Mockito.when;
 
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.res.Resources;
 import android.net.Uri;
 import android.os.AsyncResult;
 import android.os.Bundle;
@@ -105,11 +106,14 @@ import com.android.internal.telephony.emergency.EmergencyNumberTracker;
 import com.android.internal.telephony.emergency.EmergencyStateTracker;
 import com.android.internal.telephony.emergency.RadioOnHelper;
 import com.android.internal.telephony.emergency.RadioOnStateListener;
+import com.android.internal.telephony.flags.FeatureFlags;
 import com.android.internal.telephony.flags.Flags;
 import com.android.internal.telephony.gsm.SuppServiceNotification;
 import com.android.internal.telephony.imsphone.ImsPhone;
 import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.internal.telephony.satellite.SatelliteSOSMessageRecommender;
+import com.android.internal.telephony.subscription.SubscriptionInfoInternal;
+import com.android.internal.telephony.subscription.SubscriptionManagerService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -224,6 +228,9 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     private static final Uri TEST_ADDRESS = Uri.parse("tel:+16505551212");
     private static final String TELECOM_CALL_ID1 = "TC1";
     private static final String TEST_EMERGENCY_NUMBER = "911";
+    private static final String DISCONNECT_REASON_SATELLITE_ENABLED = "SATELLITE_ENABLED";
+    private static final String DISCONNECT_REASON_CARRIER_ROAMING_SATELLITE_MODE =
+            "CARRIER_ROAMING_SATELLITE_MODE";
     private android.telecom.Connection mConnection;
 
     @Mock TelephonyConnectionService.TelephonyManagerProxy mTelephonyManagerProxy;
@@ -249,6 +256,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Mock ImsPhone mImsPhone;
     @Mock private SatelliteSOSMessageRecommender mSatelliteSOSMessageRecommender;
     @Mock private EmergencyStateTracker mEmergencyStateTracker;
+    @Mock private Resources mMockResources;
+    @Mock private FeatureFlags mFeatureFlags;
     private Phone mPhone0;
     private Phone mPhone1;
 
@@ -276,6 +285,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         super.setUp();
         doReturn(Looper.getMainLooper()).when(mContext).getMainLooper();
         mTestConnectionService = new TestTelephonyConnectionService(mContext);
+        mTestConnectionService.setFeatureFlags(mFeatureFlags);
         mTestConnectionService.setPhoneFactoryProxy(mPhoneFactoryProxy);
         mTestConnectionService.setSubscriptionManagerProxy(mSubscriptionManagerProxy);
         // Set configurations statically
@@ -304,7 +314,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 mTestConnectionService, mEmergencyStateTracker);
         replaceInstance(TelephonyConnectionService.class, "mSatelliteSOSMessageRecommender",
                 mTestConnectionService, mSatelliteSOSMessageRecommender);
-        doNothing().when(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        doNothing().when(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(),
+                anyBoolean());
         doNothing().when(mSatelliteSOSMessageRecommender).onEmergencyCallConnectionStateChanged(
                 anyString(), anyInt());
         doReturn(CompletableFuture.completedFuture(NOT_DISCONNECTED))
@@ -317,6 +328,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 any(), anyInt(), anyBoolean());
         replaceInstance(TelephonyConnectionService.class,
                 "mSatelliteController", mTestConnectionService, mSatelliteController);
+        doReturn(mMockResources).when(mContext).getResources();
+
         mBinderStub = (IConnectionService.Stub) mTestConnectionService.onBind(null);
         mSetFlagsRule.disableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
         mSetFlagsRule.enableFlags(Flags.FLAG_DO_NOT_OVERRIDE_PRECISE_LABEL);
@@ -1296,7 +1309,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0));
+                eq(testPhone), eq(false), eq(0), eq(false));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1324,7 +1337,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0));
+                eq(testPhone), eq(false), eq(0), eq(false));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1335,13 +1348,13 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         callback.getValue().onComplete(null, true);
 
         try {
-            doAnswer(invocation -> null).when(mContext).startActivity(any());
+            doAnswer(invocation -> null).when(mContext).startActivityAsUser(any(), any());
             verify(testPhone).dial(anyString(), any(), any());
         } catch (CallStateException e) {
             // This shouldn't happen
             fail();
         }
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
     }
 
     /**
@@ -1428,12 +1441,15 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @SmallTest
     public void testCreateOutgoingEmergencyConnection_exitingSatellite_placeCall() {
         when(mSatelliteController.isSatelliteEnabled()).thenReturn(true);
+        doReturn(true).when(mMockResources).getBoolean(anyInt());
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(
+                anyString());
         Phone testPhone = setupConnectionServiceInApm();
 
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(0));
+                eq(testPhone), eq(false), eq(0), eq(false));
 
         assertFalse(callback.getValue()
                 .isOkToCall(testPhone, ServiceState.STATE_OUT_OF_SERVICE, false));
@@ -1447,13 +1463,115 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         callback.getValue().onComplete(null, true);
 
         try {
-            doAnswer(invocation -> null).when(mContext).startActivity(any());
+            doAnswer(invocation -> null).when(mContext).startActivityAsUser(any(), any());
             verify(testPhone).dial(anyString(), any(), any());
         } catch (CallStateException e) {
             // This shouldn't happen
             fail();
         }
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
+    }
+
+    /**
+     * Test that the TelephonyConnectionService successfully placing the emergency call based on
+     * CarrierRoaming mode of Satellite.
+     */
+    @Test
+    @SmallTest
+    public void testCreateOutgoingEmergencyConnection_exitingSatellite_EmergencySatellite()
+            throws Exception {
+        doReturn(true).when(mFeatureFlags).carrierRoamingNbIotNtn();
+        doReturn(true).when(mSatelliteController).isSatelliteEnabled();
+
+        // Set config_turn_off_oem_enabled_satellite_during_emergency_call as false
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+        doReturn(false).when(mSatelliteController).isDemoModeEnabled();
+
+        // Satellite is not for emergency, allow EMC
+        doReturn(false).when(mSatelliteController).getRequestIsEmergency();
+        // Setup outgoing emergency call
+        setupConnectionServiceInApm();
+
+        // Verify emergency call go through
+        assertNull(mConnection.getDisconnectCause());
+    }
+
+    @Test
+    @SmallTest
+    public void testCreateOutgoingEmergencyConnection_exitingSatellite_OEM() throws Exception {
+        doReturn(true).when(mFeatureFlags).carrierRoamingNbIotNtn();
+        doReturn(true).when(mSatelliteController).isSatelliteEnabled();
+
+        // Set config_turn_off_oem_enabled_satellite_during_emergency_call as false
+        doReturn(false).when(mMockResources).getBoolean(anyInt());
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+        doReturn(false).when(mSatelliteController).isDemoModeEnabled();
+
+        // Satellite is for emergency
+        doReturn(true).when(mSatelliteController).getRequestIsEmergency();
+        Phone phone = mock(Phone.class);
+        doReturn(1).when(phone).getSubId();
+        doReturn(phone).when(mSatelliteController).getSatellitePhone();
+        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
+        SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
+        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+
+        // Setup outgoing emergency call
+        setupConnectionServiceInApm();
+
+        // Verify DisconnectCause which not allows emergency call
+        assertNotNull(mConnection.getDisconnectCause());
+        assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                mConnection.getDisconnectCause().getTelephonyDisconnectCause());
+
+        // OEM: config_turn_off_oem_enabled_satellite_during_emergency_call = true
+        doReturn(1).when(info).getOnlyNonTerrestrialNetwork();
+        doReturn(true).when(mMockResources).getBoolean(anyInt());
+        // Setup outgoing emergency call
+        setupConnectionServiceInApm();
+
+        // Verify emergency call go through
+        assertNull(mConnection.getDisconnectCause());
+    }
+
+    @Test
+    @SmallTest
+    public void testCreateOutgoingEmergencyConnection_exitingSatellite_Carrier() throws Exception {
+        doReturn(true).when(mFeatureFlags).carrierRoamingNbIotNtn();
+        doReturn(true).when(mSatelliteController).isSatelliteEnabled();
+
+        // Set config_turn_off_oem_enabled_satellite_during_emergency_call as false
+        doReturn(false).when(mMockResources).getBoolean(anyInt());
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+        doReturn(false).when(mSatelliteController).isDemoModeEnabled();
+
+        // Satellite is for emergency
+        doReturn(true).when(mSatelliteController).getRequestIsEmergency();
+        Phone phone = mock(Phone.class);
+        doReturn(1).when(phone).getSubId();
+        doReturn(phone).when(mSatelliteController).getSatellitePhone();
+        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
+        SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
+        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+
+        // Carrier: shouldTurnOffCarrierSatelliteForEmergencyCall = false
+        doReturn(0).when(info).getOnlyNonTerrestrialNetwork();
+        doReturn(false).when(mSatelliteController).shouldTurnOffCarrierSatelliteForEmergencyCall();
+        setupConnectionServiceInApm();
+
+        // Verify DisconnectCause which not allows emergency call
+        assertNotNull(mConnection.getDisconnectCause());
+        assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                mConnection.getDisconnectCause().getTelephonyDisconnectCause());
+
+        // Carrier: shouldTurnOffCarrierSatelliteForEmergencyCall = true
+        doReturn(true).when(mSatelliteController).shouldTurnOffCarrierSatelliteForEmergencyCall();
+        setupConnectionServiceInApm();
+
+        // Verify emergency call go through
+        assertNull(mConnection.getDisconnectCause());
     }
 
     /**
@@ -1486,7 +1604,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper).triggerRadioOnAndListen(any(), eq(false),
-                eq(testPhone0), eq(false), eq(0));
+                eq(testPhone0), eq(false), eq(0), eq(false));
     }
 
     /**
@@ -1520,7 +1638,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper).triggerRadioOnAndListen(any(), eq(false),
-                eq(testPhone0), eq(false), eq(0));
+                eq(testPhone0), eq(false), eq(0), eq(false));
     }
 
     /**
@@ -1553,7 +1671,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 PHONE_ACCOUNT_HANDLE_1, connectionRequest);
 
         verify(mRadioOnHelper, times(0)).triggerRadioOnAndListen(any(),
-                eq(true), eq(testPhone0), eq(false), eq(0));
+                eq(true), eq(testPhone0), eq(false), eq(0), eq(false));
     }
 
     /**
@@ -2041,7 +2159,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
             throws Exception {
         setupForCallTest();
         when(mTelephonyManagerProxy.isConcurrentCallsPossible()).thenReturn(true);
-        doNothing().when(mContext).startActivity(any());
+        doNothing().when(mContext).startActivityAsUser(any(), any());
 
         mBinderStub.createConnection(PHONE_ACCOUNT_HANDLE_1, "TC@1",
                 new ConnectionRequest(PHONE_ACCOUNT_HANDLE_1, Uri.parse("tel:16505551212"),
@@ -2074,7 +2192,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
             throws Exception {
         setupForCallTest();
         when(mTelephonyManagerProxy.isConcurrentCallsPossible()).thenReturn(true);
-        doNothing().when(mContext).startActivity(any());
+        doNothing().when(mContext).startActivityAsUser(any(), any());
 
         doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
         mBinderStub.createConnection(PHONE_ACCOUNT_HANDLE_1, "TC@1",
@@ -2110,7 +2228,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
             throws Exception {
         setupForCallTest();
         when(mTelephonyManagerProxy.isConcurrentCallsPossible()).thenReturn(true);
-        doNothing().when(mContext).startActivity(any());
+        doNothing().when(mContext).startActivityAsUser(any(), any());
 
         doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
         getTestContext().getCarrierConfig(0 /*subId*/).putBoolean(
@@ -2174,7 +2292,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
@@ -2213,7 +2332,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
@@ -2242,7 +2362,9 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         replaceInstance(TelephonyConnectionService.class,
                 "mImsManager", mTestConnectionService, imsManager);
 
-        setupForDialForDomainSelection(mPhone0, DOMAIN_PS, true);
+        int selectedDomain = DOMAIN_PS;
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, true);
 
         mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
                 createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
@@ -2251,13 +2373,13 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<android.telecom.Connection> connectionCaptor =
                 ArgumentCaptor.forClass(android.telecom.Connection.class);
 
-        verify(mEmergencyStateTracker, times(1))
-                .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
-        verify(mDomainSelectionResolver, times(0))
+        verify(mDomainSelectionResolver)
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
-        verify(mEmergencyCallDomainSelectionConnection, times(0))
-                .createEmergencyConnection(any(), any());
+        verify(mEmergencyStateTracker)
+                .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
+        verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
 
@@ -2272,7 +2394,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         assertNotNull("DialArgs param is null", dialArgs);
         assertNotNull("intentExtras is null", dialArgs.intentExtras);
         assertTrue(dialArgs.intentExtras.containsKey(PhoneConstants.EXTRA_DIAL_DOMAIN));
-        assertEquals(DOMAIN_CS, dialArgs.intentExtras.getInt(PhoneConstants.EXTRA_DIAL_DOMAIN, -1));
+        assertEquals(selectedDomain,
+                dialArgs.intentExtras.getInt(PhoneConstants.EXTRA_DIAL_DOMAIN, -1));
     }
 
     @Test
@@ -2289,6 +2412,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         assertTrue(mTestConnectionService.maybeReselectDomain(c, null, true,
                 android.telephony.DisconnectCause.NOT_VALID));
         verify(mEmergencyCallDomainSelectionConnection).reselectDomain(any());
+        verify(mEmergencyCallDomainSelectionConnection).setDisconnectCause(
+                eq(disconnectCause), eq(preciseDisconnectCause), any());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -2314,9 +2439,13 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         TestTelephonyConnection c = setupForReDialForDomainSelection(
                 mPhone0, selectedDomain, preciseDisconnectCause, disconnectCause, true);
 
-        assertTrue(mTestConnectionService.maybeReselectDomain(c, null, true,
-                android.telephony.DisconnectCause.NOT_VALID));
+        assertTrue(mTestConnectionService.maybeReselectDomain(c, null, false,
+                android.telephony.DisconnectCause.ICC_ERROR));
         verify(mEmergencyCallDomainSelectionConnection).reselectDomain(any());
+        verify(mEmergencyCallDomainSelectionConnection).setDisconnectCause(
+                eq(android.telephony.DisconnectCause.ICC_ERROR),
+                eq(com.android.internal.telephony.CallFailCause.NOT_VALID),
+                any());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -2362,7 +2491,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         setupForDialForDomainSelection(mPhone0, selectedDomain, true);
 
         doReturn(mInternalConnection2).when(mCall).getLatestConnection();
-        doReturn(true).when(mCall).isRinging();
+        doReturn(Call.State.INCOMING).when(mCall).getState();
         doReturn(mCall).when(mPhone0).getRingingCall();
 
         mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
@@ -2397,7 +2526,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         listener.onDisconnect(0);
 
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -2424,7 +2554,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 mPhone0, selectedDomain, preciseDisconnectCause, disconnectCause, true);
 
         doReturn(mInternalConnection2).when(mCall).getLatestConnection();
-        doReturn(true).when(mCall).isRinging();
+        doReturn(Call.State.DISCONNECTING).when(mCall).getState();
         doReturn(mCall).when(mPhone0).getRingingCall();
 
         assertTrue(mTestConnectionService.maybeReselectDomain(c, null, true,
@@ -2476,10 +2606,34 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
                         TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
 
+        ArgumentCaptor<TelephonyConnection> connectionCaptor =
+                ArgumentCaptor.forClass(TelephonyConnection.class);
+        ArgumentCaptor<Consumer<Boolean>> consumerCaptor = ArgumentCaptor
+                .forClass(Consumer.class);
+
+        verify(mEmergencyStateTracker).startNormalRoutingEmergencyCall(eq(mPhone0),
+                connectionCaptor.capture(), consumerCaptor.capture());
+
+        TelephonyConnection tc = connectionCaptor.getValue();
+
+        assertNotNull(tc);
+        assertNotNull(mTestConnectionService.getNormalRoutingEmergencyConnection());
+        assertEquals(mTestConnectionService.getNormalRoutingEmergencyConnection(), tc);
+
+        verify(mDomainSelectionResolver, never())
+                .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
+        verify(mNormalCallDomainSelectionConnection, never()).createNormalConnection(any(), any());
+
+        Consumer<Boolean> consumer = consumerCaptor.getValue();
+
+        assertNotNull(consumer);
+
+        consumer.accept(true);
+
         verify(mDomainSelectionResolver)
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
         verify(mNormalCallDomainSelectionConnection).createNormalConnection(any(), any());
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -2490,6 +2644,59 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         assertTrue(dialArgs.intentExtras.containsKey(PhoneConstants.EXTRA_DIAL_DOMAIN));
         assertEquals(
                 selectedDomain, dialArgs.intentExtras.getInt(PhoneConstants.EXTRA_DIAL_DOMAIN, -1));
+    }
+
+    @Test
+    public void testDomainSelectionNormalRoutingEmergencyNumberAndDiscarded() throws Exception {
+        setupForCallTest();
+        int selectedDomain = DOMAIN_PS;
+
+        EmergencyNumber emergencyNumber = new EmergencyNumber(TEST_EMERGENCY_NUMBER, "", "",
+                EmergencyNumber.EMERGENCY_SERVICE_CATEGORY_UNSPECIFIED,
+                Collections.emptyList(),
+                EmergencyNumber.EMERGENCY_NUMBER_SOURCE_DATABASE,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_NORMAL);
+
+        setupForDialForDomainSelection(mPhone0, selectedDomain, false);
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+        doReturn(emergencyNumber).when(mEmergencyNumberTracker).getEmergencyNumber(anyString());
+        doReturn(Arrays.asList(emergencyNumber)).when(mEmergencyNumberTracker).getEmergencyNumbers(
+                anyString());
+
+        mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+
+        ArgumentCaptor<TelephonyConnection> connectionCaptor =
+                ArgumentCaptor.forClass(TelephonyConnection.class);
+        ArgumentCaptor<Consumer<Boolean>> consumerCaptor = ArgumentCaptor
+                .forClass(Consumer.class);
+
+        verify(mEmergencyStateTracker).startNormalRoutingEmergencyCall(eq(mPhone0),
+                connectionCaptor.capture(), consumerCaptor.capture());
+
+        TelephonyConnection tc = connectionCaptor.getValue();
+
+        assertNotNull(tc);
+        assertNotNull(mTestConnectionService.getNormalRoutingEmergencyConnection());
+        assertEquals(mTestConnectionService.getNormalRoutingEmergencyConnection(), tc);
+
+        verify(mDomainSelectionResolver, never())
+                .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
+        verify(mNormalCallDomainSelectionConnection, never()).createNormalConnection(any(), any());
+
+        Consumer<Boolean> consumer = consumerCaptor.getValue();
+
+        assertNotNull(consumer);
+
+        // Discard dialing
+        tc.hangup(android.telephony.DisconnectCause.LOCAL);
+
+        consumer.accept(true);
+
+        verify(mDomainSelectionResolver, never())
+                .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
+        verify(mNormalCallDomainSelectionConnection, never()).createNormalConnection(any(), any());
     }
 
     @Test
@@ -2523,7 +2730,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
@@ -2567,10 +2775,34 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
                         TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
 
+        ArgumentCaptor<TelephonyConnection> connectionCaptor =
+                ArgumentCaptor.forClass(TelephonyConnection.class);
+        ArgumentCaptor<Consumer<Boolean>> consumerCaptor = ArgumentCaptor
+                .forClass(Consumer.class);
+
+        verify(mEmergencyStateTracker).startNormalRoutingEmergencyCall(eq(mPhone0),
+                connectionCaptor.capture(), consumerCaptor.capture());
+
+        TelephonyConnection tc = connectionCaptor.getValue();
+
+        assertNotNull(tc);
+        assertNotNull(mTestConnectionService.getNormalRoutingEmergencyConnection());
+        assertEquals(mTestConnectionService.getNormalRoutingEmergencyConnection(), tc);
+
+        verify(mDomainSelectionResolver, never())
+                .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
+        verify(mNormalCallDomainSelectionConnection, never()).createNormalConnection(any(), any());
+
+        Consumer<Boolean> consumer = consumerCaptor.getValue();
+
+        assertNotNull(consumer);
+
+        consumer.accept(true);
+
         verify(mDomainSelectionResolver)
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
         verify(mNormalCallDomainSelectionConnection).createNormalConnection(any(), any());
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -2592,7 +2824,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_OUT_OF_SERVICE);
@@ -2631,7 +2863,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_OUT_OF_SERVICE);
@@ -2656,7 +2888,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2692,7 +2924,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2729,7 +2961,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         ArgumentCaptor<RadioOnStateListener.Callback> callback =
                 ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
         verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
-                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS));
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
 
         ServiceState ss = new ServiceState();
         ss.setState(ServiceState.STATE_IN_SERVICE);
@@ -2755,6 +2987,23 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .isOkToCall(testPhone, ServiceState.STATE_IN_SERVICE, true));
 
         mConnection.setDisconnected(null);
+    }
+
+    @Test
+    public void testDomainSelectionNormalRoutingEmergencyNumber_exitingApm_DiscardDialing()
+            throws Exception {
+        when(mDeviceState.isAirplaneModeOn(any())).thenReturn(true);
+        Phone testPhone = setupConnectionServiceInApmForDomainSelection(true);
+
+        ArgumentCaptor<RadioOnStateListener.Callback> callback =
+                ArgumentCaptor.forClass(RadioOnStateListener.Callback.class);
+        verify(mRadioOnHelper).triggerRadioOnAndListen(callback.capture(), eq(true),
+                eq(testPhone), eq(false), eq(TIMEOUT_TO_DYNAMIC_ROUTING_MS), eq(true));
+
+        mConnection.setDisconnected(null);
+
+        assertTrue(callback.getValue()
+                .isOkToCall(testPhone, ServiceState.STATE_POWER_OFF, false));
     }
 
     @Test
@@ -2786,7 +3035,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
@@ -2806,6 +3055,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 dialArgs.intentExtras.getInt(PhoneConstants.EXTRA_DIAL_DOMAIN, -1));
         assertTrue(dialArgs.isEmergency);
         assertEquals(eccCategory, dialArgs.eccCategory);
+        assertTrue(dialArgs.intentExtras.getBoolean(
+                PhoneConstants.EXTRA_USE_EMERGENCY_ROUTING, false));
     }
 
     @Test
@@ -2837,7 +3088,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
@@ -2857,6 +3108,43 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 dialArgs.intentExtras.getInt(PhoneConstants.EXTRA_DIAL_DOMAIN, -1));
         assertTrue(dialArgs.isEmergency);
         assertEquals(eccCategory, dialArgs.eccCategory);
+        assertTrue(dialArgs.intentExtras.getBoolean(
+                PhoneConstants.EXTRA_USE_EMERGENCY_ROUTING, false));
+    }
+
+    @Test
+    public void testDomainSelectionSwitchPhones() throws Exception {
+        setupForCallTest();
+
+        doReturn(CompletableFuture.completedFuture(EMERGENCY_PERM_FAILURE))
+                .when(mEmergencyStateTracker)
+                .startEmergencyCall(eq(mPhone0), any(), eq(false));
+        doReturn(CompletableFuture.completedFuture(NOT_DISCONNECTED))
+                .when(mEmergencyStateTracker)
+                .startEmergencyCall(eq(mPhone1), any(), eq(false));
+
+        doReturn(mEmergencyCallDomainSelectionConnection).when(mDomainSelectionResolver)
+                .getDomainSelectionConnection(any(), anyInt(), eq(true));
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+
+        doReturn(true).when(mDomainSelectionResolver).isDomainSelectionSupported();
+
+        mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+
+        ArgumentCaptor<DomainSelectionService.SelectionAttributes> attrCaptor =
+                ArgumentCaptor.forClass(
+                        DomainSelectionService.SelectionAttributes.class);
+
+        verify(mEmergencyStateTracker).startEmergencyCall(eq(mPhone0), any(), anyBoolean());
+        verify(mEmergencyStateTracker).startEmergencyCall(eq(mPhone1), any(), anyBoolean());
+        verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(
+                attrCaptor.capture(), any());
+
+        DomainSelectionService.SelectionAttributes attr = attrCaptor.getValue();
+
+        assertEquals(mPhone1.getPhoneId(), attr.getSlotIndex());
     }
 
     @Test
@@ -2967,9 +3255,10 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
                         TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
 
-        android.telecom.Connection c = mTestConnectionService.getEmergencyConnection();
+        TelephonyConnection c = mTestConnectionService.getEmergencyConnection();
 
         assertNotNull(c);
+        assertNull(c.getOriginalConnection());
 
         ArgumentCaptor<DomainSelectionConnection.DomainSelectionConnectionCallback> callbackCaptor =
                 ArgumentCaptor.forClass(
@@ -2987,6 +3276,11 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         verify(mEmergencyCallDomainSelectionConnection).cancelSelection();
         verify(mEmergencyStateTracker).endCall(eq(c));
+
+        android.telecom.DisconnectCause disconnectCause = c.getDisconnectCause();
+
+        assertNotNull(disconnectCause);
+        assertEquals(ERROR_UNSPECIFIED, disconnectCause.getTelephonyDisconnectCause());
     }
 
     @Test
@@ -3129,7 +3423,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any(), anyBoolean());
 
         android.telecom.Connection tc = connectionCaptor.getValue();
 
@@ -3205,7 +3499,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(true));
         verify(mEmergencyStateTracker)
                 .startEmergencyCall(eq(mPhone0), connectionCaptor.capture(), eq(false));
-        verify(mSatelliteSOSMessageRecommender).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, times(2)).onEmergencyCallStarted(any(),
+                anyBoolean());
         verify(mEmergencyCallDomainSelectionConnection).createEmergencyConnection(any(), any());
         verify(mPhone0).dial(anyString(), any(), any());
 
@@ -3234,7 +3529,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         verify(mEmergencyStateTracker, times(0)).onEmergencyCallStateChanged(
                 any(), eq(c));
-        verify(mSatelliteSOSMessageRecommender, times(0))
+        verify(mSatelliteSOSMessageRecommender, times(2))
                 .onEmergencyCallConnectionStateChanged(eq(TELECOM_CALL_ID1), anyInt());
 
         c.setActive();
@@ -3258,7 +3553,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         // state change not notified any more after CONNECTED once
         verify(mEmergencyStateTracker, times(1)).onEmergencyCallStateChanged(
                 any(), eq(c));
-        verify(mSatelliteSOSMessageRecommender, times(1))
+        verify(mSatelliteSOSMessageRecommender, times(3))
                 .onEmergencyCallConnectionStateChanged(eq(TELECOM_CALL_ID1), anyInt());
 
         // state change to ACTIVE again
@@ -3270,7 +3565,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         // state change not notified any more after CONNECTED once
         verify(mEmergencyStateTracker, times(1)).onEmergencyCallStateChanged(
                 any(), eq(c));
-        verify(mSatelliteSOSMessageRecommender, times(1))
+        verify(mSatelliteSOSMessageRecommender, times(3))
                 .onEmergencyCallConnectionStateChanged(eq(TELECOM_CALL_ID1), anyInt());
 
         // SRVCC happens
@@ -3292,7 +3587,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         // state change not notified
         verify(mEmergencyStateTracker, times(1)).onEmergencyCallStateChanged(
                 any(), eq(c));
-        verify(mSatelliteSOSMessageRecommender, times(1))
+        verify(mSatelliteSOSMessageRecommender, times(3))
                 .onEmergencyCallConnectionStateChanged(eq(TELECOM_CALL_ID1), anyInt());
     }
 
@@ -3394,7 +3689,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Test
     public void testDomainSelectionWithMmiCode() {
         //UT domain selection should not be handled by new domain selector.
-        doNothing().when(mContext).startActivity(any());
+        doNothing().when(mContext).startActivityAsUser(any(), any());
         setupForCallTest();
         setupForDialForDomainSelection(mPhone0, 0, false);
         mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
@@ -3415,7 +3710,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         verify(mDomainSelectionResolver)
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
         verify(mNormalCallDomainSelectionConnection).createNormalConnection(any(), any());
-        verify(mSatelliteSOSMessageRecommender, never()).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, never()).onEmergencyCallStarted(any(),
+                anyBoolean());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -3440,7 +3736,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         verify(mDomainSelectionResolver)
                 .getDomainSelectionConnection(eq(mPhone0), eq(SELECTOR_TYPE_CALLING), eq(false));
         verify(mNormalCallDomainSelectionConnection).createNormalConnection(any(), any());
-        verify(mSatelliteSOSMessageRecommender, never()).onEmergencyCallStarted(any());
+        verify(mSatelliteSOSMessageRecommender, never()).onEmergencyCallStarted(any(),
+                anyBoolean());
 
         ArgumentCaptor<DialArgs> argsCaptor = ArgumentCaptor.forClass(DialArgs.class);
 
@@ -3463,6 +3760,25 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         DisconnectCause disconnectCause = mConnection.getDisconnectCause();
         assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
                 disconnectCause.getTelephonyDisconnectCause());
+        assertEquals(DISCONNECT_REASON_SATELLITE_ENABLED, disconnectCause.getReason());
+    }
+
+    @Test
+    public void testEmergencyCallSatelliteEnabled_blockEmergencyCall() {
+        setupForCallTest();
+        doReturn(true).when(mSatelliteController).isSatelliteEnabled();
+        doReturn(false).when(mMockResources).getBoolean(anyInt());
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(
+                anyString());
+
+        // Simulates an outgoing emergency call.
+        mConnection = mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1,
+                        TEST_EMERGENCY_NUMBER, TELECOM_CALL_ID1));
+        DisconnectCause disconnectCause = mConnection.getDisconnectCause();
+        assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                disconnectCause.getTelephonyDisconnectCause());
+        assertEquals(DISCONNECT_REASON_SATELLITE_ENABLED, disconnectCause.getReason());
     }
 
     @Test
@@ -3471,30 +3787,53 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         setupForCallTest();
         // Call is not supported while using satellite
-        NetworkRegistrationInfo nri = new NetworkRegistrationInfo.Builder()
-                .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                .build();
-        ServiceState ss = new ServiceState();
-        ss.addNetworkRegistrationInfo(nri);
-        when(mPhone0.getServiceState()).thenReturn(ss);
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
+
         mConnection = mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
                 createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1));
         DisconnectCause disconnectCause = mConnection.getDisconnectCause();
         assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
                 disconnectCause.getTelephonyDisconnectCause());
+        assertEquals(DISCONNECT_REASON_CARRIER_ROAMING_SATELLITE_MODE, disconnectCause.getReason());
 
         // Call is supported while using satellite
-        nri = new NetworkRegistrationInfo.Builder()
-                .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE))
-                .build();
-        ss.addNetworkRegistrationInfo(nri);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE));
+
+        // UnsupportedOperationException is thrown as we cannot perform actual call
+        assertThrows(UnsupportedOperationException.class, () -> mTestConnectionService
+                .onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", "TC@2")));
+    }
+
+    @Test
+    public void testNormalCallUsingSatelliteConnectedWithinHysteresisTime() throws Exception {
+        mSetFlagsRule.enableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
+
+        // Call is not supported when device is connected to satellite within hysteresis time
+        setupForCallTest();
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
+
         mConnection = mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
-                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", "TC@2"));
-        disconnectCause = mConnection.getDisconnectCause();
-        assertNotEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1));
+        DisconnectCause disconnectCause = mConnection.getDisconnectCause();
+        assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
                 disconnectCause.getTelephonyDisconnectCause());
+        assertEquals(DISCONNECT_REASON_CARRIER_ROAMING_SATELLITE_MODE, disconnectCause.getReason());
+
+        // Call is supported when device is connected to satellite within hysteresis time
+        setupForCallTest();
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any())).thenReturn(
+                List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE));
+
+        // UnsupportedOperationException is thrown as we cannot perform actual call
+        assertThrows(UnsupportedOperationException.class, () -> mTestConnectionService
+                .onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                        createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", "TC@2")));
     }
 
     @Test
@@ -3503,18 +3842,14 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         setupForCallTest();
         // Flag is disabled, so call is supported while using satellite
-        NetworkRegistrationInfo nri = new NetworkRegistrationInfo.Builder()
-                .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                .build();
-        ServiceState ss = new ServiceState();
-        ss.addNetworkRegistrationInfo(nri);
-        when(mPhone0.getServiceState()).thenReturn(ss);
-        mConnection = mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
-                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1));
-        DisconnectCause disconnectCause = mConnection.getDisconnectCause();
-        assertNotEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
-                disconnectCause.getTelephonyDisconnectCause());
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any())).thenReturn(
+                List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE));
+
+        // UnsupportedOperationException is thrown as we cannot perform actual call
+        assertThrows(UnsupportedOperationException.class, () -> mTestConnectionService
+                .onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1)));
     }
 
     @Test
@@ -3523,22 +3858,17 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
 
         setupForCallTest();
         // Call is not supported while using satellite
-        NetworkRegistrationInfo nri = new NetworkRegistrationInfo.Builder()
-                .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                .build();
-        ServiceState ss = new ServiceState();
-        ss.addNetworkRegistrationInfo(nri);
-        when(mPhone0.getServiceState()).thenReturn(ss);
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
         // Wi-Fi call is possible
         doReturn(true).when(mImsPhone).canMakeWifiCall();
         when(mPhone0.getImsPhone()).thenReturn(mImsPhone);
 
-        mConnection = mTestConnectionService.onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
-                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1));
-        DisconnectCause disconnectCause = mConnection.getDisconnectCause();
-        assertNotEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
-                disconnectCause.getTelephonyDisconnectCause());
+        // UnsupportedOperationException is thrown as we cannot perform actual call
+        assertThrows(UnsupportedOperationException.class, () -> mTestConnectionService
+                .onCreateOutgoingConnection(PHONE_ACCOUNT_HANDLE_1,
+                createConnectionRequest(PHONE_ACCOUNT_HANDLE_1, "1234", TELECOM_CALL_ID1)));
     }
 
     @Test
@@ -3558,16 +3888,16 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     public void testIsAvailableForEmergencyCallsUsingNonTerrestrialNetwork_enableFlag() {
         mSetFlagsRule.enableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
 
+        // Call is not supported while using satellite
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
         Phone mockPhone = Mockito.mock(Phone.class);
-        NetworkRegistrationInfo nri = new NetworkRegistrationInfo.Builder()
-                .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
-                .build();
         ServiceState ss = new ServiceState();
-        ss.addNetworkRegistrationInfo(nri);
         ss.setEmergencyOnly(true);
         ss.setState(ServiceState.STATE_EMERGENCY_ONLY);
         when(mockPhone.getServiceState()).thenReturn(ss);
+        when(mPhoneFactoryProxy.getPhones()).thenReturn(new Phone[] {mockPhone});
 
         assertFalse(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
                 EmergencyNumber.EMERGENCY_CALL_ROUTING_EMERGENCY));
@@ -3581,16 +3911,88 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     public void testIsAvailableForEmergencyCallsUsingNonTerrestrialNetwork_disableFlag() {
         mSetFlagsRule.disableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
 
+        // Call is supported while using satellite
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE));
         Phone mockPhone = Mockito.mock(Phone.class);
+        ServiceState ss = new ServiceState();
+        ss.setEmergencyOnly(true);
+        ss.setState(ServiceState.STATE_EMERGENCY_ONLY);
+        when(mockPhone.getServiceState()).thenReturn(ss);
+
+        when(mPhoneFactoryProxy.getPhones()).thenReturn(new Phone[] {mockPhone});
+
+        assertTrue(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_EMERGENCY));
+        assertFalse(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_NORMAL));
+        assertTrue(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_UNKNOWN));
+    }
+
+    @Test
+    public void testIsAvailableForEmergencyCallsUsingNTN_CellularAvailable() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
+
+        // Call is not supported while using satellite
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
+
+        Phone mockPhone = Mockito.mock(Phone.class);
+        ServiceState ss = new ServiceState();
+        ss.setEmergencyOnly(true);
+        ss.setState(ServiceState.STATE_EMERGENCY_ONLY);
+        when(mockPhone.getServiceState()).thenReturn(ss);
+
+        // Phone2 is in limited service
+        Phone mockPhone2 = Mockito.mock(Phone.class);
+        ServiceState ss2 = new ServiceState();
+        ss2.setEmergencyOnly(true);
+        ss2.setState(ServiceState.STATE_EMERGENCY_ONLY);
+        when(mockPhone2.getServiceState()).thenReturn(ss2);
+
+        Phone[] phones = {mockPhone, mockPhone2};
+        when(mPhoneFactoryProxy.getPhones()).thenReturn(phones);
+
+        assertFalse(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_EMERGENCY));
+        assertFalse(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_NORMAL));
+        assertFalse(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
+                EmergencyNumber.EMERGENCY_CALL_ROUTING_UNKNOWN));
+    }
+
+    @Test
+    public void testIsAvailableForEmergencyCallsUsingNTN_CellularNotAvailable() {
+        mSetFlagsRule.enableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
+
+        // Call is not supported while using satellite
+        when(mSatelliteController.isInSatelliteModeForCarrierRoaming(any())).thenReturn(true);
+        when(mSatelliteController.getCapabilitiesForCarrierRoamingSatelliteMode(any()))
+                .thenReturn(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA));
+
         NetworkRegistrationInfo nri = new NetworkRegistrationInfo.Builder()
                 .setIsNonTerrestrialNetwork(true)
-                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_VOICE))
+                .setAvailableServices(List.of(NetworkRegistrationInfo.SERVICE_TYPE_DATA))
                 .build();
+        Phone mockPhone = Mockito.mock(Phone.class);
         ServiceState ss = new ServiceState();
         ss.addNetworkRegistrationInfo(nri);
         ss.setEmergencyOnly(true);
         ss.setState(ServiceState.STATE_EMERGENCY_ONLY);
         when(mockPhone.getServiceState()).thenReturn(ss);
+
+        // Phone2 is out of service
+        Phone mockPhone2 = Mockito.mock(Phone.class);
+        ServiceState ss2 = new ServiceState();
+        ss2.setEmergencyOnly(false);
+        ss2.setState(ServiceState.STATE_OUT_OF_SERVICE);
+        when(mockPhone2.getServiceState()).thenReturn(ss2);
+
+        Phone[] phones = {mockPhone, mockPhone2};
+        when(mPhoneFactoryProxy.getPhones()).thenReturn(phones);
 
         assertTrue(mTestConnectionService.isAvailableForEmergencyCalls(mockPhone,
                 EmergencyNumber.EMERGENCY_CALL_ROUTING_EMERGENCY));
@@ -3711,6 +4113,30 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         assertEquals(mockInservicePhone,
                 mTestConnectionService.getPhoneForNormalRoutedEmergencyCall(
                         NORMAL_ROUTED_EMERGENCY_NUMBER));
+    }
+
+    /**
+     * Verify where there are two sims, we choose the sim in emergency callback mode for the
+     * next emergency call.
+     */
+    @Test
+    public void testGetPhoneInEmergencyCallbackModeMultiSim() {
+        Phone mockPhone1 = Mockito.mock(Phone.class);
+        Phone mockPhone2 = Mockito.mock(Phone.class);
+
+        when(mPhoneFactoryProxy.getPhones()).thenReturn(
+                new Phone[] {mockPhone1, mockPhone2});
+
+        doReturn(false).when(mEmergencyStateTracker).isInEcm(eq(mockPhone1));
+        doReturn(true).when(mEmergencyStateTracker).isInEcm(eq(mockPhone2));
+
+        // Only applicable for AP domain seleciton service
+        assertNull(mTestConnectionService.getPhoneInEmergencyCallbackMode());
+
+        doReturn(true).when(mDomainSelectionResolver).isDomainSelectionSupported();
+
+        assertEquals(mockPhone2,
+                mTestConnectionService.getPhoneInEmergencyCallbackMode());
     }
 
     private void setupMockEmergencyNumbers(Phone mockPhone, List<EmergencyNumber> numbers) {

@@ -42,7 +42,6 @@ import android.text.TextDirectionHeuristics;
 import android.text.TextUtils;
 import android.util.Log;
 import android.view.MenuItem;
-import android.view.WindowManager;
 import android.widget.ListAdapter;
 import android.widget.Toast;
 
@@ -50,6 +49,7 @@ import com.android.internal.telephony.CallForwardInfo;
 import com.android.internal.telephony.CommandsInterface;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneConstants;
+import com.android.internal.telephony.flags.Flags;
 import com.android.internal.telephony.util.NotificationChannelController;
 import com.android.phone.EditPhoneNumberPreference;
 import com.android.phone.PhoneGlobals;
@@ -200,6 +200,7 @@ public class VoicemailSettingsActivity extends PreferenceActivity
     private boolean mShowVoicemailPreference = false;
 
     private boolean mForeground;
+    private boolean mDisallowedConfig = false;
     private Phone mPhone;
     private SubscriptionInfoHelper mSubscriptionInfoHelper;
 
@@ -221,11 +222,20 @@ public class VoicemailSettingsActivity extends PreferenceActivity
         // Make sure we are running as the primary user only
         UserManager userManager = getApplicationContext().getSystemService(UserManager.class);
         if (!userManager.isPrimaryUser()) {
-           Toast.makeText(this, R.string.voice_number_setting_primary_user_only,
-                   Toast.LENGTH_SHORT).show();
-           finish();
-           return;
+            Toast.makeText(this, R.string.voice_number_setting_primary_user_only,
+                    Toast.LENGTH_SHORT).show();
+            finish();
+            return;
         }
+
+        // Check if mobile network configs are restricted.
+        if (Flags.ensureAccessToCallSettingsIsRestricted() &&
+                userManager.hasUserRestriction(UserManager.DISALLOW_CONFIG_MOBILE_NETWORKS)) {
+            mDisallowedConfig = true;
+            Log.i(LOG_TAG, "Mobile network configs are restricted, disabling voicemail "
+                    + "settings");
+        }
+
         // Show the voicemail preference in onResume if the calling intent specifies the
         // ACTION_ADD_VOICEMAIL action.
         mShowVoicemailPreference = (icicle == null) &&
@@ -266,7 +276,8 @@ public class VoicemailSettingsActivity extends PreferenceActivity
             mSubMenuVoicemailSettings.setDialogOnClosedListener(this);
             mSubMenuVoicemailSettings.setDialogTitle(R.string.voicemail_settings_number_label);
             if (!getBooleanCarrierConfig(
-                    CarrierConfigManager.KEY_EDITABLE_VOICEMAIL_NUMBER_SETTING_BOOL)) {
+                    CarrierConfigManager.KEY_EDITABLE_VOICEMAIL_NUMBER_SETTING_BOOL) ||
+                    mDisallowedConfig) {
                 mSubMenuVoicemailSettings.setEnabled(false);
             }
         }
@@ -483,7 +494,7 @@ public class VoicemailSettingsActivity extends PreferenceActivity
                             Intent i = new Intent(ACTION_ADD_VOICEMAIL);
                             i.putExtra(IGNORE_PROVIDER_EXTRA, victim);
                             i.setFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-                            this.startActivity(i);
+                            this.startActivityAsUser(i, UserHandle.CURRENT);
                         }
                         return;
                     }

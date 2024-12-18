@@ -19,6 +19,7 @@ package com.android;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.when;
 
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
@@ -32,6 +33,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.PersistableBundle;
 import android.os.Process;
+import android.os.UserHandle;
 import android.os.UserManager;
 import android.telecom.TelecomManager;
 import android.telephony.CarrierConfigManager;
@@ -61,6 +63,7 @@ public class TestContext extends MockContext {
     @Mock SubscriptionManager mMockSubscriptionManager;
     @Mock ImsManager mMockImsManager;
     @Mock UserManager mMockUserManager;
+    @Mock PackageManager mPackageManager;
 
     private final SparseArray<PersistableBundle> mCarrierConfigs = new SparseArray<>();
 
@@ -80,6 +83,7 @@ public class TestContext extends MockContext {
             int subId = (int) invocation.getArguments()[0];
             return getTestConfigs(subId);
         }).when(mMockCarrierConfigManager).getConfigForSubId(anyInt(), anyString());
+        when(mPackageManager.hasSystemFeature(anyString())).thenReturn(true);
     }
 
     @Override
@@ -106,6 +110,11 @@ public class TestContext extends MockContext {
     @Override
     public AttributionSource getAttributionSource() {
         return new AttributionSource(Process.myUid(), getPackageName(), "");
+    }
+
+    @Override
+    public void startActivityAsUser(Intent intent, UserHandle user) {
+        throw new UnsupportedOperationException();
     }
 
     @Override
@@ -142,6 +151,11 @@ public class TestContext extends MockContext {
     @Override
     public void unregisterReceiver(BroadcastReceiver receiver) {
         mReceiver = null;
+    }
+
+    @Override
+    public PackageManager getPackageManager() {
+        return mPackageManager;
     }
 
     @Override
