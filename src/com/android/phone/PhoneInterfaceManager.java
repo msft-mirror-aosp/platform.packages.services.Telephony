@@ -6164,7 +6164,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
             int command, int p1, int p2, int p3, String data) {
         final long identity = Binder.clearCallingIdentity();
         try {
-            if (channel <= 0) {
+            if (channel <= 0 || channel >= 256) {
                 return "6881";  // STATUS_CHANNEL_NOT_SUPPORTED
             }
 
