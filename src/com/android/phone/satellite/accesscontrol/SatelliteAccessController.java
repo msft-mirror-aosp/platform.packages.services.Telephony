@@ -2907,6 +2907,7 @@ public class SatelliteAccessController extends Handler {
                 .setIsEmergency(isInEmergency())
                 .setResult(resultCode)
                 .setCarrierId(mSatelliteController.getSatelliteCarrierId())
+                .setIsNtnOnlyCarrier(mSatelliteController.isNtnOnlyCarrier())
                 .reportAccessControllerMetrics();
         mLocationQueryStartTimeMillis = 0;
         mOnDeviceLookupStartTimeMillis = 0;
