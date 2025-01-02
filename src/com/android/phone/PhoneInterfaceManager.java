@@ -2587,8 +2587,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
     }
 
     private void sendEraseModemConfig(@NonNull Phone phone) {
-        if (mFeatureFlags.cleanupCdma()) return;
-        Boolean success = (Boolean) sendRequest(CMD_ERASE_MODEM_CONFIG, null);
+        int cmd = mFeatureFlags.cleanupCdma() ? CMD_MODEM_REBOOT : CMD_ERASE_MODEM_CONFIG;
+        Boolean success = (Boolean) sendRequest(cmd, null);
         if (DBG) log("eraseModemConfig:" + ' ' + (success ? "ok" : "fail"));
     }
 
@@ -6503,7 +6503,8 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
             final long identity = Binder.clearCallingIdentity();
             try {
-                Boolean success = (Boolean) sendRequest(CMD_RESET_MODEM_CONFIG, null);
+                int cmd = mFeatureFlags.cleanupCdma() ? CMD_MODEM_REBOOT : CMD_RESET_MODEM_CONFIG;
+                Boolean success = (Boolean) sendRequest(cmd, null);
                 if (DBG) log("resetModemConfig:" + ' ' + (success ? "ok" : "fail"));
                 return success;
             } finally {
