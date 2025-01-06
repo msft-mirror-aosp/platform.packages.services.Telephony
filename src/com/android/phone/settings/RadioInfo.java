@@ -17,6 +17,13 @@
 package com.android.phone.settings;
 
 import static android.net.ConnectivityManager.NetworkCallback;
+import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VIDEO;
+import static android.telephony.ims.feature.MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_CROSS_SIM;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_LTE;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_NR;
+import static android.telephony.ims.stub.ImsRegistrationImplBase.REGISTRATION_TECH_3G;
 
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 
@@ -308,6 +315,7 @@ public class RadioInfo extends AppCompatActivity {
     private Switch mSimulateOutOfServiceSwitch;
     private Switch mEnforceSatelliteChannel;
     private Switch mMockSatellite;
+    private Switch mMockSatelliteData;
     private Button mPingTestButton;
     private Button mUpdateSmscButton;
     private Button mRefreshSmscButton;
@@ -351,6 +359,7 @@ public class RadioInfo extends AppCompatActivity {
     private boolean mSystemUser = true;
 
     private final PersistableBundle[] mCarrierSatelliteOriginalBundle = new PersistableBundle[2];
+    private final PersistableBundle[] mSatelliteDataOriginalBundle = new PersistableBundle[2];
     private final PersistableBundle[] mOriginalSystemChannels = new PersistableBundle[2];
     private List<CellInfo> mCellInfoResult = null;
     private final boolean[] mSimulateOos = new boolean[2];
@@ -367,7 +376,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private String mActionEsos;
     private String mActionEsosDemo;
-
+    private Intent mNonEsosIntent;
     private TelephonyDisplayInfo mDisplayInfo;
 
     private List<PhysicalChannelConfig> mPhysicalChannelConfigs = new ArrayList<>();
@@ -743,9 +752,11 @@ public class RadioInfo extends AppCompatActivity {
         }
 
         mMockSatellite = (Switch) findViewById(R.id.mock_carrier_roaming_satellite);
+        mMockSatelliteData = (Switch) findViewById(R.id.use_carrier_data_in_satellite);
         mEnforceSatelliteChannel = (Switch) findViewById(R.id.enforce_satellite_channel);
         if (!Build.isDebuggable()) {
             mMockSatellite.setVisibility(View.GONE);
+            mMockSatelliteData.setVisibility(View.GONE);
             mEnforceSatelliteChannel.setVisibility(View.GONE);
         }
 
@@ -785,37 +796,33 @@ public class RadioInfo extends AppCompatActivity {
         mEsosDemoButton  = (Button) findViewById(R.id.demo_esos_questionnaire);
         mSatelliteEnableNonEmergencyModeButton = (Button) findViewById(
                 R.id.satellite_enable_non_emergency_mode);
-        CarrierConfigManager cm = getSystemService(CarrierConfigManager.class);
-        PersistableBundle bundle = cm.getConfigForSubId(mSubId,
-                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL,
-                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL);
-        if (!bundle.getBoolean(
-                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL, false)
-                || !bundle.getBoolean(
-                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL, false)) {
-            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
-        }
-        if (!Build.isDebuggable()) {
-            if (!TextUtils.isEmpty(mActionEsos)) {
-                mEsosButton.setVisibility(View.GONE);
-            }
-            if (!TextUtils.isEmpty(mActionEsosDemo)) {
-                mEsosDemoButton.setVisibility(View.GONE);
-            }
-            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
+
+        if (shouldHideButton(mActionEsos)) {
+            mEsosButton.setVisibility(View.GONE);
         } else {
             mEsosButton.setOnClickListener(v -> startActivityAsUser(
                     new Intent(mActionEsos).addFlags(
                             Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
                     UserHandle.CURRENT)
             );
+        }
+        if (shouldHideButton(mActionEsosDemo)) {
+            mEsosDemoButton.setVisibility(View.GONE);
+        } else {
             mEsosDemoButton.setOnClickListener(v -> startActivityAsUser(
                     new Intent(mActionEsosDemo).addFlags(
                             Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK),
                     UserHandle.CURRENT)
             );
-            mSatelliteEnableNonEmergencyModeButton.setOnClickListener(v ->
-                    enableSatelliteNonEmergencyMode());
+        }
+        if (shouldHideNonEmergencyMode()) {
+            mSatelliteEnableNonEmergencyModeButton.setVisibility(View.GONE);
+        } else {
+            mSatelliteEnableNonEmergencyModeButton.setOnClickListener(v -> {
+                if (mNonEsosIntent != null) {
+                    sendBroadcast(mNonEsosIntent);
+                }
+            });
         }
 
         mOemInfoButton = (Button) findViewById(R.id.oem_info);
@@ -837,6 +844,21 @@ public class RadioInfo extends AppCompatActivity {
         }).start();
 
         restoreFromBundle(icicle);
+    }
+
+    boolean shouldHideButton(String action) {
+        if (!Build.isDebuggable()) {
+            return true;
+        }
+        if (TextUtils.isEmpty(action)) {
+            return true;
+        }
+        PackageManager pm = getPackageManager();
+        Intent intent = new Intent(action);
+        if (pm.resolveActivity(intent, 0) == null) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -911,6 +933,8 @@ public class RadioInfo extends AppCompatActivity {
         mSimulateOutOfServiceSwitch.setOnCheckedChangeListener(mSimulateOosOnChangeListener);
         mMockSatellite.setChecked(mCarrierSatelliteOriginalBundle[mPhoneId] != null);
         mMockSatellite.setOnCheckedChangeListener(mMockSatelliteListener);
+        mMockSatelliteData.setChecked(mSatelliteDataOriginalBundle[mPhoneId] != null);
+        mMockSatelliteData.setOnCheckedChangeListener(mMockSatelliteDataListener);
         updateSatelliteChannelDisplay(mPhoneId);
         mEnforceSatelliteChannel.setOnCheckedChangeListener(mForceSatelliteChannelOnChangeListener);
         mImsVolteProvisionedSwitch.setOnCheckedChangeListener(mImsVolteCheckedChangeListener);
@@ -1040,6 +1064,9 @@ public class RadioInfo extends AppCompatActivity {
             }
             if (mCarrierSatelliteOriginalBundle[mPhoneId] != null) {
                 mMockSatelliteListener.onCheckedChanged(mMockSatellite, false);
+            }
+            if (mSatelliteDataOriginalBundle[mPhoneId] != null) {
+                mMockSatelliteDataListener.onCheckedChanged(mMockSatelliteData, false);
             }
             if (mSelectedSignalStrengthIndex[mPhoneId] > 0) {
                 mOnMockSignalStrengthSelectedListener.onItemSelected(null, null, 0/*pos*/, 0);
@@ -1414,7 +1441,9 @@ public class RadioInfo extends AppCompatActivity {
     }
 
     private void updateNetworkType() {
-        if (SubscriptionManager.isValidPhoneId(mPhoneId)) {
+        SubscriptionManager mSm = getSystemService(SubscriptionManager.class);
+        if (SubscriptionManager.isValidPhoneId(mPhoneId)
+                && mSm.isActiveSubscriptionId(mSubId)) {
             mDataNetwork.setText(ServiceState.rilRadioTechnologyToString(
                     mTelephonyManager.getServiceStateForSlot(mPhoneId)
                             .getRilDataRadioTechnology()));
@@ -1737,14 +1766,16 @@ public class RadioInfo extends AppCompatActivity {
                 public boolean onMenuItemClick(MenuItem item) {
                     boolean isSimValid = SubscriptionManager.isValidSubscriptionId(mSubId);
                     boolean isImsRegistered = isSimValid && mTelephonyManager.isImsRegistered();
-                    boolean availableVolte = isSimValid && mTelephonyManager.isVolteAvailable();
-                    boolean availableWfc = isSimValid && mTelephonyManager.isWifiCallingAvailable();
-                    boolean availableVt =
-                            isSimValid && mTelephonyManager.isVideoTelephonyAvailable();
+                    boolean availableVolte = false;
+                    boolean availableWfc = false;
+                    boolean availableVt = false;
                     AtomicBoolean availableUt = new AtomicBoolean(false);
 
                     if (isSimValid) {
                         ImsMmTelManager imsMmTelManager = mImsManager.getImsMmTelManager(mSubId);
+                        availableVolte = isVoiceServiceAvailable(imsMmTelManager);
+                        availableVt = isVideoServiceAvailable(imsMmTelManager);
+                        availableWfc = isWfcServiceAvailable(imsMmTelManager);
                         CountDownLatch latch = new CountDownLatch(1);
                         try {
                             HandlerThread handlerThread = new HandlerThread("RadioInfo");
@@ -1823,7 +1854,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private void setImsVolteProvisionedState(boolean state) {
         Log.d(TAG, "setImsVolteProvisioned state: " + ((state) ? "on" : "off"));
-        setImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        setImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE, state);
     }
 
@@ -1835,7 +1866,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private void setImsWfcProvisionedState(boolean state) {
         Log.d(TAG, "setImsWfcProvisioned() state: " + ((state) ? "on" : "off"));
-        setImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        setImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN, state);
     }
 
@@ -1877,7 +1908,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private boolean isImsVolteProvisioningRequired() {
         return isImsConfigProvisioningRequired(
-                MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+                CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
     }
 
@@ -1889,7 +1920,7 @@ public class RadioInfo extends AppCompatActivity {
 
     private boolean isImsWfcProvisioningRequired() {
         return isImsConfigProvisioningRequired(
-                MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+                CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN);
     }
 
@@ -2076,6 +2107,57 @@ public class RadioInfo extends AppCompatActivity {
         })).start();
     }
 
+    /**
+     * The method will override the key `KEY_SATELLITE_DATA_SUPPORT_MODE_INT` in carrierConfig to
+     * `SATELLITE_DATA_SUPPORT_ALL` means satellite data support is not restricted.
+     */
+    private final OnCheckedChangeListener mMockSatelliteDataListener = (buttonView, isChecked) -> {
+        if (SubscriptionManager.isValidPhoneId(mPhoneId)) {
+            CarrierConfigManager cm = getSystemService(CarrierConfigManager.class);
+            if (cm == null) return;
+            if (isChecked) {
+                String operatorNumeric = mTelephonyManager
+                        .getNetworkOperatorForPhone(mPhoneId);
+                TelephonyManager tm;
+                if (TextUtils.isEmpty(operatorNumeric)
+                        && (tm = getSystemService(TelephonyManager.class)) != null) {
+                    operatorNumeric = tm.getSimOperatorNumericForPhone(mPhoneId);
+                }
+                if (TextUtils.isEmpty(operatorNumeric)) {
+                    loge("mMockSatelliteDataListener: Can't mock because no operator for phone "
+                            + mPhoneId);
+                    mMockSatelliteData.setChecked(false);
+                    return;
+                }
+                log("mMockSatelliteData Checked");
+                PersistableBundle originalBundle = cm.getConfigForSubId(mSubId,
+                        CarrierConfigManager.KEY_SATELLITE_DATA_SUPPORT_MODE_INT);
+                PersistableBundle overrideBundle = new PersistableBundle();
+                overrideBundle.putInt(CarrierConfigManager.KEY_SATELLITE_DATA_SUPPORT_MODE_INT,
+                        CarrierConfigManager.SATELLITE_DATA_SUPPORT_ALL);
+                log("mMockSatelliteDataListener: new " + overrideBundle);
+                log("mMockSatelliteDataListener: old " + originalBundle);
+                cm.overrideConfig(mSubId, overrideBundle, false);
+                mSatelliteDataOriginalBundle[mPhoneId] = originalBundle;
+            } else {
+                log("mMockSatelliteData UnChecked");
+                try {
+                    cm.overrideConfig(mSubId, mSatelliteDataOriginalBundle[mPhoneId], false);
+                    mSatelliteDataOriginalBundle[mPhoneId] = null;
+                    log("mMockSatelliteDataListener: Successfully cleared data mock for phone "
+                            + mPhoneId);
+                } catch (Exception e) {
+                    loge("mMockSatelliteDataListener: Can't clear mock data because invalid sub Id "
+                            + mSubId + ", insert SIM and use adb shell cmd phone cc clear-values");
+                    // Keep show toggle ON if the view is not destroyed. If destroyed, must
+                    // use cmd to reset, because upon creation the view doesn't remember the
+                    // last toggle state while override mock is still in place.
+                    mMockSatelliteData.setChecked(true);
+                }
+            }
+        }
+    };
+
     private final OnCheckedChangeListener mMockSatelliteListener =
             (buttonView, isChecked) -> {
                 if (SubscriptionManager.isValidPhoneId(mPhoneId)) {
@@ -2141,26 +2223,36 @@ public class RadioInfo extends AppCompatActivity {
                 }
             };
 
-    /**
-     * Enable modem satellite for non-emergency mode.
-     */
-    private void enableSatelliteNonEmergencyMode() {
+    private boolean shouldHideNonEmergencyMode() {
+        if (!Build.isDebuggable()) {
+            return true;
+        }
+        String action  = SatelliteManager.ACTION_SATELLITE_START_NON_EMERGENCY_SESSION;
+        if (TextUtils.isEmpty(action)) {
+            return true;
+        }
+        if (mNonEsosIntent != null) {
+            mNonEsosIntent = null;
+        }
         CarrierConfigManager cm = getSystemService(CarrierConfigManager.class);
         if (cm == null) {
-            loge("enableSatelliteNonEmergencyMode: sm or cm is null");
-            return;
+            loge("shouldHideNonEmergencyMode: cm is null");
+            return true;
         }
-        if (!cm.getConfigForSubId(mSubId,
-                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)
-                .getBoolean(CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL)) {
-            loge("enableSatelliteNonEmergencyMode: KEY_SATELLITE_ATTACH_SUPPORTED_BOOL is false");
-            return;
+        PersistableBundle bundle = cm.getConfigForSubId(mSubId,
+                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL,
+                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL);
+        if (!bundle.getBoolean(
+                CarrierConfigManager.KEY_SATELLITE_ESOS_SUPPORTED_BOOL, false)) {
+            log("shouldHideNonEmergencyMode: esos_supported false");
+            return true;
         }
-        log("enableSatelliteNonEmergencyMode: requestEnabled");
-        sendBroadCastForSatelliteNonEmergencyMode();
-    }
+        if (!bundle.getBoolean(
+                CarrierConfigManager.KEY_SATELLITE_ATTACH_SUPPORTED_BOOL, false)) {
+            log("shouldHideNonEmergencyMode: attach_supported false");
+            return true;
+        }
 
-    private void sendBroadCastForSatelliteNonEmergencyMode() {
         String packageName = getStringFromOverlayConfig(
                 com.android.internal.R.string.config_satellite_gateway_service_package);
 
@@ -2168,16 +2260,20 @@ public class RadioInfo extends AppCompatActivity {
                 .config_satellite_carrier_roaming_non_emergency_session_class);
         if (packageName == null || className == null
                 || packageName.isEmpty() || className.isEmpty()) {
-            Log.d(TAG, "sendBroadCastForSatelliteNonEmergencyMode:"
+            Log.d(TAG, "shouldHideNonEmergencyMode:"
                     + " packageName or className is null or empty.");
-            return;
+            return true;
         }
-        String action  = SatelliteManager.ACTION_SATELLITE_START_NON_EMERGENCY_SESSION;
-
+        PackageManager pm = getPackageManager();
         Intent intent = new Intent(action);
         intent.setComponent(new ComponentName(packageName, className));
-        sendBroadcast(intent);
-        Log.d(TAG, "sendBroadCastForSatelliteNonEmergencyMode" + intent);
+        if (pm.queryBroadcastReceivers(intent, 0).isEmpty()) {
+            Log.d(TAG, "shouldHideNonEmergencyMode: Broadcast receiver not found for intent: "
+                    + intent);
+            return true;
+        }
+        mNonEsosIntent = intent;
+        return false;
     }
 
     private String getStringFromOverlayConfig(int resourceId) {
@@ -2192,7 +2288,7 @@ public class RadioInfo extends AppCompatActivity {
     }
 
     private boolean isImsVolteProvisioned() {
-        return getImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        return getImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_LTE);
     }
 
@@ -2216,7 +2312,7 @@ public class RadioInfo extends AppCompatActivity {
     };
 
     private boolean isImsWfcProvisioned() {
-        return getImsConfigProvisionedState(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+        return getImsConfigProvisionedState(CAPABILITY_TYPE_VOICE,
                 ImsRegistrationImplBase.REGISTRATION_TECH_IWLAN);
     }
 
@@ -2603,7 +2699,7 @@ public class RadioInfo extends AppCompatActivity {
 
         ImsMmTelManager imsMmTelManager = mImsManager.getImsMmTelManager(mSubId);
         try {
-            imsMmTelManager.isSupported(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+            imsMmTelManager.isSupported(CAPABILITY_TYPE_VOICE,
                     AccessNetworkConstants.TRANSPORT_TYPE_WWAN, getMainExecutor(), (result) -> {
                         updateVolteProvisionedSwitch(result);
                     });
@@ -2611,7 +2707,7 @@ public class RadioInfo extends AppCompatActivity {
                     AccessNetworkConstants.TRANSPORT_TYPE_WWAN, getMainExecutor(), (result) -> {
                         updateVtProvisionedSwitch(result);
                     });
-            imsMmTelManager.isSupported(MmTelFeature.MmTelCapabilities.CAPABILITY_TYPE_VOICE,
+            imsMmTelManager.isSupported(CAPABILITY_TYPE_VOICE,
                     AccessNetworkConstants.TRANSPORT_TYPE_WLAN, getMainExecutor(), (result) -> {
                         updateWfcProvisionedSwitch(result);
                     });
@@ -2629,5 +2725,82 @@ public class RadioInfo extends AppCompatActivity {
         }
 
         return phone;
+    }
+
+    private boolean isVoiceServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isVoiceServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        final int[] radioTechs = {
+            REGISTRATION_TECH_LTE,
+            REGISTRATION_TECH_CROSS_SIM,
+            REGISTRATION_TECH_NR,
+            REGISTRATION_TECH_3G
+        };
+
+        boolean isAvailable = false;
+        for (int tech : radioTechs) {
+            try {
+                isAvailable |= imsMmTelManager.isAvailable(CAPABILITY_TYPE_VOICE, tech);
+                if (isAvailable) {
+                    break;
+                }
+            } catch (Exception e) {
+                log("isVoiceServiceAvailable: exception " + e.getMessage());
+            }
+        }
+
+        log("isVoiceServiceAvailable: " + isAvailable);
+        return isAvailable;
+    }
+
+    private boolean isVideoServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isVideoServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        final int[] radioTechs = {
+            REGISTRATION_TECH_LTE,
+            REGISTRATION_TECH_IWLAN,
+            REGISTRATION_TECH_CROSS_SIM,
+            REGISTRATION_TECH_NR,
+            REGISTRATION_TECH_3G
+        };
+
+        boolean isAvailable = false;
+        for (int tech : radioTechs) {
+            try {
+                isAvailable |= imsMmTelManager.isAvailable(CAPABILITY_TYPE_VIDEO, tech);
+                if (isAvailable) {
+                    break;
+                }
+            } catch (Exception e) {
+                log("isVideoServiceAvailable: exception " + e.getMessage());
+            }
+        }
+
+        log("isVideoServiceAvailable: " + isAvailable);
+        return isAvailable;
+    }
+
+    private boolean isWfcServiceAvailable(ImsMmTelManager imsMmTelManager) {
+        if (imsMmTelManager == null) {
+            log("isWfcServiceAvailable: ImsMmTelManager is null");
+            return false;
+        }
+
+        boolean isAvailable = false;
+        try {
+            isAvailable = imsMmTelManager.isAvailable(CAPABILITY_TYPE_VOICE,
+                    REGISTRATION_TECH_IWLAN);
+        } catch (Exception e) {
+            log("isWfcServiceAvailable: exception " + e.getMessage());
+        }
+
+        log("isWfcServiceAvailable: " + isAvailable);
+        return isAvailable;
     }
 }

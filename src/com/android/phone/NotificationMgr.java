@@ -439,7 +439,10 @@ public class NotificationMgr {
                 mUserManager.getSerialNumbersOfUsers(/* excludeDying= */ true);
         List<UserHandle> users = new ArrayList<>(serialNumbersOfUsers.length);
         for (long serialNumber : serialNumbersOfUsers) {
-            users.add(mUserManager.getUserForSerialNumber(serialNumber));
+            UserHandle userHandle = mUserManager.getUserForSerialNumber(serialNumber);
+            if (userHandle != null) {
+                users.add(userHandle);
+            }
         }
         return users;
     }
@@ -814,7 +817,7 @@ public class NotificationMgr {
                 mContext.getString(R.string.mobile_network_settings_class)));
         intent.putExtra(Settings.EXTRA_SUB_ID, subId);
         builder.setContentIntent(
-                PendingIntent.getActivity(mContext, 0, intent, PendingIntent.FLAG_IMMUTABLE));
+                PendingIntent.getActivity(mContext, subId, intent, PendingIntent.FLAG_IMMUTABLE));
         notifyAsUser(
                 Integer.toString(subId) /* tag */,
                 SELECTED_OPERATOR_FAIL_NOTIFICATION,
