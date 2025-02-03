@@ -730,11 +730,6 @@ public class SatelliteAccessController extends Handler {
      */
     public void requestIsCommunicationAllowedForCurrentLocation(
             @NonNull ResultReceiver result, boolean enablingSatellite) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            plogd("oemEnabledSatelliteFlag is disabled");
-            result.send(SATELLITE_RESULT_REQUEST_NOT_SUPPORTED, null);
-            return;
-        }
         plogd("requestIsCommunicationAllowedForCurrentLocation : "
                 + "enablingSatellite is " + enablingSatellite);
         synchronized (mIsAllowedCheckBeforeEnablingSatelliteLock) {
@@ -1505,11 +1500,6 @@ public class SatelliteAccessController extends Handler {
     }
 
     private void registerLocationModeChangedBroadcastReceiver(Context context) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            plogd("registerLocationModeChangedBroadcastReceiver: Flag "
-                    + "oemEnabledSatellite is disabled");
-            return;
-        }
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(LocationManager.MODE_CHANGED_ACTION);
         intentFilter.addAction(LocationManager.PROVIDERS_CHANGED_ACTION);
@@ -1964,11 +1954,6 @@ public class SatelliteAccessController extends Handler {
     }
 
     private void handleSatelliteAllowedRegionPossiblyChanged(int handleEvent) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            ploge("handleSatelliteAllowedRegionPossiblyChanged: "
-                    + "The feature flag oemEnabledSatelliteFlag() is not enabled");
-            return;
-        }
         synchronized (mPossibleChangeInSatelliteAllowedRegionLock) {
             logd("handleSatelliteAllowedRegionPossiblyChanged");
             setIsSatelliteAllowedRegionPossiblyChanged(true);
@@ -2838,12 +2823,6 @@ public class SatelliteAccessController extends Handler {
     @SatelliteManager.SatelliteResult
     public int registerForCommunicationAccessStateChanged(int subId,
             @NonNull ISatelliteCommunicationAccessStateCallback callback) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            plogd("registerForCommunicationAccessStateChanged: oemEnabledSatelliteFlag is "
-                    + "disabled");
-            return SatelliteManager.SATELLITE_RESULT_REQUEST_NOT_SUPPORTED;
-        }
-
         mSatelliteCommunicationAccessStateChangedListeners.put(callback.asBinder(), callback);
 
         this.post(() -> {
@@ -2883,12 +2862,6 @@ public class SatelliteAccessController extends Handler {
      */
     public void unregisterForCommunicationAccessStateChanged(
             int subId, @NonNull ISatelliteCommunicationAccessStateCallback callback) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            plogd("unregisterForCommunicationAccessStateChanged: "
-                    + "oemEnabledSatelliteFlag is disabled");
-            return;
-        }
-
         mSatelliteCommunicationAccessStateChangedListeners.remove(callback.asBinder());
     }
 
@@ -2967,12 +2940,6 @@ public class SatelliteAccessController extends Handler {
      * @return {@code true} if the setting is successful, {@code false} otherwise.
      */
     public boolean setIsSatelliteCommunicationAllowedForCurrentLocationCache(String state) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            logd("setIsSatelliteCommunicationAllowedForCurrentLocationCache: "
-                    + "oemEnabledSatelliteFlag is disabled");
-            return false;
-        }
-
         if (!isMockModemAllowed()) {
             logd("setIsSatelliteCommunicationAllowedForCurrentLocationCache: "
                     + "mock modem not allowed.");
