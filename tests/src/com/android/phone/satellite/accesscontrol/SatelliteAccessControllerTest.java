@@ -126,6 +126,7 @@ import com.android.internal.telephony.satellite.SatelliteConfigParser;
 import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.internal.telephony.satellite.SatelliteModemInterface;
 import com.android.internal.telephony.satellite.metrics.ControllerMetricsStats;
+import com.android.internal.telephony.subscription.SubscriptionManagerService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -354,6 +355,8 @@ public class SatelliteAccessControllerTest extends TelephonyTestBase {
                 mMockSatelliteController);
         replaceInstance(SatelliteModemInterface.class, "sInstance", null,
                 mMockSatelliteModemInterface);
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null,
+                mock(SubscriptionManagerService.class));
         replaceInstance(TelephonyCountryDetector.class, "sInstance", null,
                 mMockCountryDetector);
         replaceInstance(ControllerMetricsStats.class, "sInstance", null,
