@@ -177,7 +177,7 @@ public class SimContacts extends ADNList {
         builder.withValue(Data.IS_PRIMARY, 1);
         operationList.add(builder.build());
 
-        if (emailAddresses != null) {
+        if (emailAddressArray != null) {
             for (String emailAddress : emailAddressArray) {
                 builder = ContentProviderOperation.newInsert(Data.CONTENT_URI);
                 builder.withValueBackReference(Email.RAW_CONTACT_ID, 0);
@@ -231,6 +231,10 @@ public class SimContacts extends ADNList {
     @Override
     protected void onCreate(Bundle icicle) {
         super.onCreate(icicle);
+
+        getWindow().addSystemFlags(
+                android.view.WindowManager.LayoutParams
+                        .SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS);
 
         Intent intent = getIntent();
         if (intent != null) {

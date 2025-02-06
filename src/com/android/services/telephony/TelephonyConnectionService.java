@@ -71,6 +71,7 @@ import android.telephony.ims.stub.ImsRegistrationImplBase;
 import android.text.TextUtils;
 import android.util.Pair;
 import android.view.WindowManager;
+import android.widget.Toast;
 
 import com.android.ims.ImsManager;
 import com.android.internal.annotations.VisibleForTesting;
@@ -2152,6 +2153,11 @@ public class TelephonyConnectionService extends ConnectionService {
         }
 
         if (isEmergencyNumber) {
+            if (!shouldTurnOffNonEmergencyNbIotNtnSessionForEmergencyCall()) {
+                // Carrier
+                return false;
+            }
+
             if (mSatelliteController.isDemoModeEnabled()) {
                 // If user makes emergency call in demo mode, end the satellite session
                 return true;
@@ -2334,9 +2340,8 @@ public class TelephonyConnectionService extends ConnectionService {
                                 }
                             }
                             for (Conference c : getAllConferences()) {
-                                if (c.getState() != Connection.STATE_DISCONNECTED
-                                        && c instanceof Conference) {
-                                    ((Conference) c).onDisconnect();
+                                if (c.getState() != Connection.STATE_DISCONNECTED) {
+                                    c.onDisconnect();
                                 }
                             }
                         } else if (!isVideoCallHoldAllowed(phone)) {
@@ -2557,6 +2562,10 @@ public class TelephonyConnectionService extends ConnectionService {
             }
         } catch (CallStateException e) {
             Log.e(this, e, "Call placeOutgoingCallConnection, phone.dial exception: " + e);
+            if (e.getError() == CallStateException.ERROR_FDN_BLOCKED) {
+                Toast.makeText(getApplicationContext(), R.string.fdn_blocked_mmi,
+                        Toast.LENGTH_SHORT).show();
+            }
             mNormalCallConnection.unregisterForCallEvents();
             handleCallStateException(e, mNormalCallConnection, phone);
         } catch (Exception e) {
@@ -4865,6 +4874,18 @@ public class TelephonyConnectionService extends ConnectionService {
                     R.bool.config_turn_off_oem_enabled_satellite_during_emergency_call);
         } catch (Resources.NotFoundException ex) {
             Log.e(this, ex, "getTurnOffOemEnabledSatelliteDuringEmergencyCall: ex=" + ex);
+        }
+        return turnOffSatellite;
+    }
+
+    private boolean shouldTurnOffNonEmergencyNbIotNtnSessionForEmergencyCall() {
+        boolean turnOffSatellite = false;
+        try {
+            turnOffSatellite = getApplicationContext().getResources().getBoolean(R.bool
+                    .config_turn_off_non_emergency_nb_iot_ntn_satellite_for_emergency_call);
+        } catch (Resources.NotFoundException ex) {
+            Log.e(this, ex,
+                    "shouldTurnOffNonEmergencyNbIotNtnSessionForEmergencyCall: ex=" + ex);
         }
         return turnOffSatellite;
     }

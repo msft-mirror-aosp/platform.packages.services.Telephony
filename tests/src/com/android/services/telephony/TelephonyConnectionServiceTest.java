@@ -253,6 +253,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Mock EmergencyCallDomainSelectionConnection mEmergencyCallDomainSelectionConnection;
     @Mock NormalCallDomainSelectionConnection mNormalCallDomainSelectionConnection;
     @Mock ImsPhone mImsPhone;
+    @Mock SubscriptionManagerService mSubscriptionManagerService;
     @Mock private SatelliteSOSMessageRecommender mSatelliteSOSMessageRecommender;
     @Mock private EmergencyStateTracker mEmergencyStateTracker;
     @Mock private Resources mMockResources;
@@ -305,8 +306,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 (int) invocation.getArgument(2)))
                 .when(mDisconnectCauseFactory).toTelecomDisconnectCause(anyInt(), any(), anyInt());
         mTestConnectionService.setDisconnectCauseFactory(mDisconnectCauseFactory);
-        mTestConnectionService.onCreate();
-        mTestConnectionService.setTelephonyManagerProxy(mTelephonyManagerProxy);
+        replaceInstance(DomainSelectionResolver.class, "sInstance", null,
+                mDomainSelectionResolver);
         replaceInstance(TelephonyConnectionService.class, "mDomainSelectionResolver",
                 mTestConnectionService, mDomainSelectionResolver);
         replaceInstance(TelephonyConnectionService.class, "mEmergencyStateTracker",
@@ -325,9 +326,15 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         doReturn(false).when(mDomainSelectionResolver).isDomainSelectionSupported();
         doReturn(null).when(mDomainSelectionResolver).getDomainSelectionConnection(
                 any(), anyInt(), anyBoolean());
+        replaceInstance(SatelliteController.class, "sInstance", null, mSatelliteController);
         replaceInstance(TelephonyConnectionService.class,
                 "mSatelliteController", mTestConnectionService, mSatelliteController);
         doReturn(mMockResources).when(mContext).getResources();
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null,
+                mSubscriptionManagerService);
+
+        mTestConnectionService.onCreate();
+        mTestConnectionService.setTelephonyManagerProxy(mTelephonyManagerProxy);
 
         mBinderStub = (IConnectionService.Stub) mTestConnectionService.onBind(null);
         mSetFlagsRule.disableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
@@ -1482,7 +1489,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         doReturn(true).when(mFeatureFlags).carrierRoamingNbIotNtn();
         doReturn(true).when(mSatelliteController).isSatelliteEnabledOrBeingEnabled();
 
-        // Set config_turn_off_oem_enabled_satellite_during_emergency_call as false
+        // Set config_turn_off_non_emergency_nb_iot_ntn_satellite_for_emergency_call as true
+        doReturn(true).when(mMockResources).getBoolean(anyInt());
         doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
         doReturn(false).when(mSatelliteController).isDemoModeEnabled();
 
@@ -1509,10 +1517,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         // Satellite is for emergency
         doReturn(true).when(mSatelliteController).getRequestIsEmergency();
         doReturn(1).when(mSatelliteController).getSelectedSatelliteSubId();
-        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
-        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
         SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
-        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+        doReturn(info).when(mSubscriptionManagerService).getSubscriptionInfoInternal(1);
 
         // Setup outgoing emergency call
         setupConnectionServiceInApm();
@@ -1546,10 +1552,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         // Satellite is for emergency
         doReturn(true).when(mSatelliteController).getRequestIsEmergency();
         doReturn(1).when(mSatelliteController).getSelectedSatelliteSubId();
-        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
-        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
         SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
-        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+        doReturn(info).when(mSubscriptionManagerService).getSubscriptionInfoInternal(1);
 
         // Carrier: shouldTurnOffCarrierSatelliteForEmergencyCall = false
         doReturn(0).when(info).getOnlyNonTerrestrialNetwork();
@@ -1562,11 +1566,34 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 mConnection.getDisconnectCause().getTelephonyDisconnectCause());
 
         // Carrier: shouldTurnOffCarrierSatelliteForEmergencyCall = true
+        doReturn(true).when(mMockResources).getBoolean(anyInt());
         doReturn(true).when(mSatelliteController).shouldTurnOffCarrierSatelliteForEmergencyCall();
         setupConnectionServiceInApm();
 
         // Verify emergency call go through
         assertNull(mConnection.getDisconnectCause());
+    }
+
+    @Test
+    @SmallTest
+    public void testCreateOutgoingEmergencyConnection_NonEmergencySatelliteSession() {
+        doReturn(true).when(mFeatureFlags).carrierRoamingNbIotNtn();
+        doReturn(true).when(mSatelliteController).isSatelliteEnabledOrBeingEnabled();
+
+        // Set config_turn_off_non_emergency_nb_iot_ntn_satellite_for_emergency_call as false
+        doReturn(false).when(mMockResources).getBoolean(anyInt());
+        doReturn(true).when(mTelephonyManagerProxy).isCurrentEmergencyNumber(anyString());
+        doReturn(false).when(mSatelliteController).isDemoModeEnabled();
+
+        // Satellite is for emergency
+        doReturn(false).when(mSatelliteController).getRequestIsEmergency();
+
+        setupConnectionServiceInApm();
+
+        // Verify DisconnectCause which not allows emergency call
+        assertNotNull(mConnection.getDisconnectCause());
+        assertEquals(android.telephony.DisconnectCause.SATELLITE_ENABLED,
+                mConnection.getDisconnectCause().getTelephonyDisconnectCause());
     }
 
     /**

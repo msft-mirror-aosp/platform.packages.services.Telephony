@@ -11820,7 +11820,7 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
         if (instance == null) {
             String packageName = mApp.getResources().getString(R.string.config_gba_package);
             int releaseTime = mApp.getResources().getInteger(R.integer.config_gba_release_time);
-            instance = GbaManager.make(mApp, subId, packageName, releaseTime);
+            instance = GbaManager.make(mApp, subId, packageName, releaseTime, mFeatureFlags);
         }
         return instance;
     }
@@ -12936,12 +12936,18 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
 
         if (mTelecomFeatureFlags.telecomMainUserInGetRespondMessageApp()){
             UserHandle mainUser = null;
-            Context userContext = null;
+            Context userContext = context;
             final long identity = Binder.clearCallingIdentity();
             try {
                 mainUser = mUserManager.getMainUser();
-                userContext = context.createContextAsUser(mainUser, 0);
-                Log.d(LOG_TAG, "getDefaultRespondViaMessageApplication: mainUser = " + mainUser);
+                if (mainUser != null) {
+                    userContext = context.createContextAsUser(mainUser, 0);
+                } else {
+                    // If getting the main user is null, then fall back to legacy behavior:
+                    mainUser = TelephonyUtils.getSubscriptionUserHandle(context, subId);
+                }
+                Log.d(LOG_TAG, "getDefaultRespondViaMessageApplication: mainUser = "
+                        + mainUser);
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
@@ -14472,11 +14478,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * @return {@code true} if the operation is successful, {@code false} otherwise.
      */
     public boolean setShouldSendDatagramToModemInDemoMode(boolean shouldSendToModemInDemoMode) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            Log.d(LOG_TAG, "shouldSendDatagramToModemInDemoMode: oemEnabledSatelliteFlag is "
-                    + "disabled");
-            return false;
-        }
         Log.d(LOG_TAG, "setShouldSendDatagramToModemInDemoMode");
         TelephonyPermissions.enforceShellOnly(
                 Binder.getCallingUid(), "setShouldSendDatagramToModemInDemoMode");
@@ -14500,12 +14501,6 @@ public class PhoneInterfaceManager extends ITelephony.Stub {
      * @return {@code true} if the setting is successful, {@code false} otherwise.
      */
     public boolean setIsSatelliteCommunicationAllowedForCurrentLocationCache(String state) {
-        if (!mFeatureFlags.oemEnabledSatelliteFlag()) {
-            Log.d(LOG_TAG, "setIsSatelliteCommunicationAllowedForCurrentLocationCache: "
-                    + "oemEnabledSatelliteFlag is disabled");
-            return false;
-        }
-
         Log.d(LOG_TAG, "setIsSatelliteCommunicationAllowedForCurrentLocationCache: "
                 + "state=" + state);
         TelephonyPermissions.enforceShellOnly(
