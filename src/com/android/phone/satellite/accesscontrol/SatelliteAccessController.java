@@ -2267,7 +2267,6 @@ public class SatelliteAccessController extends Handler {
                     ploge("cleanupOnDeviceAccessControllerResources: ex=" + ex);
                 }
                 mSatelliteOnDeviceAccessController = null;
-                mSatelliteAccessConfigMap = null;
                 stopKeepOnDeviceAccessControllerResourcesTimer();
             }
         }
@@ -2866,6 +2865,8 @@ public class SatelliteAccessController extends Handler {
                 .setIsAllowed(allowed)
                 .setIsEmergency(isInEmergency())
                 .setResult(resultCode)
+                .setCarrierId(mSatelliteController.getSatelliteCarrierId())
+                .setIsNtnOnlyCarrier(mSatelliteController.isNtnOnlyCarrier())
                 .reportAccessControllerMetrics();
         mLocationQueryStartTimeMillis = 0;
         mOnDeviceLookupStartTimeMillis = 0;
