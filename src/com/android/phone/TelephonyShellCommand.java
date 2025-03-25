@@ -53,6 +53,7 @@ import android.util.Log;
 import android.util.SparseArray;
 
 import com.android.ims.rcs.uce.util.FeatureTags;
+import com.android.internal.telephony.IIntegerConsumer;
 import com.android.internal.telephony.ITelephony;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
@@ -214,6 +215,11 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
 
     private static final String SET_SATELLITE_ACCESS_RESTRICTION_CHECKING_RESULT =
             "set-satellite-access-restriction-checking-result";
+
+    private static final String  ADD_ATTACH_RESTRICTION_FOR_CARRIER =
+            "add-attach-restriction-for-carrier";
+    private static final String  REMOVE_ATTACH_RESTRICTION_FOR_CARRIER =
+            "remove-attach-restriction-for-carrier";
 
     private static final String DOMAIN_SELECTION_SUBCOMMAND = "domainselection";
     private static final String DOMAIN_SELECTION_SET_SERVICE_OVERRIDE = "set-dss-override";
@@ -432,6 +438,10 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
                 return handleSetSatelliteSubscriberIdListChangedIntentComponent();
             case SET_SATELLITE_ACCESS_RESTRICTION_CHECKING_RESULT:
                 return handleOverrideCarrierRoamingNtnEligibilityChanged();
+            case ADD_ATTACH_RESTRICTION_FOR_CARRIER:
+                return handleAddAttachRestrictionForCarrier(cmd);
+            case REMOVE_ATTACH_RESTRICTION_FOR_CARRIER:
+                return handleRemoveAttachRestrictionForCarrier(cmd);
             case COMMAND_DELETE_IMSI_KEY:
                 return handleDeleteTestImsiKey();
             default: {
@@ -859,6 +869,26 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         pw.println("    Sets the OEM-enabled satellite provision status. Options are:");
         pw.println("      -p: the overriding satellite provision status. If no option is ");
         pw.println("          specified, reset the overridden provision status.");
+        pw.println("  add-attach-restriction-for-carrier [-s SLOT_ID ");
+        pw.println("    -r SATELLITE_COMMUNICATION_RESTRICTION_REASON] Add a restriction reason ");
+        pw.println("     for disallowing carrier supported satellite plmn scan ");
+        pw.println("     and attach by modem. ");
+        pw.println("    Options are:");
+        pw.println("      -s: The SIM slot ID to add a restriction reason. If no option ");
+        pw.println("          is specified, it will choose the default voice SIM slot.");
+        pw.println("      -r: restriction reason ");
+        pw.println("          If no option is specified, it will use ");
+        pw.println("          the default value SATELLITE_COMMUNICATION_RESTRICTION_REASON_USER.");
+        pw.println("  remove-attach-restriction-for-carrier [-s SLOT_ID ");
+        pw.println("    -r SATELLITE_COMMUNICATION_RESTRICTION_REASON] Add a restriction reason ");
+        pw.println("     for disallowing carrier supported satellite plmn scan ");
+        pw.println("     and attach by modem. ");
+        pw.println("    Options are:");
+        pw.println("      -s: The SIM slot ID to add a restriction reason. If no option ");
+        pw.println("          is specified, it will choose the default voice SIM slot.");
+        pw.println("      -r: restriction reason ");
+        pw.println("          If no option is specified, it will use ");
+        pw.println("          the default value SATELLITE_COMMUNICATION_RESTRICTION_REASON_USER.");
     }
 
     private void onHelpImei() {
@@ -3841,6 +3871,118 @@ public class TelephonyShellCommand extends BasicShellCommandHandler {
         } catch (RemoteException e) {
             Log.w(LOG_TAG, "handleSetSatelliteSubscriberIdListChangedIntentComponent("
                     + name + "), error = " + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleAddAttachRestrictionForCarrier(String command) {
+        PrintWriter errPw = getErrPrintWriter();
+        String tag = command + ": ";
+        int subId = SubscriptionManager.getDefaultSubscriptionId();
+        int reason = 0;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-s": {
+                    try {
+                        subId = slotStringToSubId(tag, getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println("handleAddAttachRestrictionForCarrier:"
+                                + " require an integer for subId");
+                        return -1;
+                    }
+                    break;
+                }
+                case "-r": {
+                    try {
+                        reason = Integer.parseInt(getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println("handleAddAttachRestrictionForCarrier:"
+                                + " require an integer for reason");
+                        return -1;
+                    }
+                    break;
+                }
+            }
+        }
+
+        Log.d(LOG_TAG, "handleAddAttachRestrictionForCarrier: subId= "
+                + subId + ", reason= " + reason);
+
+        try {
+            IIntegerConsumer errorCallback = new IIntegerConsumer.Stub() {
+                @Override
+                public void accept(int result) {
+                    if (VDBG) {
+                        Log.v(LOG_TAG, "addAttachRestrictionForCarrier result = " + result);
+                    }
+                    getOutPrintWriter().println(result);
+                }
+            };
+
+            mInterface.addAttachRestrictionForCarrier(subId, reason, errorCallback);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "addAttachRestrictionForCarrier:"
+                    + " error = " + e.getMessage());
+            errPw.println("Exception: " + e.getMessage());
+            return -1;
+        }
+        return 0;
+    }
+
+    private int handleRemoveAttachRestrictionForCarrier(String command) {
+        PrintWriter errPw = getErrPrintWriter();
+        String tag = command + ": ";
+        int subId = SubscriptionManager.getDefaultSubscriptionId();
+        int reason = 0;
+
+        String opt;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "-s": {
+                    try {
+                        subId = slotStringToSubId(tag, getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println("handleRemoveAttachRestrictionForCarrier:"
+                                + " require an integer for subId");
+                        return -1;
+                    }
+                    break;
+                }
+                case "-r": {
+                    try {
+                        reason = Integer.parseInt(getNextArgRequired());
+                    } catch (NumberFormatException e) {
+                        errPw.println("handleRemoveAttachRestrictionForCarrier:"
+                                + " require an integer for reason");
+                        return -1;
+                    }
+                    break;
+                }
+            }
+        }
+
+        Log.d(LOG_TAG, "handleRemoveAttachRestrictionForCarrier: subId= "
+                + subId + ", reason= " + reason);
+
+        try {
+            IIntegerConsumer errorCallback = new IIntegerConsumer.Stub() {
+                @Override
+                public void accept(int result) {
+                    if (VDBG) {
+                        Log.v(LOG_TAG, "removeAttachRestrictionForCarrier result = " + result);
+                    }
+                    getOutPrintWriter().println(result);
+                }
+            };
+
+            mInterface.removeAttachRestrictionForCarrier(subId, reason, errorCallback);
+        } catch (RemoteException e) {
+            Log.e(LOG_TAG, "removeAttachRestrictionForCarrier:"
+                    + " error = " + e.getMessage());
             errPw.println("Exception: " + e.getMessage());
             return -1;
         }
