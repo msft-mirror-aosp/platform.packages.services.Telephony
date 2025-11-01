@@ -21,6 +21,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeNotNull;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -147,12 +148,16 @@ public class SipTransportControllerTest extends TelephonyTestBase {
 
     @After
     public void tearDown() throws Exception {
-        super.tearDown();
-        boolean isShutdown = mExecutorService == null || mExecutorService.isShutdown();
-        if (!isShutdown) {
+        var monitor = RcsProvisioningMonitor.getInstance();
+        if (monitor != null) {
+            monitor.overrideImsFeatureValidation(TEST_SUB_ID, null);
+        }
+
+        if (mExecutorService != null && !mExecutorService.isShutdown()) {
             mExecutorService.shutdownNow();
         }
-        RcsProvisioningMonitor.getInstance().overrideImsFeatureValidation(TEST_SUB_ID, null);
+
+        super.tearDown();
     }
 
     @SmallTest
@@ -713,7 +718,9 @@ public class SipTransportControllerTest extends TelephonyTestBase {
     @SmallTest
     @Test
     public void testFeatureTagsDeniedByOverride() throws Exception {
-        RcsProvisioningMonitor.getInstance().overrideImsFeatureValidation(TEST_SUB_ID, false);
+        RcsProvisioningMonitor monitor = RcsProvisioningMonitor.getInstance();
+        assumeNotNull(monitor);
+        monitor.overrideImsFeatureValidation(TEST_SUB_ID, false);
         SipTransportController controller = setupLiveTransportController(THROTTLE_MS, 0);
 
         ArraySet<String> requestTags = new ArraySet<>(getBaseDelegateRequest().getFeatureTags());
@@ -733,8 +740,10 @@ public class SipTransportControllerTest extends TelephonyTestBase {
     @SmallTest
     @Test
     public void testFeatureTagsDeniedByConfigAllowedByOverride() throws Exception {
+        RcsProvisioningMonitor monitor = RcsProvisioningMonitor.getInstance();
+        assumeNotNull(monitor);
         setFeatureAllowedConfig(TEST_SUB_ID, new String[]{});
-        RcsProvisioningMonitor.getInstance().overrideImsFeatureValidation(TEST_SUB_ID, true);
+        monitor.overrideImsFeatureValidation(TEST_SUB_ID, true);
         SipTransportController controller = setupLiveTransportController(THROTTLE_MS, 0);
 
         ArraySet<String> requestTags = new ArraySet<>(getBaseDelegateRequest().getFeatureTags());

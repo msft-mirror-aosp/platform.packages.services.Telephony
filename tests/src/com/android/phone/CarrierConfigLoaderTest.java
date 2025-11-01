@@ -41,7 +41,6 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.os.Build;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.os.PermissionEnforcer;
 import android.os.PersistableBundle;
 import android.os.UserHandle;
@@ -51,10 +50,9 @@ import android.telephony.CarrierConfigManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.telephony.TelephonyRegistryManager;
-import android.testing.TestableLooper;
+import android.testing.AndroidTestingRunner;
 
 import androidx.test.InstrumentationRegistry;
-import androidx.test.ext.junit.runners.AndroidJUnit4;
 
 import com.android.TelephonyTestBase;
 import com.android.internal.telephony.IccCardConstants;
@@ -72,7 +70,6 @@ import org.junit.rules.TestRule;
 import org.junit.runner.RunWith;
 import org.mockito.Mock;
 import org.mockito.Mockito;
-import org.mockito.MockitoAnnotations;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -81,7 +78,7 @@ import java.io.StringWriter;
 /**
  * Unit Test for CarrierConfigLoader.
  */
-@RunWith(AndroidJUnit4.class)
+@RunWith(AndroidTestingRunner.class)
 public class CarrierConfigLoaderTest extends TelephonyTestBase {
     @Rule
     public TestRule compatChangeRule = new PlatformCompatChangeRule();
@@ -108,8 +105,6 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
     private TelephonyManager mTelephonyManager;
     private CarrierConfigLoader mCarrierConfigLoader;
     private Handler mHandler;
-    private HandlerThread mHandlerThread;
-    private TestableLooper mTestableLooper;
 
     // The AIDL stub will use PermissionEnforcer to check permission from the caller.
     private FakePermissionEnforcer mFakePermissionEnforcer = new FakePermissionEnforcer();
@@ -117,7 +112,7 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        MockitoAnnotations.initMocks(this);
+        setupTestLooper();
         doReturn(Context.PERMISSION_ENFORCER_SERVICE).when(mContext).getSystemServiceName(
                 eq(PermissionEnforcer.class));
         doReturn(mFakePermissionEnforcer).when(mContext).getSystemService(
@@ -151,11 +146,7 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         when(mContext.getSystemService(TelephonyRegistryManager.class)).thenReturn(
                 mTelephonyRegistryManager);
 
-        mHandlerThread = new HandlerThread("CarrierConfigLoaderTest");
-        mHandlerThread.start();
-
-        mTestableLooper = new TestableLooper(mHandlerThread.getLooper());
-        mCarrierConfigLoader = new CarrierConfigLoader(mContext, mTestableLooper.getLooper(),
+        mCarrierConfigLoader = new CarrierConfigLoader(mContext, mTestLooper,
                 mFeatureFlags);
         mHandler = mCarrierConfigLoader.getHandler();
 
@@ -169,8 +160,6 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         mFakePermissionEnforcer.revoke(android.Manifest.permission.DUMP);
         mFakePermissionEnforcer.revoke(android.Manifest.permission.MODIFY_PHONE_STATE);
         mFakePermissionEnforcer.revoke(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE);
-        mTestableLooper.destroy();
-        mHandlerThread.quit();
         super.tearDown();
     }
 
@@ -217,7 +206,10 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         mCarrierConfigLoader.saveNoSimConfigToXml(PLATFORM_CARRIER_CONFIG_PACKAGE, config);
         mCarrierConfigLoader.updateConfigForPhoneId(DEFAULT_PHONE_ID,
                 IccCardConstants.INTENT_VALUE_ICC_ABSENT);
-        mTestableLooper.processAllMessages();
+        processOneMessage();
+        processOneMessage();
+        processOneMessage();
+        processOneMessage();
 
         assertThat(mCarrierConfigLoader.getConfigFromDefaultApp(DEFAULT_PHONE_ID)).isNull();
         assertThat(mCarrierConfigLoader.getConfigFromCarrierApp(DEFAULT_PHONE_ID)).isNull();
@@ -256,7 +248,7 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
                 DEFAULT_PHONE_ID, carrierId, config);
         mCarrierConfigLoader.updateConfigForPhoneId(DEFAULT_PHONE_ID,
                 IccCardConstants.INTENT_VALUE_ICC_LOADED);
-        mTestableLooper.processAllMessages();
+        processAllMessages();
 
         assertThat(mCarrierConfigLoader.getConfigFromDefaultApp(DEFAULT_PHONE_ID).getInt(
                 CARRIER_CONFIG_EXAMPLE_KEY)).isEqualTo(CARRIER_CONFIG_EXAMPLE_VALUE);
@@ -298,7 +290,8 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
 
         mCarrierConfigLoader.overrideConfig(DEFAULT_SUB_ID, null /*overrides*/,
                 false/*persistent*/);
-        mTestableLooper.processAllMessages();
+        processOneMessage();
+        processOneMessage();
 
         assertThat(mCarrierConfigLoader.getOverrideConfig(DEFAULT_PHONE_ID).isEmpty()).isTrue();
         verify(mSubscriptionManagerService).updateSubscriptionByCarrierConfig(
@@ -320,7 +313,8 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
         PersistableBundle config = getTestConfig();
         mCarrierConfigLoader.overrideConfig(DEFAULT_SUB_ID, config /*overrides*/,
                 false/*persistent*/);
-        mTestableLooper.processAllMessages();
+        processOneMessage();
+        processOneMessage();
 
         assertThat(mCarrierConfigLoader.getOverrideConfig(DEFAULT_PHONE_ID).getInt(
                 CARRIER_CONFIG_EXAMPLE_KEY)).isEqualTo(CARRIER_CONFIG_EXAMPLE_VALUE);
@@ -485,9 +479,9 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
                 any(Intent.class), any(ServiceConnection.class), anyInt());
         doNothing().when(mContext).sendBroadcastAsUser(any(Intent.class), any(UserHandle.class));
         mHandler.sendMessage(mHandler.obtainMessage(17 /* EVENT_MULTI_SIM_CONFIG_CHANGED */));
-        mTestableLooper.processAllMessages();
+        processAllMessages();
 
         mCarrierConfigLoader.updateConfigForPhoneId(1, IccCardConstants.INTENT_VALUE_ICC_ABSENT);
-        mTestableLooper.processAllMessages();
+        processAllMessages();
     }
 }

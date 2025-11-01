@@ -61,7 +61,6 @@ import android.net.Uri;
 import android.os.AsyncResult;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Looper;
 import android.platform.test.flag.junit.SetFlagsRule;
 import android.telecom.Conference;
 import android.telecom.Conferenceable;
@@ -254,6 +253,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Mock EmergencyCallDomainSelectionConnection mEmergencyCallDomainSelectionConnection;
     @Mock NormalCallDomainSelectionConnection mNormalCallDomainSelectionConnection;
     @Mock ImsPhone mImsPhone;
+    @Mock SubscriptionManagerService mSubscriptionManagerService;
     @Mock private SatelliteSOSMessageRecommender mSatelliteSOSMessageRecommender;
     @Mock private EmergencyStateTracker mEmergencyStateTracker;
     @Mock private Resources mMockResources;
@@ -283,7 +283,7 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
     @Before
     public void setUp() throws Exception {
         super.setUp();
-        doReturn(Looper.getMainLooper()).when(mContext).getMainLooper();
+
         mTestConnectionService = new TestTelephonyConnectionService(mContext);
         mTestConnectionService.setFeatureFlags(mFeatureFlags);
         mTestConnectionService.setPhoneFactoryProxy(mPhoneFactoryProxy);
@@ -306,8 +306,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
                 (int) invocation.getArgument(2)))
                 .when(mDisconnectCauseFactory).toTelecomDisconnectCause(anyInt(), any(), anyInt());
         mTestConnectionService.setDisconnectCauseFactory(mDisconnectCauseFactory);
-        mTestConnectionService.onCreate();
-        mTestConnectionService.setTelephonyManagerProxy(mTelephonyManagerProxy);
+        replaceInstance(DomainSelectionResolver.class, "sInstance", null,
+                mDomainSelectionResolver);
         replaceInstance(TelephonyConnectionService.class, "mDomainSelectionResolver",
                 mTestConnectionService, mDomainSelectionResolver);
         replaceInstance(TelephonyConnectionService.class, "mEmergencyStateTracker",
@@ -326,9 +326,15 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         doReturn(false).when(mDomainSelectionResolver).isDomainSelectionSupported();
         doReturn(null).when(mDomainSelectionResolver).getDomainSelectionConnection(
                 any(), anyInt(), anyBoolean());
+        replaceInstance(SatelliteController.class, "sInstance", null, mSatelliteController);
         replaceInstance(TelephonyConnectionService.class,
                 "mSatelliteController", mTestConnectionService, mSatelliteController);
         doReturn(mMockResources).when(mContext).getResources();
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null,
+                mSubscriptionManagerService);
+
+        mTestConnectionService.onCreate();
+        mTestConnectionService.setTelephonyManagerProxy(mTelephonyManagerProxy);
 
         mBinderStub = (IConnectionService.Stub) mTestConnectionService.onBind(null);
         mSetFlagsRule.disableFlags(Flags.FLAG_CARRIER_ENABLED_SATELLITE_FLAG);
@@ -1512,10 +1518,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         Phone phone = mock(Phone.class);
         doReturn(1).when(phone).getSubId();
         doReturn(phone).when(mSatelliteController).getSatellitePhone();
-        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
-        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
         SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
-        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+        doReturn(info).when(mSubscriptionManagerService).getSubscriptionInfoInternal(1);
 
         // Setup outgoing emergency call
         setupConnectionServiceInApm();
@@ -1551,10 +1555,8 @@ public class TelephonyConnectionServiceTest extends TelephonyTestBase {
         Phone phone = mock(Phone.class);
         doReturn(1).when(phone).getSubId();
         doReturn(phone).when(mSatelliteController).getSatellitePhone();
-        SubscriptionManagerService isub = mock(SubscriptionManagerService.class);
-        replaceInstance(SubscriptionManagerService.class, "sInstance", null, isub);
         SubscriptionInfoInternal info = mock(SubscriptionInfoInternal.class);
-        doReturn(info).when(isub).getSubscriptionInfoInternal(1);
+        doReturn(info).when(mSubscriptionManagerService).getSubscriptionInfoInternal(1);
 
         // Carrier: shouldTurnOffCarrierSatelliteForEmergencyCall = false
         doReturn(0).when(info).getOnlyNonTerrestrialNetwork();

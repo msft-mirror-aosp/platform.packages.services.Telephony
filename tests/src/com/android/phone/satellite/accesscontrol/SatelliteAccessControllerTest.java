@@ -43,6 +43,7 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import static org.junit.Assume.assumeTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -75,19 +76,21 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.DropBoxManager;
 import android.os.Handler;
-import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.ResultReceiver;
 import android.telecom.TelecomManager;
 import android.telephony.SubscriptionManager;
 import android.telephony.satellite.SatelliteManager;
+import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.util.Log;
 import android.util.Pair;
 
-import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.InstrumentationRegistry;
 
+import com.android.TelephonyTestBase;
 import com.android.internal.telephony.Phone;
 import com.android.internal.telephony.PhoneFactory;
 import com.android.internal.telephony.TelephonyCountryDetector;
@@ -96,6 +99,8 @@ import com.android.internal.telephony.satellite.SatelliteConfig;
 import com.android.internal.telephony.satellite.SatelliteConfigParser;
 import com.android.internal.telephony.satellite.SatelliteController;
 import com.android.internal.telephony.satellite.SatelliteModemInterface;
+import com.android.internal.telephony.satellite.metrics.ControllerMetricsStats;
+import com.android.internal.telephony.subscription.SubscriptionManagerService;
 
 import org.junit.After;
 import org.junit.Before;
@@ -104,10 +109,8 @@ import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Captor;
 import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 import java.io.File;
-import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -121,8 +124,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
 /** Unit test for {@link SatelliteAccessController} */
-@RunWith(AndroidJUnit4.class)
-public class SatelliteAccessControllerTest {
+@RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
+public class SatelliteAccessControllerTest extends TelephonyTestBase {
     private static final String TAG = "SatelliteAccessControllerTest";
     private static final String[] TEST_SATELLITE_COUNTRY_CODES = {"US", "CA", "UK"};
     private static final String[] TEST_SATELLITE_COUNTRY_CODES_EMPTY = {""};
@@ -156,8 +160,7 @@ public class SatelliteAccessControllerTest {
     private SatelliteModemInterface mMockSatelliteModemInterface;
     @Mock
     private DropBoxManager mMockDropBoxManager;
-    @Mock
-    private Context mMockContext;
+    private Context mMockContext;  // alias of mContext
     @Mock
     private Phone mMockPhone;
     @Mock
@@ -188,7 +191,6 @@ public class SatelliteAccessControllerTest {
     @Mock
     private ResultReceiver mMockSatelliteSupportedResultReceiver;
 
-    private Looper mLooper;
     private TestableLooper mTestableLooper;
     private Phone[] mPhones;
     private TestSatelliteAccessController mSatelliteAccessControllerUT;
@@ -251,17 +253,10 @@ public class SatelliteAccessControllerTest {
 
     @Before
     public void setUp() throws Exception {
-        logd("setUp");
-        MockitoAnnotations.initMocks(this);
+        super.setUp();
 
-        if (Looper.myLooper() == null) {
-            Looper.prepare();
-        }
-
-        HandlerThread handlerThread = new HandlerThread("SatelliteAccessControllerTest");
-        handlerThread.start();
-        mLooper = handlerThread.getLooper();
-        mTestableLooper = new TestableLooper(mLooper);
+        mMockContext = mContext;
+        mTestableLooper = TestableLooper.get(this);
         when(mMockContext.getSystemServiceName(LocationManager.class)).thenReturn(
                 Context.LOCATION_SERVICE);
         when(mMockContext.getSystemServiceName(TelecomManager.class)).thenReturn(
@@ -274,14 +269,23 @@ public class SatelliteAccessControllerTest {
                 mMockTelecomManager);
         when(mMockContext.getSystemService(DropBoxManager.class)).thenReturn(
                 mMockDropBoxManager);
+        doAnswer(inv -> {
+            var args = inv.getArguments();
+            return InstrumentationRegistry.getTargetContext()
+                    .getDir((String) args[0], (Integer) args[1]);
+        }).when(mPhoneGlobals).getDir(anyString(), anyInt());
         mPhones = new Phone[]{mMockPhone, mMockPhone2};
         replaceInstance(PhoneFactory.class, "sPhones", null, mPhones);
         replaceInstance(SatelliteController.class, "sInstance", null,
                 mMockSatelliteController);
         replaceInstance(SatelliteModemInterface.class, "sInstance", null,
                 mMockSatelliteModemInterface);
+        replaceInstance(SubscriptionManagerService.class, "sInstance", null,
+                mock(SubscriptionManagerService.class));
         replaceInstance(TelephonyCountryDetector.class, "sInstance", null,
                 mMockCountryDetector);
+        replaceInstance(ControllerMetricsStats.class, "sInstance", null,
+                mock(ControllerMetricsStats.class));
         when(mMockSatelliteController.getSatellitePhone()).thenReturn(mMockPhone);
         when(mMockPhone.getSubId()).thenReturn(SubscriptionManager.getDefaultSubscriptionId());
         when(mMockContext.getResources()).thenReturn(mMockResources);
@@ -321,8 +325,8 @@ public class SatelliteAccessControllerTest {
         when(mMockSatelliteOnDeviceAccessController.isSatCommunicationAllowedAtLocation(
                 any(SatelliteOnDeviceAccessController.LocationToken.class))).thenReturn(true);
 
-        when(mMockContext.getSharedPreferences(anyString(), anyInt())).thenReturn(
-                mMockSharedPreferences);
+        doReturn(mMockSharedPreferences).when(mMockContext)
+                .getSharedPreferences(anyString(), anyInt());
         when(mMockSharedPreferences.getBoolean(anyString(), anyBoolean())).thenReturn(true);
         when(mMockSharedPreferences.getStringSet(anyString(), any()))
                 .thenReturn(Set.of(TEST_SATELLITE_COUNTRY_CODES));
@@ -339,24 +343,16 @@ public class SatelliteAccessControllerTest {
         when(mMockFeatureFlags.geofenceEnhancementForBetterUx()).thenReturn(true);
         when(mMockFeatureFlags.oemEnabledSatelliteFlag()).thenReturn(true);
 
+
         mSatelliteAccessControllerUT = new TestSatelliteAccessController(mMockContext,
-                mMockFeatureFlags, mLooper, mMockLocationManager, mMockTelecomManager,
-                mMockSatelliteOnDeviceAccessController, mMockSatS2File);
+                mMockFeatureFlags, mTestableLooper.getLooper(), mMockLocationManager,
+                mMockTelecomManager, mMockSatelliteOnDeviceAccessController, mMockSatS2File);
         mTestableLooper.processAllMessages();
     }
 
     @After
     public void tearDown() throws Exception {
-        logd("tearDown");
-        if (mTestableLooper != null) {
-            mTestableLooper.destroy();
-            mTestableLooper = null;
-        }
-
-        if (mLooper != null) {
-            mLooper.quit();
-            mLooper = null;
-        }
+        super.tearDown();
     }
 
     @Test
@@ -985,6 +981,7 @@ public class SatelliteAccessControllerTest {
         doReturn(mockConfig).when(mMockSatelliteController).getSatelliteConfig();
         File testS2File = mSatelliteAccessControllerUT
                 .getTestSatelliteS2File(GOOGLE_US_SAN_SAT_S2_FILE_NAME);
+        assumeTrue("Satellite not supported", testS2File != null && testS2File.exists());
         doReturn(List.of(TEST_SATELLITE_COUNTRY_CODES))
                 .when(mockConfig).getDeviceSatelliteCountryCodes();
         doReturn(true).when(mockConfig).isSatelliteDataForAllowedRegion();
@@ -1298,13 +1295,6 @@ public class SatelliteAccessControllerTest {
 
     private static void logd(String message) {
         Log.d(TAG, message);
-    }
-
-    private static void replaceInstance(final Class c,
-            final String instanceName, final Object obj, final Object newValue) throws Exception {
-        Field field = c.getDeclaredField(instanceName);
-        field.setAccessible(true);
-        field.set(obj, newValue);
     }
 
     private static class TestSatelliteAccessController extends SatelliteAccessController {

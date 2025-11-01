@@ -21,6 +21,8 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.when;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
@@ -28,6 +30,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.PackageManager;
+import android.content.res.AssetManager;
+import android.content.res.Resources;
+import android.net.ConnectivityManager;
 import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
@@ -44,7 +49,10 @@ import android.test.mock.MockContext;
 import android.util.Log;
 import android.util.SparseArray;
 
+import androidx.test.InstrumentationRegistry;
+
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
@@ -64,6 +72,7 @@ public class TestContext extends MockContext {
     @Mock ImsManager mMockImsManager;
     @Mock UserManager mMockUserManager;
     @Mock PackageManager mPackageManager;
+    @Mock ConnectivityManager mMockConnectivityManager;
 
     private final SparseArray<PersistableBundle> mCarrierConfigs = new SparseArray<>();
 
@@ -87,6 +96,11 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public AssetManager getAssets() {
+        return Mockito.mock(AssetManager.class);
+    }
+
+    @Override
     public Executor getMainExecutor() {
         // Just run on current thread
         return Runnable::run;
@@ -98,8 +112,18 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
+        return this;
+    }
+
+    @Override
     public String getPackageName() {
         return "com.android.phone.tests";
+    }
+
+    @Override
+    public String getOpPackageName() {
+        return getPackageName();
     }
 
     @Override
@@ -169,6 +193,9 @@ public class TestContext extends MockContext {
             case Context.CARRIER_CONFIG_SERVICE: {
                 return mMockCarrierConfigManager;
             }
+            case Context.CONNECTIVITY_SERVICE: {
+                return mMockConnectivityManager;
+            }
             case Context.TELECOM_SERVICE: {
                 return mMockTelecomManager;
             }
@@ -193,6 +220,9 @@ public class TestContext extends MockContext {
         if (serviceClass == CarrierConfigManager.class) {
             return Context.CARRIER_CONFIG_SERVICE;
         }
+        if (serviceClass == ConnectivityManager.class) {
+            return Context.CONNECTIVITY_SERVICE;
+        }
         if (serviceClass == TelecomManager.class) {
             return Context.TELECOM_SERVICE;
         }
@@ -212,8 +242,18 @@ public class TestContext extends MockContext {
     }
 
     @Override
+    public Looper getMainLooper() {
+        return Looper.getMainLooper();
+    }
+
+    @Override
     public Handler getMainThreadHandler() {
         return new Handler(Looper.getMainLooper());
+    }
+
+    @Override
+    public Resources.Theme getTheme() {
+        return InstrumentationRegistry.getTargetContext().getTheme();
     }
 
     /**
