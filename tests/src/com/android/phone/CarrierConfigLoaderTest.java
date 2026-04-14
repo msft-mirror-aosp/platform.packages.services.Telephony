@@ -108,6 +108,8 @@ public class CarrierConfigLoaderTest extends TelephonyTestBase {
 
     private TelephonyManager mTelephonyManager;
     private CarrierConfigLoader mCarrierConfigLoader;
+    private HandlerThread mHandlerThread;
+    private TestableLooper mTestableLooper;
     private Handler mHandler;
     private int mFakeCallingUid;
     private boolean mFakeIsSdkSandboxUid;
